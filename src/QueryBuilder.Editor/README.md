@@ -47,12 +47,6 @@ builder.Services.AddQueryBuilderEditor(options =>
     options.ConnectionString = builder.Configuration.GetConnectionString("QueryBuilderDb")!;
 });
 
-builder.Services.ConfigureHttpJsonOptions(o =>
-{
-    o.SerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase;
-    o.SerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter(System.Text.Json.JsonNamingPolicy.CamelCase));
-});
-
 var app = builder.Build();
 
 app.UseExceptionHandler();
@@ -74,6 +68,10 @@ you. Navigate to `/querybuilder`.
 QueryBuilder always mounts under `/querybuilder` — it never takes over your app's root, so it's
 safe to drop into an app that already has its own home page. Add a nav link wherever makes sense
 in your own layout: `<a href="/querybuilder">Queries</a>`.
+
+QueryBuilder's API routes serialize and parse JSON with their own fixed contract (camelCase
+properties, string enums) — independent of whatever you've configured (or not configured) in your
+own `ConfigureHttpJsonOptions`. You never need to set up JSON options for QueryBuilder to work.
 
 On first run with zero data sources registered, QueryBuilder automatically registers a **"Default"**
 one pointed at its own connection string above — so the catalog isn't empty out of the box. This

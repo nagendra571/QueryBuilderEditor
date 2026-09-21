@@ -1,5 +1,3 @@
-using System.Text.Json;
-using System.Text.Json.Serialization;
 using QueryBuilder.Api.Seed;
 using QueryBuilder.Editor;
 using Serilog;
@@ -30,13 +28,6 @@ builder.Services.AddQueryBuilderEditor(options =>
 // AddQueryBuilderEditor so it runs after QueryBuilder's own migration hosted service.
 builder.Services.AddSingleton<DemoSourceSeeder>();
 builder.Services.AddHostedService<DemoDataSeederHostedService>();
-
-builder.Services.ConfigureHttpJsonOptions(options =>
-{
-    options.SerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
-    options.SerializerOptions.Converters.Add(new JsonStringEnumConverter(JsonNamingPolicy.CamelCase));
-    options.SerializerOptions.DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull;
-});
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();

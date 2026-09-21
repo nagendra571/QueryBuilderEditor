@@ -10,9 +10,9 @@ public static class DataSourceEndpoints
         var group = app.MapGroup("/api/data-sources").WithTags("Data Sources");
 
         group.MapGet("/", async (ISender sender, CancellationToken ct) =>
-            Results.Ok(await sender.Send(new GetDataSourcesQuery(), ct)));
+            Results.Json(await sender.Send(new GetDataSourcesQuery(), ct), QueryBuilderJson.Options));
 
         group.MapGet("/{id:guid}/catalog", async (Guid id, ISender sender, CancellationToken ct) =>
-            Results.Ok(await sender.Send(new GetCatalogQuery(id), ct)));
+            Results.Json(await sender.Send(new GetCatalogQuery(id), ct), QueryBuilderJson.Options));
     }
 }
