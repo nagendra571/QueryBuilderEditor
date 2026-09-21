@@ -1,4 +1,4 @@
-import { Check, ChevronRight, Database, Plus, Search, Table2 } from 'lucide-react'
+import { Check, ChevronRight, ChevronsDownUp, ChevronsUpDown, Database, Eye, Plus, Search, Table2 } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -15,17 +15,23 @@ import { DataTypeIcon } from '@/lib/data-type-icons'
 import { cn } from '@/lib/utils'
 import type { SchemaObjectMetadata } from '@/types'
 
+function objectKey(schemaName: string, objectName: string) {
+  return `${schemaName}.${objectName}`
+}
+
 export function CatalogSidebar({ dataSourceId }: { dataSourceId: string }) {
   const { data: catalog, isLoading } = useDataSourceCatalog(dataSourceId)
   const [search, setSearch] = useState('')
+  const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const source = useBuilderStore((s) => s.definition.source)
   const columns = useBuilderStore((s) => s.definition.columns)
   const setSource = useBuilderStore((s) => s.setSource)
   const addColumn = useBuilderStore((s) => s.addColumn)
 
+  const term = search.trim().toLowerCase()
+
   const filtered = useMemo(() => {
     if (!catalog) return []
-    const term = search.trim().toLowerCase()
     if (!term) return catalog.schemas
 
     return catalog.schemas
@@ -38,12 +44,37 @@ export function CatalogSidebar({ dataSourceId }: { dataSourceId: string }) {
         ),
       }))
       .filter((schema) => schema.objects.length > 0)
-  }, [catalog, search])
+  }, [catalog, term])
 
+  const totalCount = useMemo(() => catalog?.schemas.reduce((n, s) => n + s.objects.length, 0) ?? 0, [catalog])
   const hasSource = !!source.objectName
+  const sourceKey = hasSource ? objectKey(source.schemaName, source.objectName) : null
+
+  function toggleExpanded(key: string) {
+    setExpanded((prev) => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
+  }
+
+  function handleSelectAsSource(obj: SchemaObjectMetadata) {
+    setSource({ schemaName: obj.schemaName, objectName: obj.name, kind: obj.kind })
+    setExpanded((prev) => new Set(prev).add(objectKey(obj.schemaName, obj.name)))
+  }
+
+  function expandAll() {
+    if (!catalog) return
+    setExpanded(new Set(catalog.schemas.flatMap((s) => s.objects.map((o) => objectKey(o.schemaName, o.name)))))
+  }
+
+  function collapseAll() {
+    setExpanded(new Set())
+  }
 
   return (
-    <div className="flex h-full flex-col border-r border-border bg-sidebar/40">
+    <div className="flex h-full min-h-0 flex-col border-r border-border bg-sidebar/40">
       <div className="border-b border-border p-3">
         <div className="relative">
           <Search className="absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
@@ -54,9 +85,35 @@ export function CatalogSidebar({ dataSourceId }: { dataSourceId: string }) {
             className="h-8 pl-8 text-xs"
           />
         </div>
+
+        {!isLoading && totalCount > 0 && (
+          <div className="mt-2 flex items-center justify-between">
+            <span className="text-[11px] text-muted-foreground">
+              {totalCount} {totalCount === 1 ? 'object' : 'objects'}
+            </span>
+            <div className="flex items-center gap-0.5">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="ghost" size="icon" className="size-6" onClick={expandAll} aria-label="Expand all">
+                    <ChevronsUpDown className="size-3.5" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Expand all</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="ghost" size="icon" className="size-6" onClick={collapseAll} aria-label="Collapse all">
+                    <ChevronsDownUp className="size-3.5" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Collapse all</TooltipContent>
+              </Tooltip>
+            </div>
+          </div>
+        )}
       </div>
 
-      <ScrollArea className="flex-1">
+      <ScrollArea className="min-h-0 flex-1">
         <div className="p-2">
           {isLoading && <p className="px-2 py-4 text-xs text-muted-foreground">Loading catalog…</p>}
           {!isLoading && filtered.length === 0 && (
@@ -67,20 +124,28 @@ export function CatalogSidebar({ dataSourceId }: { dataSourceId: string }) {
               <div className="flex items-center gap-1.5 px-2 py-1 text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">
                 <Database className="size-3" />
                 {schema.name}
+                <span className="ml-auto font-normal normal-case text-muted-foreground/60">{schema.objects.length}</span>
               </div>
-              {schema.objects.map((obj) => (
-                <CatalogObject
-                  key={`${obj.schemaName}.${obj.name}`}
-                  object={obj}
-                  isActiveSource={hasSource && source.objectName === obj.name && source.schemaName === obj.schemaName}
-                  isBlocked={hasSource && !(source.objectName === obj.name && source.schemaName === obj.schemaName)}
-                  defaultExpanded={!hasSource}
-                  sourceAlias={source.alias}
-                  selectedKeys={columns.map((c) => columnKey(c.tableAlias, c.columnName, c.aggregate))}
-                  onSelectAsSource={() => setSource({ schemaName: obj.schemaName, objectName: obj.name, kind: obj.kind })}
-                  onAddColumn={(columnName, dataType) => addColumn(source.alias, columnName, dataType)}
-                />
-              ))}
+              {schema.objects.map((obj) => {
+                const key = objectKey(obj.schemaName, obj.name)
+                const isActiveSource = sourceKey === key
+                const matchesSearch = term !== '' && obj.columns.some((c) => c.name.toLowerCase().includes(term))
+                const isExpanded = expanded.has(key) || isActiveSource || matchesSearch
+                return (
+                  <CatalogObject
+                    key={key}
+                    object={obj}
+                    isActiveSource={isActiveSource}
+                    isBlocked={hasSource && !isActiveSource}
+                    expanded={isExpanded}
+                    onToggleExpanded={() => toggleExpanded(key)}
+                    sourceAlias={source.alias}
+                    selectedKeys={columns.map((c) => columnKey(c.tableAlias, c.columnName, c.aggregate))}
+                    onSelectAsSource={() => handleSelectAsSource(obj)}
+                    onAddColumn={(columnName, dataType) => addColumn(source.alias, columnName, dataType)}
+                  />
+                )
+              })}
             </div>
           ))}
         </div>
@@ -93,7 +158,8 @@ function CatalogObject({
   object,
   isActiveSource,
   isBlocked,
-  defaultExpanded,
+  expanded,
+  onToggleExpanded,
   sourceAlias,
   selectedKeys,
   onSelectAsSource,
@@ -102,36 +168,48 @@ function CatalogObject({
   object: SchemaObjectMetadata
   isActiveSource: boolean
   isBlocked: boolean
-  defaultExpanded: boolean
+  expanded: boolean
+  onToggleExpanded: () => void
   sourceAlias: string
   selectedKeys: string[]
   onSelectAsSource: () => void
   onAddColumn: (columnName: string, dataType: SchemaObjectMetadata['columns'][number]['dataType']) => void
 }) {
-  const [expanded, setExpanded] = useState(defaultExpanded || isActiveSource)
+  const ObjectIcon = object.kind === 'view' ? Eye : Table2
 
   return (
     <div className="mb-0.5">
-      <button
-        type="button"
-        onClick={() => (isActiveSource ? setExpanded((v) => !v) : onSelectAsSource())}
+      <div
         className={cn(
-          'flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-left text-xs font-medium transition-colors',
+          'flex w-full items-center gap-1 rounded-md pr-2 text-left text-xs font-medium transition-colors',
           isActiveSource && 'bg-primary/10 text-primary',
           !isActiveSource && !isBlocked && 'hover:bg-accent',
           isBlocked && 'opacity-40 hover:opacity-70',
         )}
-        title={isBlocked ? 'Joining multiple tables is coming soon — pick this as your source instead' : undefined}
       >
-        <ChevronRight className={cn('size-3.5 shrink-0 transition-transform', expanded && 'rotate-90')} />
-        <Table2 className="size-3.5 shrink-0" />
-        <span className="truncate">{object.name}</span>
-        {object.kind === 'view' && (
-          <Badge variant="secondary" className="ml-auto h-4 px-1 text-[9px] font-medium">
-            view
-          </Badge>
-        )}
-      </button>
+        <button
+          type="button"
+          onClick={onToggleExpanded}
+          className="flex size-6 shrink-0 items-center justify-center rounded hover:bg-accent"
+          aria-label={expanded ? `Collapse ${object.name}` : `Expand ${object.name}`}
+        >
+          <ChevronRight className={cn('size-3.5 transition-transform', expanded && 'rotate-90')} />
+        </button>
+        <button
+          type="button"
+          onClick={onSelectAsSource}
+          className="flex min-w-0 flex-1 items-center gap-1.5 py-1.5 text-left"
+          title={isBlocked ? 'Joining multiple tables is coming soon — picking this switches your source' : undefined}
+        >
+          <ObjectIcon className="size-3.5 shrink-0" />
+          <span className="truncate">{object.name}</span>
+          {object.kind === 'view' && (
+            <Badge variant="secondary" className="ml-auto h-4 shrink-0 px-1 text-[9px] font-medium">
+              view
+            </Badge>
+          )}
+        </button>
+      </div>
 
       {expanded && (
         <div className="ml-4 border-l border-border pl-2">
