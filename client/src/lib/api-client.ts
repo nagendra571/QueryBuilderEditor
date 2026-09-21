@@ -1,8 +1,10 @@
 import axios from 'axios'
 import type { ApiProblemDetails } from '@/types'
 
+// Matches QueryBuilder.Editor's fixed mount path (QueryBuilderRoutes.BasePath) — the API lives
+// under the same /querybuilder prefix as the UI so it never collides with a host app's own /api.
 export const apiClient = axios.create({
-  baseURL: '/api',
+  baseURL: '/querybuilder/api',
   headers: { 'Content-Type': 'application/json' },
 })
 

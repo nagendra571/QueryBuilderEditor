@@ -27,11 +27,16 @@ public static class DependencyInjection
 
         services.AddMemoryCache();
         services.AddHttpContextAccessor();
+        services.AddSingleton(new MetadataConnectionStringAccessor(connectionString));
 
         if (applyMigrations)
         {
             services.AddHostedService<DatabaseMigrationHostedService>();
         }
+
+        // Registered after the migration hosted service (registration order = startup order) so
+        // that when migrations are enabled, the schema is guaranteed to exist by the time this runs.
+        services.AddHostedService<DefaultDataSourceSeeder>();
 
         services.AddScoped<ISavedQueryRepository, SavedQueryRepository>();
         services.AddScoped<IDataSourceRepository, DataSourceRepository>();

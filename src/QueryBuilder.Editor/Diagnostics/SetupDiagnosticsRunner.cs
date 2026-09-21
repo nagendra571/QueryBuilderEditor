@@ -74,7 +74,7 @@ internal static class SetupDiagnosticsRunner
         var hasRoute = services.GetServices<EndpointDataSource>()
             .SelectMany(ds => ds.Endpoints)
             .OfType<RouteEndpoint>()
-            .Any(e => (e.RoutePattern.RawText ?? string.Empty).Contains("/api/data-sources", StringComparison.OrdinalIgnoreCase));
+            .Any(e => (e.RoutePattern.RawText ?? string.Empty).Contains($"{QueryBuilderRoutes.BasePath}/api/data-sources", StringComparison.OrdinalIgnoreCase));
 
         return hasRoute
             ? new SetupCheck("API endpoints mapped", true, "QueryBuilder's API routes are registered.")

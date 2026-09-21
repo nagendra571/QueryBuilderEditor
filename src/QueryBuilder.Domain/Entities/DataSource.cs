@@ -8,6 +8,14 @@ namespace QueryBuilder.Domain.Entities;
 /// </summary>
 public sealed class DataSource : AuditableEntity
 {
+    /// <summary>
+    /// Reserved <see cref="ConnectionStringName"/> value meaning "use QueryBuilder's own metadata
+    /// connection string" instead of looking one up by name in configuration. Set on the data
+    /// source QueryBuilder auto-registers on first run when none exist yet, so there's something
+    /// to query out of the box.
+    /// </summary>
+    public const string DefaultConnectionStringSentinel = "__QueryBuilderDefault__";
+
     public string Name { get; set; } = string.Empty;
     public string? Description { get; set; }
     public DataSourceProvider Provider { get; set; } = DataSourceProvider.SqlServer;

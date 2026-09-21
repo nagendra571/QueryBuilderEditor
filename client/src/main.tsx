@@ -23,7 +23,7 @@ createRoot(document.getElementById('root')!).render(
       <QueryClientProvider client={queryClient}>
         <TooltipProvider delayDuration={300}>
           <DensityInit />
-          <BrowserRouter>
+          <BrowserRouter basename="/querybuilder">
             <App />
           </BrowserRouter>
           <Toaster richColors position="bottom-right" />

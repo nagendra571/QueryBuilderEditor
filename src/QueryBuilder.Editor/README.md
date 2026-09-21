@@ -69,9 +69,18 @@ dotnet run
 ```
 
 EF Core migrations run automatically on first startup — the database and schema are created for
-you. Navigate to `/`.
+you. Navigate to `/querybuilder`.
 
-No admin UI registers a business data source yet in this release — insert a row into the
+QueryBuilder always mounts under `/querybuilder` — it never takes over your app's root, so it's
+safe to drop into an app that already has its own home page. Add a nav link wherever makes sense
+in your own layout: `<a href="/querybuilder">Queries</a>`.
+
+On first run with zero data sources registered, QueryBuilder automatically registers a **"Default"**
+one pointed at its own connection string above — so the catalog isn't empty out of the box. This
+only fires once (it never runs again once at least one data source exists), and it's silent, not
+fatal, if it can't (e.g. the schema isn't provisioned yet in a DBA-managed setup).
+
+No admin UI registers additional business data sources yet in this release — insert a row into the
 `DataSources` table (or run your own seeding code) pointing `ConnectionStringName` at another
 entry under `ConnectionStrings` in your configuration. The catalog sidebar reads directly from
 that source's `sys.tables`/`sys.views`.

@@ -50,10 +50,11 @@ for how.
 dotnet run --project src/QueryBuilder.Api
 ```
 
-This serves the whole app — API and built frontend — from a single process at whatever URL
-`dotnet run` prints (check `src/QueryBuilder.Api/Properties/launchSettings.json`). A "Sales
-Sample" data source with a demo schema is seeded automatically so there's something to query
-immediately.
+This serves the whole app — API and built frontend — from a single process. Navigate to
+`/querybuilder` on whatever URL `dotnet run` prints (check
+`src/QueryBuilder.Api/Properties/launchSettings.json`) — QueryBuilder always mounts under that
+path rather than your app's root. A "Sales Sample" data source with a demo schema is seeded
+automatically so there's something to query immediately.
 
 **For frontend development** with hot reload instead of the pre-built bundle:
 
@@ -87,6 +88,8 @@ migrations, API/UI wiring, JSON options, and the authorization pipeline in one p
   role / custom policy), applied uniformly across every route
 - DBA-friendly database story: auto-migration by default, or an idempotent SQL script for
   DDL-restricted environments
+- Auto-registers a default data source (against its own connection string) on first run so the
+  catalog is never empty out of the box
 - Compact/comfortable density modes, light/dark theme
 
 ## Roadmap

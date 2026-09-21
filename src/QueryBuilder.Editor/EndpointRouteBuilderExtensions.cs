@@ -13,16 +13,16 @@ public static class EndpointRouteBuilderExtensions
     /// to all of them uniformly — no per-endpoint changes needed. For anything other than
     /// <see cref="QueryBuilderAuthorizationMode.Anonymous"/>, your pipeline must call, in order,
     /// <c>app.UseAuthentication()</c> then <c>app.UseAuthorization()</c> before this is reached.
-    /// Once registered, visit <c>GET /_setup</c> in Development to verify every integration
-    /// requirement at once — it works independently of whether this method was even called.
+    /// Every route is mapped under <c>/querybuilder</c> (e.g. <c>/querybuilder/api/data-sources</c>)
+    /// so QueryBuilder never collides with routes your own app owns. Once registered, visit
+    /// <c>GET /_setup</c> in Development to verify every integration requirement at once — it
+    /// works independently of whether this method was even called.
     /// </summary>
     public static IEndpointRouteBuilder MapQueryBuilderEditor(this IEndpointRouteBuilder endpoints)
     {
         var options = endpoints.ServiceProvider.GetRequiredService<QueryBuilderEditorOptions>();
 
-        // An empty-prefix group is a pure convention carrier: nested route groups keep their own
-        // paths untouched, but RequireAuthorization applied here cascades to every one of them.
-        var group = endpoints.MapGroup(string.Empty);
+        var group = endpoints.MapGroup(QueryBuilderRoutes.BasePath);
         ApplyAuthorization(group, options.Authorization);
 
         group.MapDataSourceEndpoints();
