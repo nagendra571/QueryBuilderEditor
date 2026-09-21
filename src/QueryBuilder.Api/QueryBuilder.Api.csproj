@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="8.0.19" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="9.0.9">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="Serilog.AspNetCore" Version="10.0.0" />
+    <PackageReference Include="Serilog.Settings.Configuration" Version="10.0.1" />
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="10.2.3" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- In a real integration this would be a PackageReference to QueryBuilder.Editor from NuGet —
+         this repo just references the project directly since it's also the package's own source. -->
+    <ProjectReference Include="..\QueryBuilder.Editor\QueryBuilder.Editor.csproj" />
+    <!-- Domain/Infrastructure are bundled privately into QueryBuilder.Editor's package (not exposed
+         to a real consumer) — this sample app references them directly only because its demo Seed/
+         code reaches into AppDbContext and domain entities, something a real integration never does. -->
+    <ProjectReference Include="..\QueryBuilder.Domain\QueryBuilder.Domain.csproj" />
+    <ProjectReference Include="..\QueryBuilder.Infrastructure\QueryBuilder.Infrastructure.csproj" />
+  </ItemGroup>
+
+</Project>

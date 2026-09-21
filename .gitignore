@@ -1,0 +1,31 @@
+# .NET build output
+[Bb]in/
+[Oo]bj/
+*.user
+*.suo
+.vs/
+TestResults/
+
+# Local NuGet pack output — regenerate with `dotnet pack src/QueryBuilder.Editor -c Release -o nupkg`
+nupkg/
+pack-output/
+*.nupkg
+*.snupkg
+
+# Node / Vite (client)
+client/node_modules/
+client/dist/
+# QueryBuilder.Editor/wwwroot IS committed on purpose — it's the built SPA embedded into the
+# package, and there's no CI to regenerate it on pack. Refresh it via `-p:BuildClientApp=true`
+# (see src/QueryBuilder.Editor/QueryBuilder.Editor.csproj) whenever client/ changes.
+npm-debug.log*
+
+# Editor/OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Secrets — never commit real connection strings/credentials
+appsettings.*.local.json
+*.local.json

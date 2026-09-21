@@ -1,0 +1,11 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <!-- Internal layer, never published on its own — bundled into QueryBuilder.Editor's package. -->
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+</Project>

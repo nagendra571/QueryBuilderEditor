@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/QueryBuilder.Api/QueryBuilder.Api.csproj" />
+    <Project Path="src/QueryBuilder.Application/QueryBuilder.Application.csproj" />
+    <Project Path="src/QueryBuilder.Domain/QueryBuilder.Domain.csproj" />
+    <Project Path="src/QueryBuilder.Editor/QueryBuilder.Editor.csproj" />
+    <Project Path="src/QueryBuilder.Infrastructure/QueryBuilder.Infrastructure.csproj" />
+  </Folder>
+</Solution>

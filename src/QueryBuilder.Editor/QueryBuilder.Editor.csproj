@@ -1,0 +1,103 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <!-- Domain/Application/Infrastructure are internal layers (IsPackable=false) — bundled into this
+       package's lib folder by BundleInternalAssemblies below, never exposed as separate NuGet
+       dependencies. PrivateAssets=all is what suppresses them from the nuspec's <dependencies>. -->
+  <ItemGroup>
+    <ProjectReference Include="..\QueryBuilder.Application\QueryBuilder.Application.csproj" PrivateAssets="all" />
+    <ProjectReference Include="..\QueryBuilder.Infrastructure\QueryBuilder.Infrastructure.csproj" PrivateAssets="all" />
+    <ProjectReference Include="..\QueryBuilder.Domain\QueryBuilder.Domain.csproj" PrivateAssets="all" />
+  </ItemGroup>
+
+  <!-- Runtime dependencies of the bundled assemblies — must be declared explicitly here because
+       PrivateAssets=all above also suppresses their transitive packages, which a consumer's
+       restore would otherwise silently be missing. Versions match what Application/Infrastructure
+       reference; keep these in sync if those change. -->
+  <ItemGroup>
+    <PackageReference Include="FluentValidation" Version="12.1.1" />
+    <PackageReference Include="FluentValidation.DependencyInjectionExtensions" Version="12.1.1" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.12" />
+    <PackageReference Include="ClosedXML" Version="0.105.1" />
+    <PackageReference Include="CsvHelper" Version="33.1.0" />
+    <PackageReference Include="Microsoft.Data.SqlClient" Version="7.1.0" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="9.0.9" />
+    <PackageReference Include="Microsoft.Extensions.Caching.Memory" Version="10.0.12" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <ClientAppDir>$(MSBuildThisFileDirectory)..\..\client</ClientAppDir>
+  </PropertyGroup>
+
+  <!-- Package metadata -->
+  <PropertyGroup>
+    <PackageId>QueryBuilder.Editor</PackageId>
+    <!-- Bump alongside a new EF Core migration, then regenerate Scripts/QueryBuilder.schema.<version>.sql
+         (see Scripts/README.md) so DBA-managed deployments have a matching provisioning script. -->
+    <Version>1.0.0</Version>
+    <Authors>Nagendra Chinnam</Authors>
+    <Description>Visual, no-SQL-required query builder for business users: browse a catalog of SQL Server views/tables, build queries by dragging columns and setting filters/sorts, preview generated SQL, run and export results, with a full audit trail. Ships as an embeddable ASP.NET Core component with its UI built in — call AddQueryBuilderEditor() then app.UseQueryBuilderEditorUI() + app.MapQueryBuilderEditor().</Description>
+    <PackageTags>query-builder;sql;low-code;reporting;data-analytics;aspnetcore</PackageTags>
+    <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <RepositoryUrl>https://github.com/nagendra571/QueryBuilderEditor</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageProjectUrl>https://github.com/nagendra571/QueryBuilderEditor</PackageProjectUrl>
+    <Copyright>Copyright © 2026 Nagendra Chinnam</Copyright>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+  <!-- The built React app is embedded into this assembly and served by UseQueryBuilderEditorUI(),
+       so a consuming app doesn't need to run or deploy a separate frontend process. -->
+  <PropertyGroup>
+    <GenerateEmbeddedFilesManifest>true</GenerateEmbeddedFilesManifest>
+  </PropertyGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="wwwroot\**" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.FileProviders.Embedded" Version="10.0.12" />
+  </ItemGroup>
+
+  <!-- Shipped alongside the assembly (not embedded — a DBA needs to open and run these directly)
+       for DBA-managed databases; see Scripts/README.md and QueryBuilderEditorOptions.ApplyMigrations. -->
+  <ItemGroup>
+    <None Include="Scripts\**\*.sql" Pack="true" PackagePath="scripts\" />
+    <None Include="Scripts\README.md" Pack="true" PackagePath="scripts\" />
+  </ItemGroup>
+
+  <!-- Bundles the internal layers' compiled DLLs directly into this package's lib folder instead of
+       referencing them as separate NuGet packages (which don't exist — they're IsPackable=false).
+       Mirrors the same technique used by TemplateBuilder.Editor. -->
+  <Target Name="BundleInternalAssemblies" BeforeTargets="_GetPackageFiles">
+    <ItemGroup>
+      <None Include="$(OutputPath)QueryBuilder.Domain.dll" Pack="true" PackagePath="lib\$(TargetFramework)\" Visible="false" />
+      <None Include="$(OutputPath)QueryBuilder.Application.dll" Pack="true" PackagePath="lib\$(TargetFramework)\" Visible="false" />
+      <None Include="$(OutputPath)QueryBuilder.Infrastructure.dll" Pack="true" PackagePath="lib\$(TargetFramework)\" Visible="false" />
+    </ItemGroup>
+  </Target>
+
+  <!-- Dev convenience only, opt-in: pass -p:BuildClientApp=true to rebuild the SPA from source and
+       refresh wwwroot before this project builds (skipped by default so routine backend builds stay
+       fast). A real NuGet consumer never has the client source, so this never runs for them either
+       way — they always get whatever wwwroot was baked into the package at pack time. -->
+  <Target Name="BuildClientApp" BeforeTargets="BeforeBuild" Condition="'$(BuildClientApp)' == 'true' And Exists('$(ClientAppDir)\package.json')">
+    <Exec Command="npm run build" WorkingDirectory="$(ClientAppDir)" />
+    <ItemGroup>
+      <_BuiltClientFiles Include="$(ClientAppDir)\dist\**\*" />
+    </ItemGroup>
+    <RemoveDir Directories="$(MSBuildThisFileDirectory)wwwroot" Condition="Exists('$(MSBuildThisFileDirectory)wwwroot')" />
+    <Copy SourceFiles="@(_BuiltClientFiles)" DestinationFolder="$(MSBuildThisFileDirectory)wwwroot\%(RecursiveDir)" />
+  </Target>
+
+</Project>
