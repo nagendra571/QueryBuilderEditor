@@ -22,6 +22,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { NewQueryDialog } from '@/features/builder/NewQueryDialog'
+import { useDataSources } from '@/hooks/useDataSources'
 import { useDeleteSavedQuery, useSavedQueries, useToggleFavorite } from '@/hooks/useSavedQueries'
 import { cn } from '@/lib/utils'
 import type { SavedQuerySummaryDto } from '@/types'
@@ -30,12 +31,22 @@ type FilterTab = 'all' | 'mine' | 'favorites'
 
 export function QueryListPage() {
   const { data: queries, isLoading } = useSavedQueries()
+  const { data: dataSources } = useDataSources()
   const [search, setSearch] = useState('')
   const [tab, setTab] = useState<FilterTab>('all')
   const [newQueryOpen, setNewQueryOpen] = useState(false)
   const navigate = useNavigate()
   const toggleFavorite = useToggleFavorite()
   const deleteQuery = useDeleteSavedQuery()
+
+  function handleNewQuery() {
+    // Only one data source registered — skip asking and go straight to the builder.
+    if (dataSources?.length === 1) {
+      navigate(`/queries/new?dataSourceId=${dataSources[0].id}`)
+      return
+    }
+    setNewQueryOpen(true)
+  }
 
   const filtered = useMemo(() => {
     if (!queries) return []
@@ -55,7 +66,7 @@ export function QueryListPage() {
           <h1 className="text-xl font-semibold tracking-tight">Queries</h1>
           <p className="text-sm text-muted-foreground">Build, run, and share reusable queries over your data views.</p>
         </div>
-        <Button onClick={() => setNewQueryOpen(true)}>
+        <Button onClick={handleNewQuery}>
           <Plus className="size-4" />
           New query
         </Button>
@@ -91,7 +102,7 @@ export function QueryListPage() {
             <p className="text-sm font-medium">No queries yet</p>
             <p className="text-xs text-muted-foreground">Create your first query to browse your data views.</p>
           </div>
-          <Button size="sm" onClick={() => setNewQueryOpen(true)}>
+          <Button size="sm" onClick={handleNewQuery}>
             <Plus className="size-3.5" />
             New query
           </Button>
