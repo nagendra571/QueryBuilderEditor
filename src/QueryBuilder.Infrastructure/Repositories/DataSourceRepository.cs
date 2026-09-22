@@ -12,4 +12,11 @@ public sealed class DataSourceRepository(AppDbContext db) : IDataSourceRepositor
 
     public Task<List<DataSource>> GetActiveAsync(CancellationToken cancellationToken) =>
         db.DataSources.AsNoTracking().Where(x => x.IsActive).OrderBy(x => x.Name).ToListAsync(cancellationToken);
+
+    public Task<List<DataSource>> GetAllAsync(CancellationToken cancellationToken) =>
+        db.DataSources.AsNoTracking().OrderBy(x => x.Name).ToListAsync(cancellationToken);
+
+    public void Update(DataSource dataSource) => db.DataSources.Update(dataSource);
+
+    public Task<int> SaveChangesAsync(CancellationToken cancellationToken) => db.SaveChangesAsync(cancellationToken);
 }
