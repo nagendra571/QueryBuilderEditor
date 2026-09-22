@@ -17,6 +17,7 @@ public sealed record RunQueryCommand(
 
 public sealed class RunQueryCommandHandler(
     IDataSourceRepository dataSourceRepository,
+    ISavedQueryRepository savedQueryRepository,
     IDataCatalogService catalogService,
     IQuerySqlBuilderFactory sqlBuilderFactory,
     IQueryExecutionService executionService,
@@ -27,6 +28,16 @@ public sealed class RunQueryCommandHandler(
     {
         var dataSource = await dataSourceRepository.GetByIdAsync(request.DataSourceId, cancellationToken)
             ?? throw new NotFoundException(nameof(DataSource), request.DataSourceId);
+
+        if (request.SavedQueryId is { } savedQueryId)
+        {
+            var savedQuery = await savedQueryRepository.GetByIdAsync(savedQueryId, cancellationToken)
+                ?? throw new NotFoundException(nameof(SavedQuery), savedQueryId);
+            if (savedQuery.IsDisabled)
+            {
+                throw new QueryDisabledException($"'{savedQuery.Name}' is disabled and cannot be run.");
+            }
+        }
 
         await catalogService.ValidateAsync(request.DataSourceId, request.Definition, cancellationToken);
 

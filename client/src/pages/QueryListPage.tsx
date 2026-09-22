@@ -1,5 +1,5 @@
 import { formatDistanceToNow } from 'date-fns'
-import { Database, MoreHorizontal, Plus, Search, Share2, Star, Trash2 } from 'lucide-react'
+import { Ban, Database, MoreHorizontal, Plus, Power, Search, Share2, Star, Trash2 } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Badge } from '@/components/ui/badge'
@@ -24,7 +24,7 @@ import {
 import { NewQueryDialog } from '@/features/builder/NewQueryDialog'
 import { AccessLevelBadge, ShareDialog } from '@/features/builder/ShareDialog'
 import { useDataSources } from '@/hooks/useDataSources'
-import { useDeleteSavedQuery, useSavedQueries, useToggleFavorite } from '@/hooks/useSavedQueries'
+import { useDeleteSavedQuery, useSavedQueries, useToggleDisabled, useToggleFavorite } from '@/hooks/useSavedQueries'
 import { cn } from '@/lib/utils'
 import type { SavedQuerySummaryDto } from '@/types'
 
@@ -39,6 +39,7 @@ export function QueryListPage() {
   const [shareTarget, setShareTarget] = useState<SavedQuerySummaryDto | null>(null)
   const navigate = useNavigate()
   const toggleFavorite = useToggleFavorite()
+  const toggleDisabled = useToggleDisabled()
   const deleteQuery = useDeleteSavedQuery()
 
   function handleNewQuery() {
@@ -133,6 +134,7 @@ export function QueryListPage() {
                   query={query}
                   onOpen={() => navigate(`/queries/${query.id}`)}
                   onToggleFavorite={() => toggleFavorite.mutate(query.id)}
+                  onToggleDisabled={() => toggleDisabled.mutate(query.id)}
                   onDelete={() => deleteQuery.mutate(query.id)}
                   onShare={() => setShareTarget(query)}
                 />
@@ -161,17 +163,19 @@ function QueryRow({
   query,
   onOpen,
   onToggleFavorite,
+  onToggleDisabled,
   onDelete,
   onShare,
 }: {
   query: SavedQuerySummaryDto
   onOpen: () => void
   onToggleFavorite: () => void
+  onToggleDisabled: () => void
   onDelete: () => void
   onShare: () => void
 }) {
   return (
-    <TableRow className="cursor-pointer" onClick={onOpen}>
+    <TableRow className={cn('cursor-pointer', query.isDisabled && 'opacity-60')} onClick={onOpen}>
       <TableCell onClick={(e) => e.stopPropagation()}>
         <Button variant="ghost" size="icon" className="size-6" onClick={onToggleFavorite}>
           <Star className={cn('size-3.5', query.isFavorite && 'fill-warning text-warning')} />
@@ -182,6 +186,12 @@ function QueryRow({
           <span className="flex items-center gap-1.5 text-(length:--text-body) font-medium">
             {query.name}
             <AccessLevelBadge level={query.myAccessLevel} />
+            {query.isDisabled && (
+              <Badge variant="outline" className="h-4 gap-1 px-1.5 text-[10px] font-normal text-muted-foreground">
+                <Ban className="size-2.5" />
+                Disabled
+              </Badge>
+            )}
           </span>
           {query.description && <span className="truncate text-xs text-muted-foreground">{query.description}</span>}
         </div>
@@ -207,6 +217,10 @@ function QueryRow({
               <DropdownMenuItem onClick={onShare}>
                 <Share2 className="size-3.5" />
                 Share
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={onToggleDisabled}>
+                {query.isDisabled ? <Power className="size-3.5" /> : <Ban className="size-3.5" />}
+                {query.isDisabled ? 'Enable' : 'Disable'}
               </DropdownMenuItem>
               <DropdownMenuItem variant="destructive" onClick={onDelete}>
                 <Trash2 className="size-3.5" />

@@ -20,6 +20,15 @@ export function useToggleFavorite() {
   })
 }
 
+export function useToggleDisabled() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => savedQueriesApi.toggleDisabled(id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: savedQueriesKey }),
+    onError: (error) => toast.error(error instanceof ApiError ? error.message : 'Could not update the query.'),
+  })
+}
+
 export function useDeleteSavedQuery() {
   const queryClient = useQueryClient()
   return useMutation({

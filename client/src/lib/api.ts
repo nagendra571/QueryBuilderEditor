@@ -33,6 +33,8 @@ export const savedQueriesApi = {
   },
   toggleFavorite: async (id: string): Promise<{ isFavorite: boolean }> =>
     (await apiClient.post(`/queries/${id}/favorite`)).data,
+  toggleDisabled: async (id: string): Promise<{ isDisabled: boolean }> =>
+    (await apiClient.post(`/queries/${id}/disable`)).data,
   previewSql: async (request: RunQueryRequest): Promise<QuerySqlPreviewDto> =>
     (await apiClient.post('/queries/preview-sql', request)).data,
   run: async (request: RunQueryRequest): Promise<QueryResultDto> =>

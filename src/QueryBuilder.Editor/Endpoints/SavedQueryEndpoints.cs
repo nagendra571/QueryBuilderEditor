@@ -39,6 +39,12 @@ public static class SavedQueryEndpoints
             return Results.Json(new { isFavorite }, QueryBuilderJson.Options);
         });
 
+        group.MapPost("/{id:guid}/disable", async (Guid id, ISender sender, CancellationToken ct) =>
+        {
+            var isDisabled = await sender.Send(new SetQueryDisabledCommand(id), ct);
+            return Results.Json(new { isDisabled }, QueryBuilderJson.Options);
+        });
+
         group.MapGet("/{id:guid}/shares", async (Guid id, ISender sender, CancellationToken ct) =>
             Results.Json(await sender.Send(new GetQuerySharesQuery(id), ct), QueryBuilderJson.Options));
 

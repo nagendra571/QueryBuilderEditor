@@ -33,6 +33,7 @@ public sealed class GetSavedQueryByIdQueryHandler(ISavedQueryRepository reposito
             isOwner,
             GetSavedQueriesQueryHandler.AccessLevelFor(query, currentUser.UserId),
             query.IsFavorite,
+            query.IsDisabled,
             QueryDefinitionSerializer.Deserialize(query.DefinitionJson),
             query.CreatedAtUtc,
             query.UpdatedAtUtc);

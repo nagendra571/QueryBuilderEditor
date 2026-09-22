@@ -19,6 +19,7 @@ public sealed record ExportResult(byte[] Content, string ContentType, string Fil
 
 public sealed class ExportQueryCommandHandler(
     IDataSourceRepository dataSourceRepository,
+    ISavedQueryRepository savedQueryRepository,
     IDataCatalogService catalogService,
     IQuerySqlBuilderFactory sqlBuilderFactory,
     IQueryExecutionService executionService,
@@ -30,6 +31,16 @@ public sealed class ExportQueryCommandHandler(
     {
         var dataSource = await dataSourceRepository.GetByIdAsync(request.DataSourceId, cancellationToken)
             ?? throw new NotFoundException(nameof(DataSource), request.DataSourceId);
+
+        if (request.SavedQueryId is { } savedQueryId)
+        {
+            var savedQuery = await savedQueryRepository.GetByIdAsync(savedQueryId, cancellationToken)
+                ?? throw new NotFoundException(nameof(SavedQuery), savedQueryId);
+            if (savedQuery.IsDisabled)
+            {
+                throw new QueryDisabledException($"'{savedQuery.Name}' is disabled and cannot be exported.");
+            }
+        }
 
         await catalogService.ValidateAsync(request.DataSourceId, request.Definition, cancellationToken);
 

@@ -27,6 +27,7 @@ public sealed class GetSavedQueriesQueryHandler(ISavedQueryRepository repository
                 q.OwnerId == currentUser.UserId,
                 AccessLevelFor(q, currentUser.UserId),
                 q.IsFavorite,
+                q.IsDisabled,
                 q.CreatedAtUtc,
                 q.UpdatedAtUtc))
             .ToList();

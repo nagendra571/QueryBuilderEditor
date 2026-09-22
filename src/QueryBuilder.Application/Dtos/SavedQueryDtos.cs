@@ -14,6 +14,7 @@ public sealed record SavedQuerySummaryDto(
     bool IsOwnedByCurrentUser,
     QueryAccessLevel MyAccessLevel,
     bool IsFavorite,
+    bool IsDisabled,
     DateTimeOffset CreatedAtUtc,
     DateTimeOffset? UpdatedAtUtc);
 
@@ -28,6 +29,7 @@ public sealed record SavedQueryDetailDto(
     bool IsOwnedByCurrentUser,
     QueryAccessLevel MyAccessLevel,
     bool IsFavorite,
+    bool IsDisabled,
     QueryDefinition Definition,
     DateTimeOffset CreatedAtUtc,
     DateTimeOffset? UpdatedAtUtc);

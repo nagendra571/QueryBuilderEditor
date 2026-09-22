@@ -169,6 +169,23 @@ BEGIN
     VALUES (N'20260921010653_AddAuditLog', N'9.0.9');
 END;
 
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20260922164327_AddQueryDisabled'
+)
+BEGIN
+    ALTER TABLE [SavedQueries] ADD [IsDisabled] bit NOT NULL DEFAULT CAST(0 AS bit);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20260922164327_AddQueryDisabled'
+)
+BEGIN
+    INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
+    VALUES (N'20260922164327_AddQueryDisabled', N'9.0.9');
+END;
+
 COMMIT;
 GO
 

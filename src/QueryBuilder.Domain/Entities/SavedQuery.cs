@@ -14,6 +14,7 @@ public sealed class SavedQuery : AuditableEntity
     public string DefinitionJson { get; set; } = string.Empty;
 
     public bool IsFavorite { get; set; }
+    public bool IsDisabled { get; set; }
 
     public List<QueryShare> Shares { get; set; } = [];
 }

@@ -44,6 +44,7 @@ public sealed class GlobalExceptionHandler(ILogger<GlobalExceptionHandler> logge
         ForbiddenException => (StatusCodes.Status403Forbidden, "Forbidden", null),
         CatalogValidationException => (StatusCodes.Status400BadRequest, "Invalid query definition", null),
         QueryExecutionException => (StatusCodes.Status400BadRequest, "Query failed", null),
+        QueryDisabledException => (StatusCodes.Status409Conflict, "Query disabled", null),
         ValidationException validationException => (
             StatusCodes.Status400BadRequest,
             "Validation failed",

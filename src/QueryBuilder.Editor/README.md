@@ -189,8 +189,10 @@ Every failing check includes a one-line fix. Returns 404 outside Development.
 - Export results to CSV or Excel
 - Save, reopen, and re-run queries; per-query history tab
 - Share a saved query as Viewer or Editor, scoped per data source via an optional `AppUsers` view
-- Full audit log (created/updated/deleted/run/exported/shared/unshared) with a configurable actor
-  identity and access control
+- Disable a saved query to block anyone from running or exporting it without deleting it —
+  owner-only, reversible
+- Full audit log (created/updated/deleted/run/exported/shared/unshared/disabled/enabled) with a
+  configurable actor identity and access control
 
 ## Links
 

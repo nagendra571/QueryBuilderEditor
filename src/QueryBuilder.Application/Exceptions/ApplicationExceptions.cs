@@ -8,3 +8,5 @@ public sealed class NotFoundException(string entityName, object key)
 public sealed class ForbiddenException(string message) : Exception(message);
 
 public sealed class QueryExecutionException(string message, Exception? inner = null) : Exception(message, inner);
+
+public sealed class QueryDisabledException(string message) : Exception(message);

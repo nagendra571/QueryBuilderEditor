@@ -169,6 +169,7 @@ export interface SavedQuerySummaryDto {
   isOwnedByCurrentUser: boolean
   myAccessLevel: QueryAccessLevel
   isFavorite: boolean
+  isDisabled: boolean
   createdAtUtc: string
   updatedAtUtc?: string | null
 }
@@ -184,6 +185,7 @@ export interface SavedQueryDetailDto {
   isOwnedByCurrentUser: boolean
   myAccessLevel: QueryAccessLevel
   isFavorite: boolean
+  isDisabled: boolean
   definition: QueryDefinition
   createdAtUtc: string
   updatedAtUtc?: string | null
@@ -272,7 +274,16 @@ export interface ApiProblemDetails {
   errors?: Record<string, string[]>
 }
 
-export type AuditAction = 'queryCreated' | 'queryUpdated' | 'queryDeleted' | 'queryRun' | 'queryExported'
+export type AuditAction =
+  | 'queryCreated'
+  | 'queryUpdated'
+  | 'queryDeleted'
+  | 'queryRun'
+  | 'queryExported'
+  | 'queryShared'
+  | 'queryUnshared'
+  | 'queryDisabled'
+  | 'queryEnabled'
 
 export interface AuditLogEntryDto {
   id: string

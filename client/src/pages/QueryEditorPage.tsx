@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, Code2, Download, FileSpreadsheet, History, Loader2, Play, Save, Share2, Star } from 'lucide-react'
+import { ArrowLeft, Ban, Code2, Download, FileSpreadsheet, History, Loader2, Play, Power, Save, Share2, Star } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
@@ -129,9 +129,19 @@ export function QueryEditorPage() {
     mutationFn: () => savedQueriesApi.toggleFavorite(queryId!),
   })
 
+  const disabledMutation = useMutation({
+    mutationFn: () => savedQueriesApi.toggleDisabled(queryId!),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['saved-query', queryId] })
+      queryClient.invalidateQueries({ queryKey: savedQueriesKey })
+    },
+    onError: (error) => toast.error(error instanceof ApiError ? error.message : 'Could not update the query.'),
+  })
+
   const myAccessLevel = existingQuery.data?.myAccessLevel ?? 'owner'
   const isViewer = myAccessLevel === 'viewer'
   const isOwner = myAccessLevel === 'owner'
+  const isDisabled = existingQuery.data?.isDisabled ?? false
 
   const hasColumns = definition.columns.some((c) => c.isVisible)
   const canQuery = hasColumns && !!dataSourceId
@@ -184,6 +194,12 @@ export function QueryEditorPage() {
             <span className="flex items-center gap-1.5 truncate text-sm font-semibold">
               {name || 'Untitled query'}
               <AccessLevelBadge level={myAccessLevel} />
+              {isDisabled && (
+                <Badge variant="outline" className="h-4 gap-1 px-1.5 text-[10px] font-normal text-muted-foreground">
+                  <Ban className="size-2.5" />
+                  Disabled
+                </Badge>
+              )}
             </span>
             {definition.source.objectName && (
               <span className="truncate text-[11px] text-muted-foreground">
@@ -213,7 +229,13 @@ export function QueryEditorPage() {
               Show query
             </Button>
 
-            <Button size="sm" className="h-8 text-xs" disabled={!canQuery || runMutation.isPending} onClick={() => requireParametersThen({ kind: 'run' })}>
+            <Button
+              size="sm"
+              className="h-8 text-xs"
+              disabled={!canQuery || isDisabled || runMutation.isPending}
+              title={isDisabled ? 'This query is disabled and cannot be run.' : undefined}
+              onClick={() => requireParametersThen({ kind: 'run' })}
+            >
               {runMutation.isPending ? <Loader2 className="size-3.5 animate-spin" /> : <Play className="size-3.5" />}
               Run
             </Button>
@@ -224,7 +246,8 @@ export function QueryEditorPage() {
               variant="outline"
               size="sm"
               className="h-8 text-xs"
-              disabled={!canQuery || exportMutation.isPending}
+              disabled={!canQuery || isDisabled || exportMutation.isPending}
+              title={isDisabled ? 'This query is disabled and cannot be exported.' : undefined}
               onClick={() => requireParametersThen({ kind: 'export', format: 'csv' })}
             >
               <Download className="size-3.5" />
@@ -234,7 +257,8 @@ export function QueryEditorPage() {
               variant="outline"
               size="sm"
               className="h-8 text-xs"
-              disabled={!canQuery || exportMutation.isPending}
+              disabled={!canQuery || isDisabled || exportMutation.isPending}
+              title={isDisabled ? 'This query is disabled and cannot be exported.' : undefined}
               onClick={() => requireParametersThen({ kind: 'export', format: 'xlsx' })}
             >
               <FileSpreadsheet className="size-3.5" />
@@ -242,6 +266,19 @@ export function QueryEditorPage() {
             </Button>
 
             <Separator orientation="vertical" className="h-5" />
+
+            {queryId && isOwner && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 text-xs"
+                disabled={disabledMutation.isPending}
+                onClick={() => disabledMutation.mutate()}
+              >
+                {isDisabled ? <Power className="size-3.5" /> : <Ban className="size-3.5" />}
+                {isDisabled ? 'Enable' : 'Disable'}
+              </Button>
+            )}
 
             {queryId && isOwner && (
               <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => setShareDialogOpen(true)}>

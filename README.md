@@ -87,6 +87,8 @@ migrations, API/UI wiring, JSON options, and the authorization pipeline in one p
 - Export results to CSV or Excel
 - Save, reopen, and re-run queries; per-query audit history
 - Share a saved query as Viewer or Editor, scoped per data source via an optional `AppUsers` view
+- Disable a saved query to block it from being run or exported by anyone (owner or shared users)
+  without deleting it; owner-only toggle, reversible, logged to the audit history
 - Configurable actor identity (`ActorResolver`) and access control (anonymous / authenticated /
   role / custom policy), applied uniformly across every route
 - DBA-friendly database story: auto-migration by default, or an idempotent SQL script for
