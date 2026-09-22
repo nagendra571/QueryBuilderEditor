@@ -13,6 +13,8 @@ export type SortDirection = 'asc' | 'desc'
 
 export type QueryAccessLevel = 'viewer' | 'editor' | 'owner'
 
+export type CatalogScope = 'views' | 'tables' | 'tablesAndViews'
+
 export type FilterLogicalOperator = 'and' | 'or'
 
 export type FilterOperator =
@@ -69,7 +71,7 @@ export interface DataSourceDto {
   id: string
   name: string
   description?: string | null
-  viewsOnly: boolean
+  catalogScope: CatalogScope
 }
 
 // ---- Query definition (the builder's persisted state) ----

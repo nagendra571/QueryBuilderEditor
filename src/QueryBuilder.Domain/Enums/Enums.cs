@@ -8,6 +8,15 @@ public enum DataSourceProvider
     Sqlite = 3
 }
 
+/// <summary>Which object kinds a data source's catalog surfaces. Combined with
+/// <see cref="Entities.DataSource.AllowedObjects"/> (if non-empty) for finer-grained control.</summary>
+public enum CatalogScope
+{
+    Views = 0,
+    Tables = 1,
+    TablesAndViews = 2
+}
+
 public enum ColumnDataType
 {
     Text = 0,
@@ -99,5 +108,6 @@ public enum AuditAction
     QueryShared = 5,
     QueryUnshared = 6,
     QueryDisabled = 7,
-    QueryEnabled = 8
+    QueryEnabled = 8,
+    DataSourceCatalogPolicyUpdated = 9
 }

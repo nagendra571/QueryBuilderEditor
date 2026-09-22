@@ -29,7 +29,7 @@ public static class AppDbSeeder
             Provider = DataSourceProvider.SqlServer,
             ConnectionStringName = "DemoSource",
             AllowedSchemas = ["sales"],
-            ViewsOnly = true,
+            CatalogScope = CatalogScope.Views,
             IsActive = true,
             CreatedBy = "system-seed"
         });

@@ -38,7 +38,7 @@ internal sealed class DefaultDataSourceSeeder(
                                "Register additional data sources via SQL (see the package README) — an admin UI for this is planned.",
                 Provider = DataSourceProvider.SqlServer,
                 ConnectionStringName = DataSource.DefaultConnectionStringSentinel,
-                ViewsOnly = false,
+                CatalogScope = CatalogScope.TablesAndViews,
                 IsActive = true,
                 CreatedBy = "system-seed",
             });

@@ -26,8 +26,14 @@ public sealed class DataSource : AuditableEntity
     /// <summary>Restrict the catalog to these schemas only (empty = all non-system schemas).</summary>
     public List<string> AllowedSchemas { get; set; } = [];
 
-    /// <summary>When true, only Views are surfaced in the catalog (recommended — business logic lives in views).</summary>
-    public bool ViewsOnly { get; set; } = true;
+    /// <summary>Restricts the catalog by object kind. Combined with <see cref="AllowedObjects"/>
+    /// (if non-empty) for finer-grained control.</summary>
+    public CatalogScope CatalogScope { get; set; } = CatalogScope.Views;
+
+    /// <summary>Restrict the catalog to these specific "SchemaName.ObjectName" entries only
+    /// (empty = every object matching <see cref="CatalogScope"/>/<see cref="AllowedSchemas"/> is
+    /// exposed) — same "empty = no restriction" convention as <see cref="AllowedSchemas"/>.</summary>
+    public List<string> AllowedObjects { get; set; } = [];
 
     public bool IsActive { get; set; } = true;
 }

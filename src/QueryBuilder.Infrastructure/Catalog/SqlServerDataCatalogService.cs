@@ -135,51 +135,27 @@ public sealed class SqlServerDataCatalogService(
         }
     }
 
+    public async Task<List<SchemaObjectMetadata>> GetRawObjectsAsync(Guid dataSourceId, CancellationToken cancellationToken)
+    {
+        var dataSource = await dataSourceRepository.GetByIdAsync(dataSourceId, cancellationToken)
+            ?? throw new NotFoundException(nameof(DataSource), dataSourceId);
+
+        var connectionString = connectionStringResolver.Resolve(dataSource);
+        await using var connection = new SqlConnection(connectionString);
+        await connection.OpenAsync(cancellationToken);
+
+        return await QueryObjectsAsync(connection, dataSource, applyCatalogScopeAndAllowlist: false, cancellationToken);
+    }
+
+    public void InvalidateCatalogCache(Guid dataSourceId) => cache.Remove($"catalog:{dataSourceId}");
+
     private async Task<DataSourceCatalog> BuildCatalogAsync(DataSource dataSource, CancellationToken cancellationToken)
     {
         var connectionString = connectionStringResolver.Resolve(dataSource);
         await using var connection = new SqlConnection(connectionString);
         await connection.OpenAsync(cancellationToken);
 
-        var objects = new List<SchemaObjectMetadata>();
-
-        const string objectsSql = """
-            SELECT s.name AS SchemaName, t.name AS ObjectName, 'Table' AS Kind
-            FROM sys.tables t JOIN sys.schemas s ON t.schema_id = s.schema_id
-            WHERE t.is_ms_shipped = 0
-            UNION ALL
-            SELECT s.name AS SchemaName, v.name AS ObjectName, 'View' AS Kind
-            FROM sys.views v JOIN sys.schemas s ON v.schema_id = s.schema_id
-            WHERE v.is_ms_shipped = 0
-            ORDER BY SchemaName, ObjectName
-            """;
-
-        await using (var cmd = new SqlCommand(objectsSql, connection))
-        await using (var reader = await cmd.ExecuteReaderAsync(cancellationToken))
-        {
-            while (await reader.ReadAsync(cancellationToken))
-            {
-                var schemaName = reader.GetString(0);
-                var objectName = reader.GetString(1);
-                var kind = reader.GetString(2) == "View" ? SchemaObjectKind.View : SchemaObjectKind.Table;
-
-                if (SystemSchemas.Contains(schemaName, StringComparer.OrdinalIgnoreCase))
-                {
-                    continue;
-                }
-                if (dataSource.AllowedSchemas.Count > 0 &&
-                    !dataSource.AllowedSchemas.Contains(schemaName, StringComparer.OrdinalIgnoreCase))
-                {
-                    continue;
-                }
-                if (dataSource.ViewsOnly && kind != SchemaObjectKind.View)
-                {
-                    continue;
-                }
-
-                objects.Add(new SchemaObjectMetadata { SchemaName = schemaName, Name = objectName, Kind = kind });
-            }
-        }
+        var objects = await QueryObjectsAsync(connection, dataSource, applyCatalogScopeAndAllowlist: true, cancellationToken);
 
         const string columnsSql = """
             SELECT
@@ -264,5 +240,62 @@ public sealed class SqlServerDataCatalogService(
             .ToList();
 
         return new DataSourceCatalog { DataSourceId = dataSource.Id, Schemas = schemas };
+    }
+
+    private static async Task<List<SchemaObjectMetadata>> QueryObjectsAsync(
+        SqlConnection connection, DataSource dataSource, bool applyCatalogScopeAndAllowlist, CancellationToken cancellationToken)
+    {
+        var objects = new List<SchemaObjectMetadata>();
+
+        const string objectsSql = """
+            SELECT s.name AS SchemaName, t.name AS ObjectName, 'Table' AS Kind
+            FROM sys.tables t JOIN sys.schemas s ON t.schema_id = s.schema_id
+            WHERE t.is_ms_shipped = 0
+            UNION ALL
+            SELECT s.name AS SchemaName, v.name AS ObjectName, 'View' AS Kind
+            FROM sys.views v JOIN sys.schemas s ON v.schema_id = s.schema_id
+            WHERE v.is_ms_shipped = 0
+            ORDER BY SchemaName, ObjectName
+            """;
+
+        await using var cmd = new SqlCommand(objectsSql, connection);
+        await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            var schemaName = reader.GetString(0);
+            var objectName = reader.GetString(1);
+            var kind = reader.GetString(2) == "View" ? SchemaObjectKind.View : SchemaObjectKind.Table;
+
+            if (SystemSchemas.Contains(schemaName, StringComparer.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+            if (dataSource.AllowedSchemas.Count > 0 &&
+                !dataSource.AllowedSchemas.Contains(schemaName, StringComparer.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            if (applyCatalogScopeAndAllowlist)
+            {
+                if (dataSource.CatalogScope == CatalogScope.Views && kind != SchemaObjectKind.View)
+                {
+                    continue;
+                }
+                if (dataSource.CatalogScope == CatalogScope.Tables && kind != SchemaObjectKind.Table)
+                {
+                    continue;
+                }
+                if (dataSource.AllowedObjects.Count > 0 &&
+                    !dataSource.AllowedObjects.Contains($"{schemaName}.{objectName}", StringComparer.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+            }
+
+            objects.Add(new SchemaObjectMetadata { SchemaName = schemaName, Name = objectName, Kind = kind });
+        }
+
+        return objects;
     }
 }

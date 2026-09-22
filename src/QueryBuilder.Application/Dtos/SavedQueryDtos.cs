@@ -41,7 +41,7 @@ public sealed record SaveQueryRequest(
     Guid DataSourceId,
     QueryDefinition Definition);
 
-public sealed record DataSourceDto(Guid Id, string Name, string? Description, bool ViewsOnly);
+public sealed record DataSourceDto(Guid Id, string Name, string? Description, CatalogScope CatalogScope);
 
 public sealed record QueryShareDto(
     Guid Id,
