@@ -1,4 +1,6 @@
+using QueryBuilder.Application.Commands.Admin;
 using QueryBuilder.Application.Common;
+using QueryBuilder.Application.Dtos;
 using QueryBuilder.Application.Queries.Admin;
 
 namespace QueryBuilder.Editor.Endpoints;
@@ -18,6 +20,14 @@ public static class AdminEndpoints
 
         group.MapGet("/data-sources/{id:guid}", async (Guid id, ISender sender, CancellationToken ct) =>
             Results.Json(await sender.Send(new GetAdminDataSourceDetailQuery(id), ct), QueryBuilderJson.Options));
+
+        group.MapPut("/data-sources/{id:guid}/catalog-policy", async (Guid id, HttpContext http, ISender sender, CancellationToken ct) =>
+        {
+            var request = await http.Request.ReadFromJsonAsync<UpdateCatalogPolicyRequest>(QueryBuilderJson.Options, ct)
+                ?? throw new BadHttpRequestException("Request body is required.");
+            await sender.Send(new UpdateCatalogPolicyCommand(id, request.CatalogScope, request.AllowedObjects), ct);
+            return Results.NoContent();
+        });
 
         return group;
     }
