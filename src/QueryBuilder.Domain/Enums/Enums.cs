@@ -95,5 +95,7 @@ public enum AuditAction
     QueryUpdated = 1,
     QueryDeleted = 2,
     QueryRun = 3,
-    QueryExported = 4
+    QueryExported = 4,
+    QueryShared = 5,
+    QueryUnshared = 6
 }

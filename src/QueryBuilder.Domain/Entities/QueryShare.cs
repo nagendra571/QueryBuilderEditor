@@ -3,8 +3,11 @@ using QueryBuilder.Domain.Enums;
 namespace QueryBuilder.Domain.Entities;
 
 /// <summary>
-/// Reserved for the sharing feature (v2). Modeled now so the schema doesn't need
-/// a breaking migration later; not yet surfaced in the UI.
+/// Grants another user access to a saved query. <see cref="SharedWithUserId"/> must equal
+/// whatever that person's own session resolves as their identity (the same value used for
+/// <c>CreatedBy</c>/<c>ICurrentUserService.UserId</c>) — it's what access checks match against.
+/// Only <see cref="QueryAccessLevel.Viewer"/> and <see cref="QueryAccessLevel.Editor"/> are valid
+/// here; true ownership lives on <see cref="SavedQuery.OwnerId"/> instead.
 /// </summary>
 public sealed class QueryShare : AuditableEntity
 {

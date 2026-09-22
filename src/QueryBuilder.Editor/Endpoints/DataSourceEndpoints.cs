@@ -14,5 +14,8 @@ public static class DataSourceEndpoints
 
         group.MapGet("/{id:guid}/catalog", async (Guid id, ISender sender, CancellationToken ct) =>
             Results.Json(await sender.Send(new GetCatalogQuery(id), ct), QueryBuilderJson.Options));
+
+        group.MapGet("/{id:guid}/app-users", async (Guid id, ISender sender, CancellationToken ct) =>
+            Results.Json(await sender.Send(new GetAppUsersQuery(id), ct), QueryBuilderJson.Options));
     }
 }

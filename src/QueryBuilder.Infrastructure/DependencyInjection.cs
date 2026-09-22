@@ -48,6 +48,7 @@ public static class DependencyInjection
         // via the host's own IConfiguration — already registered by the host, no wiring needed here.
         services.AddSingleton<IConnectionStringResolver, ConnectionStringResolver>();
         services.AddScoped<IDataCatalogService, SqlServerDataCatalogService>();
+        services.AddScoped<IAppUsersDirectory, AppUsersDirectory>();
 
         services.AddSingleton<IQuerySqlBuilder, SqlServerQuerySqlBuilder>();
         services.AddSingleton<IQuerySqlBuilderFactory, QuerySqlBuilderFactory>();

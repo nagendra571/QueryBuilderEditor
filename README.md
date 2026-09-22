@@ -77,6 +77,8 @@ migrations, API/UI wiring, JSON options, and the authorization pipeline in one p
 - Searchable catalog sidebar (schemas → tables/views → columns) with type-aware icons, sourced
   live from `sys.tables`/`sys.views` — no manual schema configuration
 - Drag-and-drop column selection, reordering, and aliasing
+- Column totals (Sum, Average, Count, Distinct count, Min, Max) with automatic grouping and a
+  totals-only filter (HAVING) — no separate "Group By" step
 - Visual filter builder with type-aware inputs (date picker, checkbox, number, text) and
   run-time-prompted parameters (`{{ selected_date }}`-style placeholders, filled in at run time)
 - Read-only generated SQL preview with syntax highlighting
@@ -84,6 +86,7 @@ migrations, API/UI wiring, JSON options, and the authorization pipeline in one p
   and sort
 - Export results to CSV or Excel
 - Save, reopen, and re-run queries; per-query audit history
+- Share a saved query as Viewer or Editor, scoped per data source via an optional `AppUsers` view
 - Configurable actor identity (`ActorResolver`) and access control (anonymous / authenticated /
   role / custom policy), applied uniformly across every route
 - DBA-friendly database story: auto-migration by default, or an idempotent SQL script for
@@ -96,7 +99,6 @@ migrations, API/UI wiring, JSON options, and the authorization pipeline in one p
 
 Not yet built, tracked for a future version:
 
-- Sharing a saved query with other users
 - Manually-written SQL as an alternative to the visual builder
 - Turning a result set into a saved visualization
 - Dashboards composed of multiple visualizations

@@ -114,6 +114,30 @@ The resolver receives the request's `HttpContext`, runs once per request, and it
 propagate rather than being swallowed. A `null`/blank result falls through to the next step in
 the chain.
 
+## Sharing
+
+Saved queries are private to their owner by default. To let an owner share a query with someone
+else — Viewer (open/run/export) or Editor (can also overwrite the saved definition) — add a
+`dbo.AppUsers` view to **that query's data source's own database** (not QueryBuilder's metadata
+DB, unless that happens to be the same database):
+
+```sql
+CREATE VIEW dbo.AppUsers AS
+SELECT Id, DisplayName, Email FROM YourExistingUsersTable;
+```
+
+- `Id` **must equal exactly what `ActorResolver` returns for that person** — it's what access
+  checks match against, the same way `CreatedBy` is stamped.
+- `DisplayName` and `Email` are just for the picker UI.
+
+The Share dialog only appears once this view is queryable for a query's data source — no separate
+setting to flip. Since each data source can define its own `AppUsers`, sharing is naturally scoped:
+someone only shows up as shareable if their data source's own admin has vouched for them there.
+Access is a durable grant recorded when you share, independent of `AppUsers` afterward — removing
+someone from `AppUsers` doesn't revoke an existing share (the owner still needs to remove it
+explicitly), it just flags that share as stale in the manage-sharing view and stops the person
+appearing as a new pick.
+
 ## Access Control
 
 By default the editor is **open to all users** — no authentication required.
@@ -155,6 +179,8 @@ Every failing check includes a one-line fix. Returns 404 outside Development.
 
 - Searchable catalog sidebar (schemas → tables/views → columns) with type-aware icons
 - Drag-and-drop column selection, reordering, and aliasing
+- Column totals (Sum, Average, Count, Distinct count, Min, Max) with automatic grouping and a
+  totals-only filter (HAVING) — no separate "Group By" step
 - Visual filter builder with type-aware inputs (date picker, checkbox, number, text) and
   run-time-prompted parameters
 - Read-only generated SQL preview
@@ -162,8 +188,9 @@ Every failing check includes a one-line fix. Returns 404 outside Development.
   and sort
 - Export results to CSV or Excel
 - Save, reopen, and re-run queries; per-query history tab
-- Full audit log (created/updated/deleted/run/exported) with a configurable actor identity and
-  access control
+- Share a saved query as Viewer or Editor, scoped per data source via an optional `AppUsers` view
+- Full audit log (created/updated/deleted/run/exported/shared/unshared) with a configurable actor
+  identity and access control
 
 ## Links
 

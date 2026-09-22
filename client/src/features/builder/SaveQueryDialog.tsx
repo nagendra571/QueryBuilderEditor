@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
@@ -8,6 +8,7 @@ import { Textarea } from '@/components/ui/textarea'
 export function SaveQueryDialog({
   open,
   onOpenChange,
+  title = 'Save query',
   initialName,
   initialDescription,
   isSaving,
@@ -15,6 +16,7 @@ export function SaveQueryDialog({
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
+  title?: string
   initialName: string
   initialDescription: string
   isSaving: boolean
@@ -23,11 +25,22 @@ export function SaveQueryDialog({
   const [name, setName] = useState(initialName)
   const [description, setDescription] = useState(initialDescription)
 
+  // Re-sync from the caller's current values each time the dialog opens, rather than only once at
+  // mount — this dialog stays mounted across opens, and its initial values can change between them
+  // (e.g. "Save a copy" wants a different starting name than a normal save).
+  useEffect(() => {
+    if (open) {
+      setName(initialName)
+      setDescription(initialDescription)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open])
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Save query</DialogTitle>
+          <DialogTitle>{title}</DialogTitle>
         </DialogHeader>
 
         <div className="flex flex-col gap-3">
@@ -46,7 +59,7 @@ export function SaveQueryDialog({
             Cancel
           </Button>
           <Button disabled={!name.trim() || isSaving} onClick={() => onConfirm(name.trim(), description.trim())}>
-            {isSaving ? 'Saving…' : 'Save query'}
+            {isSaving ? 'Saving…' : 'Save'}
           </Button>
         </DialogFooter>
       </DialogContent>

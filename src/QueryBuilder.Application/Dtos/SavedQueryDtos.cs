@@ -12,6 +12,7 @@ public sealed record SavedQuerySummaryDto(
     string OwnerId,
     string OwnerName,
     bool IsOwnedByCurrentUser,
+    QueryAccessLevel MyAccessLevel,
     bool IsFavorite,
     DateTimeOffset CreatedAtUtc,
     DateTimeOffset? UpdatedAtUtc);
@@ -25,6 +26,7 @@ public sealed record SavedQueryDetailDto(
     string OwnerId,
     string OwnerName,
     bool IsOwnedByCurrentUser,
+    QueryAccessLevel MyAccessLevel,
     bool IsFavorite,
     QueryDefinition Definition,
     DateTimeOffset CreatedAtUtc,
@@ -38,6 +40,18 @@ public sealed record SaveQueryRequest(
     QueryDefinition Definition);
 
 public sealed record DataSourceDto(Guid Id, string Name, string? Description, bool ViewsOnly);
+
+public sealed record QueryShareDto(
+    Guid Id,
+    string SharedWithUserId,
+    string SharedWithUserEmail,
+    QueryAccessLevel AccessLevel,
+    DateTimeOffset CreatedAtUtc);
+
+public sealed record ShareQueryRequest(
+    string SharedWithUserId,
+    string SharedWithUserEmail,
+    QueryAccessLevel AccessLevel);
 
 public sealed record RunQueryRequest(
     Guid DataSourceId,

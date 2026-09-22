@@ -1,5 +1,5 @@
 import { formatDistanceToNow } from 'date-fns'
-import { Database, MoreHorizontal, Plus, Search, Star, Trash2 } from 'lucide-react'
+import { Database, MoreHorizontal, Plus, Search, Share2, Star, Trash2 } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Badge } from '@/components/ui/badge'
@@ -22,12 +22,13 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { NewQueryDialog } from '@/features/builder/NewQueryDialog'
+import { AccessLevelBadge, ShareDialog } from '@/features/builder/ShareDialog'
 import { useDataSources } from '@/hooks/useDataSources'
 import { useDeleteSavedQuery, useSavedQueries, useToggleFavorite } from '@/hooks/useSavedQueries'
 import { cn } from '@/lib/utils'
 import type { SavedQuerySummaryDto } from '@/types'
 
-type FilterTab = 'all' | 'mine' | 'favorites'
+type FilterTab = 'all' | 'mine' | 'shared' | 'favorites'
 
 export function QueryListPage() {
   const { data: queries, isLoading } = useSavedQueries()
@@ -35,6 +36,7 @@ export function QueryListPage() {
   const [search, setSearch] = useState('')
   const [tab, setTab] = useState<FilterTab>('all')
   const [newQueryOpen, setNewQueryOpen] = useState(false)
+  const [shareTarget, setShareTarget] = useState<SavedQuerySummaryDto | null>(null)
   const navigate = useNavigate()
   const toggleFavorite = useToggleFavorite()
   const deleteQuery = useDeleteSavedQuery()
@@ -53,6 +55,7 @@ export function QueryListPage() {
     const term = search.trim().toLowerCase()
     return queries.filter((q) => {
       if (tab === 'mine' && !q.isOwnedByCurrentUser) return false
+      if (tab === 'shared' && q.isOwnedByCurrentUser) return false
       if (tab === 'favorites' && !q.isFavorite) return false
       if (term && !q.name.toLowerCase().includes(term)) return false
       return true
@@ -77,6 +80,7 @@ export function QueryListPage() {
           <TabsList>
             <TabsTrigger value="all">All</TabsTrigger>
             <TabsTrigger value="mine">Mine</TabsTrigger>
+            <TabsTrigger value="shared">Shared with me</TabsTrigger>
             <TabsTrigger value="favorites">Favorites</TabsTrigger>
           </TabsList>
         </Tabs>
@@ -130,6 +134,7 @@ export function QueryListPage() {
                   onOpen={() => navigate(`/queries/${query.id}`)}
                   onToggleFavorite={() => toggleFavorite.mutate(query.id)}
                   onDelete={() => deleteQuery.mutate(query.id)}
+                  onShare={() => setShareTarget(query)}
                 />
               ))}
             </TableBody>
@@ -138,6 +143,16 @@ export function QueryListPage() {
       )}
 
       <NewQueryDialog open={newQueryOpen} onOpenChange={setNewQueryOpen} />
+
+      {shareTarget && (
+        <ShareDialog
+          open={!!shareTarget}
+          onOpenChange={(open) => !open && setShareTarget(null)}
+          queryId={shareTarget.id}
+          dataSourceId={shareTarget.dataSourceId}
+          queryName={shareTarget.name}
+        />
+      )}
     </div>
   )
 }
@@ -147,11 +162,13 @@ function QueryRow({
   onOpen,
   onToggleFavorite,
   onDelete,
+  onShare,
 }: {
   query: SavedQuerySummaryDto
   onOpen: () => void
   onToggleFavorite: () => void
   onDelete: () => void
+  onShare: () => void
 }) {
   return (
     <TableRow className="cursor-pointer" onClick={onOpen}>
@@ -162,7 +179,10 @@ function QueryRow({
       </TableCell>
       <TableCell>
         <div className="flex flex-col">
-          <span className="text-(length:--text-body) font-medium">{query.name}</span>
+          <span className="flex items-center gap-1.5 text-(length:--text-body) font-medium">
+            {query.name}
+            <AccessLevelBadge level={query.myAccessLevel} />
+          </span>
           {query.description && <span className="truncate text-xs text-muted-foreground">{query.description}</span>}
         </div>
       </TableCell>
@@ -176,19 +196,25 @@ function QueryRow({
         {formatDistanceToNow(new Date(query.updatedAtUtc ?? query.createdAtUtc), { addSuffix: true })}
       </TableCell>
       <TableCell onClick={(e) => e.stopPropagation()}>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" className="size-6">
-              <MoreHorizontal className="size-3.5" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem variant="destructive" onClick={onDelete}>
-              <Trash2 className="size-3.5" />
-              Delete
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        {query.isOwnedByCurrentUser && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" className="size-6">
+                <MoreHorizontal className="size-3.5" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={onShare}>
+                <Share2 className="size-3.5" />
+                Share
+              </DropdownMenuItem>
+              <DropdownMenuItem variant="destructive" onClick={onDelete}>
+                <Trash2 className="size-3.5" />
+                Delete
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
       </TableCell>
     </TableRow>
   )

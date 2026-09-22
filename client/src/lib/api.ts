@@ -1,13 +1,16 @@
 import { apiClient } from '@/lib/api-client'
 import type {
+  AppUsersResult,
   AuditLogEntryDto,
   DataSourceCatalog,
   DataSourceDto,
   ExportQueryRequest,
+  QueryShareDto,
   RunQueryRequest,
   SaveQueryRequest,
   SavedQueryDetailDto,
   SavedQuerySummaryDto,
+  ShareQueryRequest,
   QueryResultDto,
   QuerySqlPreviewDto,
 } from '@/types'
@@ -16,6 +19,8 @@ export const dataSourcesApi = {
   list: async (): Promise<DataSourceDto[]> => (await apiClient.get('/data-sources')).data,
   catalog: async (dataSourceId: string): Promise<DataSourceCatalog> =>
     (await apiClient.get(`/data-sources/${dataSourceId}/catalog`)).data,
+  appUsers: async (dataSourceId: string): Promise<AppUsersResult> =>
+    (await apiClient.get(`/data-sources/${dataSourceId}/app-users`)).data,
 }
 
 export const savedQueriesApi = {
@@ -34,6 +39,12 @@ export const savedQueriesApi = {
     (await apiClient.post('/queries/run', request)).data,
   export: async (request: ExportQueryRequest): Promise<Blob> =>
     (await apiClient.post('/queries/export', request, { responseType: 'blob' })).data,
+  getShares: async (id: string): Promise<QueryShareDto[]> => (await apiClient.get(`/queries/${id}/shares`)).data,
+  share: async (id: string, request: ShareQueryRequest): Promise<{ id: string }> =>
+    (await apiClient.post(`/queries/${id}/shares`, request)).data,
+  removeShare: async (id: string, shareId: string): Promise<void> => {
+    await apiClient.delete(`/queries/${id}/shares/${shareId}`)
+  },
 }
 
 export const auditApi = {

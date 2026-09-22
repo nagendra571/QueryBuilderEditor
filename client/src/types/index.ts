@@ -11,6 +11,8 @@ export type AggregateFunction = 'none' | 'sum' | 'avg' | 'count' | 'countDistinc
 
 export type SortDirection = 'asc' | 'desc'
 
+export type QueryAccessLevel = 'viewer' | 'editor' | 'owner'
+
 export type FilterLogicalOperator = 'and' | 'or'
 
 export type FilterOperator =
@@ -165,6 +167,7 @@ export interface SavedQuerySummaryDto {
   ownerId: string
   ownerName: string
   isOwnedByCurrentUser: boolean
+  myAccessLevel: QueryAccessLevel
   isFavorite: boolean
   createdAtUtc: string
   updatedAtUtc?: string | null
@@ -179,10 +182,36 @@ export interface SavedQueryDetailDto {
   ownerId: string
   ownerName: string
   isOwnedByCurrentUser: boolean
+  myAccessLevel: QueryAccessLevel
   isFavorite: boolean
   definition: QueryDefinition
   createdAtUtc: string
   updatedAtUtc?: string | null
+}
+
+export interface QueryShareDto {
+  id: string
+  sharedWithUserId: string
+  sharedWithUserEmail: string
+  accessLevel: QueryAccessLevel
+  createdAtUtc: string
+}
+
+export interface ShareQueryRequest {
+  sharedWithUserId: string
+  sharedWithUserEmail: string
+  accessLevel: QueryAccessLevel
+}
+
+export interface AppUserDto {
+  id: string
+  displayName: string
+  email?: string | null
+}
+
+export interface AppUsersResult {
+  available: boolean
+  users: AppUserDto[]
 }
 
 export interface SaveQueryRequest {

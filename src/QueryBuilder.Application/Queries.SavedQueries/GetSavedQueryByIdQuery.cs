@@ -31,6 +31,7 @@ public sealed class GetSavedQueryByIdQueryHandler(ISavedQueryRepository reposito
             query.OwnerId,
             query.OwnerName,
             isOwner,
+            GetSavedQueriesQueryHandler.AccessLevelFor(query, currentUser.UserId),
             query.IsFavorite,
             QueryDefinitionSerializer.Deserialize(query.DefinitionJson),
             query.CreatedAtUtc,

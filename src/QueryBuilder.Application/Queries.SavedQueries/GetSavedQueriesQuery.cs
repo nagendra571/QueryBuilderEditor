@@ -1,6 +1,7 @@
 using QueryBuilder.Application.Common;
 using QueryBuilder.Application.Abstractions;
 using QueryBuilder.Application.Dtos;
+using QueryBuilder.Domain.Enums;
 
 namespace QueryBuilder.Application.Queries.SavedQueries;
 
@@ -24,9 +25,15 @@ public sealed class GetSavedQueriesQueryHandler(ISavedQueryRepository repository
                 q.OwnerId,
                 q.OwnerName,
                 q.OwnerId == currentUser.UserId,
+                AccessLevelFor(q, currentUser.UserId),
                 q.IsFavorite,
                 q.CreatedAtUtc,
                 q.UpdatedAtUtc))
             .ToList();
     }
+
+    internal static QueryAccessLevel AccessLevelFor(Domain.Entities.SavedQuery query, string userId) =>
+        query.OwnerId == userId
+            ? QueryAccessLevel.Owner
+            : query.Shares.FirstOrDefault(s => s.SharedWithUserId == userId)?.AccessLevel ?? QueryAccessLevel.Viewer;
 }

@@ -9,6 +9,8 @@ public interface ISavedQueryRepository
     Task AddAsync(SavedQuery query, CancellationToken cancellationToken);
     void Update(SavedQuery query);
     void Remove(SavedQuery query);
+    Task AddShareAsync(QueryShare share, CancellationToken cancellationToken);
+    void RemoveShare(QueryShare share);
     Task<int> SaveChangesAsync(CancellationToken cancellationToken);
 }
 

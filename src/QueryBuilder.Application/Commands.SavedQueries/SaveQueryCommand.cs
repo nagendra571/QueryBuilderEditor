@@ -46,9 +46,11 @@ public sealed class SaveQueryCommandHandler(
             var existing = await repository.GetByIdAsync(id, cancellationToken)
                 ?? throw new NotFoundException(nameof(SavedQuery), id);
 
-            if (existing.OwnerId != currentUser.UserId)
+            var isOwner = existing.OwnerId == currentUser.UserId;
+            var canEdit = existing.Shares.Any(s => s.SharedWithUserId == currentUser.UserId && s.AccessLevel == QueryAccessLevel.Editor);
+            if (!isOwner && !canEdit)
             {
-                throw new ForbiddenException("Only the owner can modify this query.");
+                throw new ForbiddenException("You have view-only access to this query — save it as a new query instead.");
             }
 
             existing.Name = request.Name;

@@ -28,5 +28,15 @@ public sealed class SavedQueryRepository(AppDbContext db) : ISavedQueryRepositor
 
     public void Remove(SavedQuery query) => db.SavedQueries.Remove(query);
 
+    // Added/removed directly on the QueryShares DbSet — not via the SavedQuery.Shares navigation —
+    // so EF's change tracker unambiguously treats these as Added/Deleted. Adding a new child to an
+    // already-tracked parent's collection instead left EF inferring Modified for the new row (it
+    // already has a non-default client-generated Guid key), producing an UPDATE that matched zero
+    // rows.
+    public async Task AddShareAsync(QueryShare share, CancellationToken cancellationToken) =>
+        await db.QueryShares.AddAsync(share, cancellationToken);
+
+    public void RemoveShare(QueryShare share) => db.QueryShares.Remove(share);
+
     public Task<int> SaveChangesAsync(CancellationToken cancellationToken) => db.SaveChangesAsync(cancellationToken);
 }

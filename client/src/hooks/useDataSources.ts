@@ -13,3 +13,12 @@ export function useDataSourceCatalog(dataSourceId: string | undefined) {
     staleTime: 5 * 60_000,
   })
 }
+
+export function useAppUsers(dataSourceId: string | undefined) {
+  return useQuery({
+    queryKey: ['app-users', dataSourceId],
+    queryFn: () => dataSourcesApi.appUsers(dataSourceId!),
+    enabled: !!dataSourceId,
+    staleTime: 60_000,
+  })
+}

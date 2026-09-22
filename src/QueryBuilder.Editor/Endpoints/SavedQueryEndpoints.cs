@@ -39,6 +39,24 @@ public static class SavedQueryEndpoints
             return Results.Json(new { isFavorite }, QueryBuilderJson.Options);
         });
 
+        group.MapGet("/{id:guid}/shares", async (Guid id, ISender sender, CancellationToken ct) =>
+            Results.Json(await sender.Send(new GetQuerySharesQuery(id), ct), QueryBuilderJson.Options));
+
+        group.MapPost("/{id:guid}/shares", async (Guid id, HttpContext http, ISender sender, CancellationToken ct) =>
+        {
+            var request = await http.Request.ReadFromJsonAsync<ShareQueryRequest>(QueryBuilderJson.Options, ct)
+                ?? throw new BadHttpRequestException("Request body is required.");
+            var shareId = await sender.Send(
+                new ShareQueryCommand(id, request.SharedWithUserId, request.SharedWithUserEmail, request.AccessLevel), ct);
+            return Results.Json(new { id = shareId }, QueryBuilderJson.Options);
+        });
+
+        group.MapDelete("/{id:guid}/shares/{shareId:guid}", async (Guid id, Guid shareId, ISender sender, CancellationToken ct) =>
+        {
+            await sender.Send(new RemoveShareCommand(id, shareId), ct);
+            return Results.NoContent();
+        });
+
         group.MapPost("/preview-sql", async (HttpContext http, ISender sender, CancellationToken ct) =>
         {
             var request = await http.Request.ReadFromJsonAsync<RunQueryRequest>(QueryBuilderJson.Options, ct)

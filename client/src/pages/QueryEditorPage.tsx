@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, Code2, Download, FileSpreadsheet, History, Loader2, Play, Save, Star } from 'lucide-react'
+import { ArrowLeft, Code2, Download, FileSpreadsheet, History, Loader2, Play, Save, Share2, Star } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
@@ -15,10 +15,12 @@ import { HistoryPanel } from '@/features/builder/HistoryPanel'
 import { ParameterPromptDialog } from '@/features/builder/ParameterPromptDialog'
 import { ResultsTable } from '@/features/builder/ResultsTable'
 import { SaveQueryDialog } from '@/features/builder/SaveQueryDialog'
+import { AccessLevelBadge, ShareDialog } from '@/features/builder/ShareDialog'
 import { AddSortControl, SortPanel } from '@/features/builder/SortPanel'
 import { SqlPreviewDialog } from '@/features/builder/SqlPreviewDialog'
 import { useBuilderStore } from '@/features/builder/builder-store'
 import { useDataSourceCatalog } from '@/hooks/useDataSources'
+import { savedQueriesKey } from '@/hooks/useSavedQueries'
 import { savedQueriesApi } from '@/lib/api'
 import { ApiError } from '@/lib/api-client'
 import type { RunQueryRequest } from '@/types'
@@ -37,6 +39,7 @@ export function QueryEditorPage() {
 
   const [sqlDialogOpen, setSqlDialogOpen] = useState(false)
   const [saveDialogOpen, setSaveDialogOpen] = useState(false)
+  const [shareDialogOpen, setShareDialogOpen] = useState(false)
   const [paramDialogOpen, setParamDialogOpen] = useState(false)
   const [pendingAction, setPendingAction] = useState<PendingAction>(null)
   const [activeTab, setActiveTab] = useState('build')
@@ -95,12 +98,25 @@ export function QueryEditorPage() {
     onError: (error) => toast.error(error instanceof ApiError ? error.message : 'Export failed.'),
   })
 
+  const [saveAsCopy, setSaveAsCopy] = useState(false)
+
   const saveMutation = useMutation({
-    mutationFn: (input: { name: string; description: string }) =>
-      savedQueriesApi.save({ id: queryId, name: input.name, description: input.description, dataSourceId: dataSourceId!, definition }),
+    mutationFn: (input: { name: string; description: string; asCopy: boolean }) =>
+      savedQueriesApi.save({
+        id: input.asCopy ? null : queryId,
+        name: input.name,
+        description: input.description,
+        dataSourceId: dataSourceId!,
+        definition,
+      }),
     onSuccess: (result, input) => {
-      toast.success('Query saved.')
+      toast.success(input.asCopy ? 'Saved as a new query.' : 'Query saved.')
       setSaveDialogOpen(false)
+      queryClient.invalidateQueries({ queryKey: savedQueriesKey })
+      if (input.asCopy) {
+        navigate(`/queries/${result.id}`, { replace: true })
+        return
+      }
       store.setName(input.name)
       store.setDescription(input.description)
       queryClient.invalidateQueries({ queryKey: ['audit', queryId ?? result.id] })
@@ -112,6 +128,10 @@ export function QueryEditorPage() {
   const favoriteMutation = useMutation({
     mutationFn: () => savedQueriesApi.toggleFavorite(queryId!),
   })
+
+  const myAccessLevel = existingQuery.data?.myAccessLevel ?? 'owner'
+  const isViewer = myAccessLevel === 'viewer'
+  const isOwner = myAccessLevel === 'owner'
 
   const hasColumns = definition.columns.some((c) => c.isVisible)
   const canQuery = hasColumns && !!dataSourceId
@@ -161,7 +181,10 @@ export function QueryEditorPage() {
           </Button>
 
           <div className="flex min-w-0 flex-col">
-            <span className="truncate text-sm font-semibold">{name || 'Untitled query'}</span>
+            <span className="flex items-center gap-1.5 truncate text-sm font-semibold">
+              {name || 'Untitled query'}
+              <AccessLevelBadge level={myAccessLevel} />
+            </span>
             {definition.source.objectName && (
               <span className="truncate text-[11px] text-muted-foreground">
                 {definition.source.schemaName}.{definition.source.objectName}
@@ -220,9 +243,24 @@ export function QueryEditorPage() {
 
             <Separator orientation="vertical" className="h-5" />
 
-            <Button size="sm" className="h-8 text-xs" disabled={!canQuery} onClick={() => setSaveDialogOpen(true)}>
+            {queryId && isOwner && (
+              <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => setShareDialogOpen(true)}>
+                <Share2 className="size-3.5" />
+                Share
+              </Button>
+            )}
+
+            <Button
+              size="sm"
+              className="h-8 text-xs"
+              disabled={!canQuery}
+              onClick={() => {
+                setSaveAsCopy(isViewer)
+                setSaveDialogOpen(true)
+              }}
+            >
               <Save className="size-3.5" />
-              Save
+              {isViewer ? 'Save a copy' : 'Save'}
             </Button>
           </div>
         </div>
@@ -322,11 +360,22 @@ export function QueryEditorPage() {
       <SaveQueryDialog
         open={saveDialogOpen}
         onOpenChange={setSaveDialogOpen}
-        initialName={name}
+        title={saveAsCopy ? 'Save as a new query' : 'Save query'}
+        initialName={saveAsCopy ? `${name} (copy)` : name}
         initialDescription={description}
         isSaving={saveMutation.isPending}
-        onConfirm={(n, d) => saveMutation.mutate({ name: n, description: d })}
+        onConfirm={(n, d) => saveMutation.mutate({ name: n, description: d, asCopy: saveAsCopy })}
       />
+
+      {queryId && (
+        <ShareDialog
+          open={shareDialogOpen}
+          onOpenChange={setShareDialogOpen}
+          queryId={queryId}
+          dataSourceId={dataSourceId!}
+          queryName={name}
+        />
+      )}
 
       <ParameterPromptDialog
         open={paramDialogOpen}
