@@ -89,6 +89,9 @@ migrations, API/UI wiring, JSON options, and the authorization pipeline in one p
 - Share a saved query as Viewer or Editor, scoped per data source via an optional `AppUsers` view
 - Disable a saved query to block it from being run or exported by anyone (owner or shared users)
   without deleting it; owner-only toggle, reversible, logged to the audit history
+- Admin UI (role-gated via `AdminAuthorization`, separate from the main `Authorization` gate): per
+  data source, control whether the catalog shows views only / tables only / both, and allowlist
+  specific tables/views — replaces the previous raw-SQL-only path for this one concern
 - Configurable actor identity (`ActorResolver`) and access control (anonymous / authenticated /
   role / custom policy), applied uniformly across every route
 - DBA-friendly database story: auto-migration by default, or an idempotent SQL script for
@@ -101,6 +104,8 @@ migrations, API/UI wiring, JSON options, and the authorization pipeline in one p
 
 Not yet built, tracked for a future version:
 
+- Admin UI for registering/editing data sources themselves (name, connection string, provider,
+  `AllowedSchemas`) — still raw-SQL-only; only the catalog scope/allowlist is admin-manageable so far
 - Manually-written SQL as an alternative to the visual builder
 - Turning a result set into a saved visualization
 - Dashboards composed of multiple visualizations

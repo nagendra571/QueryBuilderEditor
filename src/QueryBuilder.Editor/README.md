@@ -138,6 +138,22 @@ someone from `AppUsers` doesn't revoke an existing share (the owner still needs 
 explicitly), it just flags that share as stale in the manage-sharing view and stops the person
 appearing as a new pick.
 
+## Admin UI
+
+At `/admin` in the SPA, an admin can control, per data source, whether the catalog shows views
+only / tables only / both, and allowlist specific tables/views — replacing direct SQL edits to
+`DataSources.CatalogScope`/`AllowedObjects` for this one concern. Gated by a second, independent
+authorization option:
+
+```csharp
+options.AdminAuthorization.Mode = QueryBuilderAuthorizationMode.Role;
+options.AdminAuthorization.RoleNames = ["QueryBuilderAdmin"];
+```
+
+Same shape as `Authorization` (`Mode`/`RoleNames`/`PolicyName`), and composes with it — a request
+must satisfy both. Defaults to `Anonymous` like the rest of the package; set this explicitly before
+production, since the admin area exposes a data source's full unfiltered schema.
+
 ## Access Control
 
 By default the editor is **open to all users** — no authentication required.
@@ -191,8 +207,10 @@ Every failing check includes a one-line fix. Returns 404 outside Development.
 - Share a saved query as Viewer or Editor, scoped per data source via an optional `AppUsers` view
 - Disable a saved query to block anyone from running or exporting it without deleting it —
   owner-only, reversible
-- Full audit log (created/updated/deleted/run/exported/shared/unshared/disabled/enabled) with a
-  configurable actor identity and access control
+- Admin UI (separately role-gated via `AdminAuthorization`) to control each data source's catalog
+  scope (views/tables/both) and a specific table/view allowlist
+- Full audit log (created/updated/deleted/run/exported/shared/unshared/disabled/enabled/catalog
+  policy updated) with a configurable actor identity and access control
 
 ## Links
 
