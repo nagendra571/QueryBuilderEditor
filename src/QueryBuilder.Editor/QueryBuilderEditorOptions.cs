@@ -49,4 +49,12 @@ public sealed class QueryBuilderEditorOptions
 
     /// <summary>Controls who can reach QueryBuilder's routes. Defaults to <see cref="QueryBuilderAuthorizationMode.Anonymous"/>.</summary>
     public QueryBuilderAuthorizationOptions Authorization { get; } = new();
+
+    /// <summary>Controls who can reach QueryBuilder's admin routes (under <c>/api/admin</c>) —
+    /// catalog policy management today, more admin features later. Applied IN ADDITION to
+    /// <see cref="Authorization"/>: a request must satisfy both. Defaults to
+    /// <see cref="QueryBuilderAuthorizationMode.Anonymous"/>, like <see cref="Authorization"/> —
+    /// set this before going to production, since the admin area lets a caller see a data
+    /// source's full unfiltered schema and change what business users can query.</summary>
+    public QueryBuilderAuthorizationOptions AdminAuthorization { get; } = new();
 }

@@ -29,6 +29,9 @@ public static class EndpointRouteBuilderExtensions
         group.MapSavedQueryEndpoints();
         group.MapAuditEndpoints();
 
+        var adminGroup = group.MapAdminEndpoints();
+        ApplyAuthorization(adminGroup, options.AdminAuthorization);
+
         return endpoints;
     }
 
