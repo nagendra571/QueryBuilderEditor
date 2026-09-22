@@ -13,6 +13,8 @@ export type SortDirection = 'asc' | 'desc'
 
 export type QueryAccessLevel = 'viewer' | 'editor' | 'owner'
 
+export type DataSourceProvider = 'sqlServer' | 'postgreSql' | 'mySql' | 'sqlite'
+
 export type CatalogScope = 'views' | 'tables' | 'tablesAndViews'
 
 export type FilterLogicalOperator = 'and' | 'or'
@@ -299,4 +301,26 @@ export interface AuditLogEntryDto {
   summary: string
   detailsJson?: string | null
   ipAddress?: string | null
+}
+
+// ---- Admin ----
+
+export interface AdminDataSourceSummaryDto {
+  id: string
+  name: string
+  provider: DataSourceProvider
+  isActive: boolean
+}
+
+export interface AdminDataSourceDetailDto {
+  id: string
+  name: string
+  catalogScope: CatalogScope
+  allowedObjects: string[]
+  objects: SchemaObjectMetadata[]
+}
+
+export interface UpdateCatalogPolicyRequest {
+  catalogScope: CatalogScope
+  allowedObjects: string[]
 }

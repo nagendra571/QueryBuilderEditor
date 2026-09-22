@@ -1,5 +1,7 @@
 import { apiClient } from '@/lib/api-client'
 import type {
+  AdminDataSourceDetailDto,
+  AdminDataSourceSummaryDto,
   AppUsersResult,
   AuditLogEntryDto,
   DataSourceCatalog,
@@ -13,6 +15,7 @@ import type {
   ShareQueryRequest,
   QueryResultDto,
   QuerySqlPreviewDto,
+  UpdateCatalogPolicyRequest,
 } from '@/types'
 
 export const dataSourcesApi = {
@@ -52,4 +55,15 @@ export const savedQueriesApi = {
 export const auditApi = {
   forQuery: async (queryId: string): Promise<AuditLogEntryDto[]> =>
     (await apiClient.get('/audit', { params: { entityType: 'SavedQuery', entityId: queryId } })).data,
+}
+
+export const adminApi = {
+  access: async (): Promise<void> => {
+    await apiClient.get('/admin/access')
+  },
+  listDataSources: async (): Promise<AdminDataSourceSummaryDto[]> => (await apiClient.get('/admin/data-sources')).data,
+  getDataSource: async (id: string): Promise<AdminDataSourceDetailDto> => (await apiClient.get(`/admin/data-sources/${id}`)).data,
+  updateCatalogPolicy: async (id: string, request: UpdateCatalogPolicyRequest): Promise<void> => {
+    await apiClient.put(`/admin/data-sources/${id}/catalog-policy`, request)
+  },
 }

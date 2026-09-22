@@ -1,4 +1,4 @@
-import { ChevronsLeft, ChevronsRight, LayoutGrid, Moon, Rows3, Squircle, Sun } from 'lucide-react'
+import { ChevronsLeft, ChevronsRight, LayoutGrid, Moon, Rows3, Settings2, Squircle, Sun } from 'lucide-react'
 import { useTheme } from 'next-themes'
 import type { ReactNode } from 'react'
 import { NavLink } from 'react-router-dom'
@@ -8,6 +8,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
+import { useAdminAccess } from '@/hooks/useAdmin'
 import { cn } from '@/lib/utils'
 import { useDensityStore } from '@/state/density-store'
 import { useSidebarStore } from '@/state/sidebar-store'
@@ -77,6 +78,7 @@ function ThemeToggle() {
 
 export function AppShell({ children }: { children: ReactNode }) {
   const { collapsed, toggle } = useSidebarStore()
+  const adminAccess = useAdminAccess()
 
   return (
     <div className="flex h-dvh w-full overflow-hidden bg-background text-foreground">
@@ -95,6 +97,9 @@ export function AppShell({ children }: { children: ReactNode }) {
 
         <nav className={cn('flex flex-1 flex-col gap-1', collapsed ? 'p-2' : 'p-3')}>
           <NavItem to="/" label="Queries" icon={<LayoutGrid className="size-4 shrink-0" />} collapsed={collapsed} />
+          {adminAccess.isSuccess && (
+            <NavItem to="/admin" label="Admin" icon={<Settings2 className="size-4 shrink-0" />} collapsed={collapsed} />
+          )}
         </nav>
 
         {!collapsed && (
