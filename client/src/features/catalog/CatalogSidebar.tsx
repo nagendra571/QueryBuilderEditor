@@ -122,9 +122,9 @@ export function CatalogSidebar({ dataSourceId }: { dataSourceId: string }) {
           {filtered.map((schema) => (
             <div key={schema.name} className="mb-2">
               <div className="flex items-center gap-1.5 px-2 py-1 text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">
-                <Database className="size-3" />
-                {schema.name}
-                <span className="ml-auto font-normal normal-case text-muted-foreground/60">{schema.objects.length}</span>
+                <Database className="size-3 shrink-0" />
+                <span className="min-w-0 flex-1 truncate">{schema.name}</span>
+                <span className="shrink-0 font-normal normal-case text-muted-foreground/60">{schema.objects.length}</span>
               </div>
               {schema.objects.map((obj) => {
                 const key = objectKey(obj.schemaName, obj.name)
@@ -202,9 +202,9 @@ function CatalogObject({
           title={isBlocked ? 'Joining multiple tables is coming soon — picking this switches your source' : undefined}
         >
           <ObjectIcon className="size-3.5 shrink-0" />
-          <span className="truncate">{object.name}</span>
+          <span className="min-w-0 flex-1 truncate">{object.name}</span>
           {object.kind === 'view' && (
-            <Badge variant="secondary" className="ml-auto h-4 shrink-0 px-1 text-[9px] font-medium">
+            <Badge variant="secondary" className="h-4 shrink-0 px-1 text-[9px] font-medium">
               view
             </Badge>
           )}
@@ -222,14 +222,14 @@ function CatalogObject({
                 className="group flex items-center gap-1.5 rounded px-1.5 py-1 text-xs hover:bg-accent/60"
               >
                 <DataTypeIcon dataType={col.dataType} isForeignKey={col.isForeignKey} />
-                <span className="truncate text-foreground/90">{col.name}</span>
+                <span className="min-w-0 flex-1 truncate text-foreground/90">{col.name}</span>
                 {isActiveSource && (
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="ml-auto size-5 shrink-0 opacity-0 group-hover:opacity-100 data-[selected=true]:opacity-100"
+                        className="size-5 shrink-0 opacity-0 group-hover:opacity-100 data-[selected=true]:opacity-100"
                         data-selected={isSelected}
                         disabled={isSelected}
                         onClick={() => onAddColumn(col.name, col.dataType)}
