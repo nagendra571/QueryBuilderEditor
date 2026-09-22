@@ -288,6 +288,7 @@ export type AuditAction =
   | 'queryUnshared'
   | 'queryDisabled'
   | 'queryEnabled'
+  | 'dataSourceCatalogPolicyUpdated'
 
 export interface AuditLogEntryDto {
   id: string

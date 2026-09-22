@@ -40,6 +40,11 @@ export function useUpdateCatalogPolicy(id: string) {
     mutationFn: (request: UpdateCatalogPolicyRequest) => adminApi.updateCatalogPolicy(id, request),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: adminDataSourceDetailKey(id) })
+      // The business-facing catalog is cached client-side for 5 minutes, and `catalogScope`
+      // also rides on the data-sources list DTO — without these the SPA keeps serving the
+      // pre-save catalog on in-app navigation, undoing the server-side cache eviction.
+      queryClient.invalidateQueries({ queryKey: ['data-source-catalog', id] })
+      queryClient.invalidateQueries({ queryKey: ['data-sources'] })
       toast.success('Catalog policy updated.')
     },
     onError: (error) => toast.error(error instanceof ApiError ? error.message : 'Could not update the catalog policy.'),

@@ -5,8 +5,16 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { useAdminDataSources } from '@/hooks/useAdmin'
 
 export function AdminDataSourcesPage() {
-  const { data, isLoading } = useAdminDataSources()
+  const { data, isLoading, isError } = useAdminDataSources()
   const navigate = useNavigate()
+
+  if (isError) {
+    return (
+      <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+        Couldn't load the data sources — you may not have access, or they may not exist.
+      </div>
+    )
+  }
 
   if (isLoading) {
     return (

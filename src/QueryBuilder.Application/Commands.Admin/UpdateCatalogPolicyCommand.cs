@@ -10,7 +10,10 @@ public sealed record UpdateCatalogPolicyCommand(Guid DataSourceId, CatalogScope 
     : IRequest<Unit>;
 
 public sealed class UpdateCatalogPolicyCommandHandler(
-    IDataSourceRepository repository, IDataCatalogService catalogService, IAuditLogger auditLogger)
+    IDataSourceRepository repository,
+    IDataCatalogService catalogService,
+    ICurrentUserService currentUser,
+    IAuditLogger auditLogger)
     : IRequestHandler<UpdateCatalogPolicyCommand, Unit>
 {
     public async Task<Unit> Handle(UpdateCatalogPolicyCommand request, CancellationToken cancellationToken)
@@ -19,15 +22,30 @@ public sealed class UpdateCatalogPolicyCommandHandler(
             ?? throw new NotFoundException(nameof(DataSource), request.DataSourceId);
 
         var rawObjects = await catalogService.GetRawObjectsAsync(request.DataSourceId, cancellationToken);
-        var validKeys = rawObjects.Select(o => $"{o.SchemaName}.{o.Name}").ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var unknown = request.AllowedObjects.Where(key => !validKeys.Contains(key)).ToList();
+        var kindByKey = rawObjects
+            .GroupBy(o => $"{o.SchemaName}.{o.Name}", StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.First().Kind, StringComparer.OrdinalIgnoreCase);
+        var unknown = request.AllowedObjects.Where(key => !kindByKey.ContainsKey(key)).ToList();
         if (unknown.Count > 0)
         {
             throw new CatalogValidationException($"Unknown table/view reference(s): {string.Join(", ", unknown)}.");
         }
 
+        if (request.CatalogScope != CatalogScope.TablesAndViews)
+        {
+            var requiredKind = request.CatalogScope == CatalogScope.Tables ? SchemaObjectKind.Table : SchemaObjectKind.View;
+            var outOfScope = request.AllowedObjects.Where(key => kindByKey[key] != requiredKind).ToList();
+            if (outOfScope.Count > 0)
+            {
+                throw new CatalogValidationException(
+                    $"Allowed object(s) out of scope for '{request.CatalogScope}': {string.Join(", ", outOfScope)}.");
+            }
+        }
+
         dataSource.CatalogScope = request.CatalogScope;
         dataSource.AllowedObjects = request.AllowedObjects;
+        dataSource.UpdatedBy = currentUser.UserId;
+        dataSource.UpdatedAtUtc = DateTimeOffset.UtcNow;
         repository.Update(dataSource);
         await repository.SaveChangesAsync(cancellationToken);
 

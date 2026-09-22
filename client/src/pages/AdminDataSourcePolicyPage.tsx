@@ -13,7 +13,7 @@ import type { CatalogScope } from '@/types'
 export function AdminDataSourcePolicyPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  const { data, isLoading } = useAdminDataSourceDetail(id)
+  const { data, isLoading, isError } = useAdminDataSourceDetail(id)
   const updatePolicy = useUpdateCatalogPolicy(id!)
 
   const [scope, setScope] = useState<CatalogScope | null>(null)
@@ -36,12 +36,50 @@ export function AdminDataSourcePolicyPage() {
     })
   }, [data, effectiveScope, search])
 
+  if (isError) {
+    return (
+      <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+        Couldn't load this data source — you may not have access, or it may not exist.
+      </div>
+    )
+  }
+
   if (isLoading || !data) {
     return (
       <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
         <Loader2 className="mr-2 size-4 animate-spin" /> Loading…
       </div>
     )
+  }
+
+  const nothingAllowed = effectiveRestrict && effectiveSelected.size === 0
+
+  function inScope(kind: string | undefined, target: CatalogScope) {
+    if (!kind) return false
+    if (target === 'tables') return kind === 'table'
+    if (target === 'views') return kind === 'view'
+    return true
+  }
+
+  // Switching scope must drop selections that are no longer valid for it — otherwise the
+  // checklist shows one thing and the saved payload carries another (e.g. views saved under
+  // a tables-only scope, which yields an empty business-facing catalog).
+  function handleScopeChange(value: string) {
+    const next = value as CatalogScope
+    setScope(next)
+    if (!data) return
+    const kindByKey = new Map(data.objects.map((o) => [`${o.schemaName}.${o.name}`, o.kind as string]))
+    const pruned = new Set(Array.from(effectiveSelected).filter((key) => inScope(kindByKey.get(key), next)))
+    if (pruned.size !== effectiveSelected.size) setSelected(pruned)
+  }
+
+  function handleRestrictChange(checked: boolean) {
+    setRestrict(checked)
+    // Turning the switch on with an empty selection would save as "allow nothing", which the
+    // backend reads as "no restriction" — start from everything in scope instead.
+    if (checked && selected === null) {
+      setSelected(new Set(visibleObjects.map((o) => `${o.schemaName}.${o.name}`)))
+    }
   }
 
   function toggleObject(key: string, checked: boolean) {
@@ -72,7 +110,7 @@ export function AdminDataSourcePolicyPage() {
 
       <div className="flex flex-col gap-2">
         <h2 className="text-sm font-semibold">Catalog scope</h2>
-        <Tabs value={effectiveScope} onValueChange={(v) => setScope(v as CatalogScope)}>
+        <Tabs value={effectiveScope} onValueChange={handleScopeChange}>
           <TabsList>
             <TabsTrigger value="views">Views only</TabsTrigger>
             <TabsTrigger value="tables">Tables only</TabsTrigger>
@@ -82,7 +120,7 @@ export function AdminDataSourcePolicyPage() {
       </div>
 
       <div className="flex items-center gap-3">
-        <Switch checked={effectiveRestrict} onCheckedChange={(checked) => setRestrict(checked)} />
+        <Switch checked={effectiveRestrict} onCheckedChange={handleRestrictChange} />
         <div>
           <p className="text-sm font-medium">Restrict to selected objects</p>
           <p className="text-xs text-muted-foreground">
@@ -117,11 +155,16 @@ export function AdminDataSourcePolicyPage() {
         </div>
       )}
 
-      <div>
-        <Button onClick={handleSave} disabled={updatePolicy.isPending}>
+      <div className="flex items-center gap-3">
+        <Button onClick={handleSave} disabled={updatePolicy.isPending || nothingAllowed}>
           {updatePolicy.isPending ? <Loader2 className="size-3.5 animate-spin" /> : <Save className="size-3.5" />}
           Save
         </Button>
+        {nothingAllowed && (
+          <p className="text-xs text-destructive">
+            Select at least one table or view, or turn off "Restrict to selected objects".
+          </p>
+        )}
       </div>
     </div>
   )
