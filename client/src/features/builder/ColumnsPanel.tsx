@@ -15,9 +15,11 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { Eye, EyeOff, GripVertical, X } from 'lucide-react'
+import { Eye, EyeOff, GripVertical, Sigma, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { AGGREGATE_LABELS, aggregatesForDataType } from '@/features/builder/aggregate-functions'
 import { columnKey, useBuilderStore } from '@/features/builder/builder-store'
 import { DataTypeIcon } from '@/lib/data-type-icons'
 import { cn } from '@/lib/utils'
@@ -73,6 +75,7 @@ function SortableColumnRow({ column }: { column: QueryColumn }) {
   const removeColumn = useBuilderStore((s) => s.removeColumn)
   const renameColumnAlias = useBuilderStore((s) => s.renameColumnAlias)
   const toggleColumnVisible = useBuilderStore((s) => s.toggleColumnVisible)
+  const setColumnAggregate = useBuilderStore((s) => s.setColumnAggregate)
 
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: key })
 
@@ -103,6 +106,20 @@ function SortableColumnRow({ column }: { column: QueryColumn }) {
       <span className="w-36 shrink-0 truncate text-xs text-muted-foreground" title={column.columnName}>
         {column.columnName}
       </span>
+
+      <Select value={column.aggregate} onValueChange={(v) => setColumnAggregate(key, v as QueryColumn['aggregate'])}>
+        <SelectTrigger size="sm" className={cn('h-7 w-32 shrink-0 text-xs', column.aggregate !== 'none' && 'text-query')}>
+          <Sigma className="size-3" />
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {aggregatesForDataType(column.dataType).map((agg) => (
+            <SelectItem key={agg} value={agg} className="text-xs">
+              {AGGREGATE_LABELS[agg]}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
 
       <Input
         value={column.alias ?? ''}

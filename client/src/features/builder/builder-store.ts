@@ -1,7 +1,10 @@
 import { create } from 'zustand'
+import { aggregateResultDataType, describeAggregate } from '@/features/builder/aggregate-functions'
 import type {
+  AggregateFunction,
   ColumnDataType,
   FilterCondition,
+  FilterGroup,
   FilterOperator,
   QueryColumn,
   QueryDefinition,
@@ -27,6 +30,20 @@ export function columnKey(tableAlias: string, columnName: string, aggregate: str
   return `${tableAlias}.${columnName}.${aggregate}`
 }
 
+function emptyFilterGroup(): FilterGroup {
+  return { operator: 'and', conditions: [], groups: [] }
+}
+
+/** Drops any HAVING condition whose measure (column + aggregate) is no longer selected. */
+function pruneHaving(having: FilterGroup | null | undefined, columns: QueryColumn[]): FilterGroup | null | undefined {
+  if (!having) return having
+  const stillExists = (c: FilterCondition) =>
+    columns.some((col) => col.tableAlias === c.tableAlias && col.columnName === c.columnName && col.aggregate === c.aggregate)
+  const conditions = having.conditions.filter(stillExists)
+  if (conditions.length === having.conditions.length) return having
+  return { ...having, conditions }
+}
+
 interface BuilderState {
   queryId: string | null
   name: string
@@ -44,12 +61,19 @@ interface BuilderState {
   reorderColumns: (fromIndex: number, toIndex: number) => void
   renameColumnAlias: (key: string, alias: string) => void
   toggleColumnVisible: (key: string) => void
+  setColumnAggregate: (key: string, aggregate: AggregateFunction) => void
 
   addFilterCondition: () => void
   updateFilterCondition: (index: number, patch: Partial<FilterCondition>) => void
   removeFilterCondition: (index: number) => void
   setFilterLogicalOperator: (operator: 'and' | 'or') => void
   toggleFilterParameterized: (index: number) => void
+
+  addHavingCondition: () => void
+  updateHavingCondition: (index: number, patch: Partial<FilterCondition>) => void
+  removeHavingCondition: (index: number) => void
+  setHavingLogicalOperator: (operator: 'and' | 'or') => void
+  toggleHavingParameterized: (index: number) => void
 
   addSort: (tableAlias: string, columnName: string) => void
   updateSortDirection: (index: number, direction: SortDirection) => void
@@ -107,15 +131,15 @@ export const useBuilderStore = create<BuilderState>((set) => ({
     }),
 
   removeColumn: (key) =>
-    set((state) => ({
-      definition: {
-        ...state.definition,
-        columns: state.definition.columns
-          .filter((c) => columnKey(c.tableAlias, c.columnName, c.aggregate) !== key)
-          .map((c, i) => ({ ...c, orderIndex: i })),
-      },
-      isDirty: true,
-    })),
+    set((state) => {
+      const columns = state.definition.columns
+        .filter((c) => columnKey(c.tableAlias, c.columnName, c.aggregate) !== key)
+        .map((c, i) => ({ ...c, orderIndex: i }))
+      return {
+        definition: { ...state.definition, columns, having: pruneHaving(state.definition.having, columns) },
+        isDirty: true,
+      }
+    }),
 
   reorderColumns: (fromIndex, toIndex) =>
     set((state) => {
@@ -146,6 +170,29 @@ export const useBuilderStore = create<BuilderState>((set) => ({
       },
       isDirty: true,
     })),
+
+  setColumnAggregate: (key, aggregate) =>
+    set((state) => {
+      const target = state.definition.columns.find((c) => columnKey(c.tableAlias, c.columnName, c.aggregate) === key)
+      if (!target || target.aggregate === aggregate) return state
+
+      // Auto-name it (e.g. "Sum of Amount") so exported headers are readable and two aggregates
+      // on the same raw column never collide — but never clobber an alias the user typed themselves.
+      const hadAutoOrNoAlias = !target.alias || target.alias === describeAggregate(target.aggregate, target.columnName)
+      const alias = hadAutoOrNoAlias
+        ? aggregate === 'none'
+          ? undefined
+          : describeAggregate(aggregate, target.columnName)
+        : target.alias
+
+      const columns = state.definition.columns.map((c) =>
+        columnKey(c.tableAlias, c.columnName, c.aggregate) === key ? { ...c, aggregate, alias } : c,
+      )
+      return {
+        definition: { ...state.definition, columns, having: pruneHaving(state.definition.having, columns) },
+        isDirty: true,
+      }
+    }),
 
   addFilterCondition: () =>
     set((state) => {
@@ -245,6 +292,108 @@ export const useBuilderStore = create<BuilderState>((set) => ({
             conditions: state.definition.filters.conditions.map((c, i) =>
               i === index ? { ...c, isParameterized: true, parameterName: paramName } : c,
             ),
+          },
+        },
+        isDirty: true,
+      }
+    }),
+
+  addHavingCondition: () =>
+    set((state) => {
+      const firstMeasure = state.definition.columns.find((c) => c.aggregate !== 'none')
+      if (!firstMeasure) return state
+      const condition: FilterCondition = {
+        tableAlias: firstMeasure.tableAlias,
+        columnName: firstMeasure.columnName,
+        dataType: aggregateResultDataType(firstMeasure.dataType, firstMeasure.aggregate),
+        aggregate: firstMeasure.aggregate,
+        operator: 'greaterThan' as FilterOperator,
+        value: '',
+        isParameterized: false,
+      }
+      const having = state.definition.having ?? emptyFilterGroup()
+      return {
+        definition: { ...state.definition, having: { ...having, conditions: [...having.conditions, condition] } },
+        isDirty: true,
+      }
+    }),
+
+  updateHavingCondition: (index, patch) =>
+    set((state) => {
+      const having = state.definition.having
+      if (!having) return state
+      return {
+        definition: {
+          ...state.definition,
+          having: { ...having, conditions: having.conditions.map((c, i) => (i === index ? { ...c, ...patch } : c)) },
+        },
+        isDirty: true,
+      }
+    }),
+
+  removeHavingCondition: (index) =>
+    set((state) => {
+      const having = state.definition.having
+      if (!having) return state
+      return {
+        definition: { ...state.definition, having: { ...having, conditions: having.conditions.filter((_, i) => i !== index) } },
+        isDirty: true,
+      }
+    }),
+
+  setHavingLogicalOperator: (operator) =>
+    set((state) => {
+      const having = state.definition.having
+      if (!having) return state
+      return { definition: { ...state.definition, having: { ...having, operator } }, isDirty: true }
+    }),
+
+  toggleHavingParameterized: (index) =>
+    set((state) => {
+      const having = state.definition.having
+      const condition = having?.conditions[index]
+      if (!having || !condition) return state
+
+      if (condition.isParameterized) {
+        return {
+          definition: {
+            ...state.definition,
+            parameters: state.definition.parameters.filter((p) => p.name !== condition.parameterName),
+            having: {
+              ...having,
+              conditions: having.conditions.map((c, i) =>
+                i === index ? { ...c, isParameterized: false, parameterName: undefined } : c,
+              ),
+            },
+          },
+          isDirty: true,
+        }
+      }
+
+      const baseName = `${condition.columnName}_total`.replace(/[^a-zA-Z0-9_]/g, '_')
+      let paramName = baseName
+      let suffix = 1
+      const existingNames = new Set(state.definition.parameters.map((p) => p.name))
+      while (existingNames.has(paramName)) {
+        paramName = `${baseName}_${suffix++}`
+      }
+
+      return {
+        definition: {
+          ...state.definition,
+          parameters: [
+            ...state.definition.parameters,
+            {
+              name: paramName,
+              label: describeAggregate(condition.aggregate, condition.columnName),
+              dataType: condition.dataType,
+              defaultValue: condition.value,
+              isRequired: true,
+            },
+          ],
+          having: {
+            ...having,
+            conditions: having.conditions.map((c, i) => (i === index ? { ...c, isParameterized: true, parameterName: paramName } : c)),
           },
         },
         isDirty: true,

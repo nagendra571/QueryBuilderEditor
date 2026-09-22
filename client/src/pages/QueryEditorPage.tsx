@@ -10,6 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { CatalogSidebar } from '@/features/catalog/CatalogSidebar'
 import { ColumnsPanel } from '@/features/builder/ColumnsPanel'
 import { AddFilterButton, FiltersPanel } from '@/features/builder/FiltersPanel'
+import { AddHavingButton, HavingPanel } from '@/features/builder/HavingPanel'
 import { HistoryPanel } from '@/features/builder/HistoryPanel'
 import { ParameterPromptDialog } from '@/features/builder/ParameterPromptDialog'
 import { ResultsTable } from '@/features/builder/ResultsTable'
@@ -114,6 +115,7 @@ export function QueryEditorPage() {
 
   const hasColumns = definition.columns.some((c) => c.isVisible)
   const canQuery = hasColumns && !!dataSourceId
+  const hasAggregates = definition.columns.some((c) => c.aggregate !== 'none')
 
   function requireParametersThen(action: PendingAction) {
     if (definition.parameters.length > 0) {
@@ -253,17 +255,34 @@ export function QueryEditorPage() {
               </div>
             ) : (
               <div className="flex flex-col gap-(--space-section)">
-                <BuilderSection title="Columns" description="Choose and order the columns to include in your results.">
+                <BuilderSection
+                  title="Columns"
+                  description={
+                    hasAggregates
+                      ? 'Give a column a total (Sum, Count...) to summarize it — every other column is automatically grouped.'
+                      : 'Choose and order the columns to include in your results. Give one a total (Sum, Count...) to summarize instead of listing every row.'
+                  }
+                >
                   <ColumnsPanel />
                 </BuilderSection>
 
                 <BuilderSection
                   title="Filters (WHERE)"
-                  description="Narrow down the rows returned."
+                  description="Narrow down the rows returned, before totals are calculated."
                   action={<AddFilterButton disabled={availableColumns.length === 0} />}
                 >
                   <FiltersPanel availableColumns={availableColumns} />
                 </BuilderSection>
+
+                {hasAggregates && (
+                  <BuilderSection
+                    title="Filter the totals (HAVING)"
+                    description="Narrow down groups after totals are calculated — e.g. only regions where Sum of Amount is above 10,000."
+                    action={<AddHavingButton />}
+                  >
+                    <HavingPanel />
+                  </BuilderSection>
+                )}
 
                 <BuilderSection
                   title="Sort"
