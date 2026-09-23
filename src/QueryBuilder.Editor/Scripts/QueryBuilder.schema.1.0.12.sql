@@ -233,6 +233,43 @@ BEGIN
     VALUES (N'20260922184156_AddCatalogScopeAndAllowedObjects', N'9.0.9');
 END;
 
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20260923015436_AddDataScopeRules'
+)
+BEGIN
+    CREATE TABLE [DataScopeRules] (
+        [Id] uniqueidentifier NOT NULL,
+        [DataSourceId] uniqueidentifier NOT NULL,
+        [ObjectName] nvarchar(256) NOT NULL,
+        [ScopeKey] nvarchar(128) NULL,
+        [ColumnName] nvarchar(128) NULL,
+        [CreatedBy] nvarchar(450) NOT NULL,
+        [CreatedAtUtc] datetimeoffset NOT NULL,
+        [UpdatedBy] nvarchar(450) NULL,
+        [UpdatedAtUtc] datetimeoffset NULL,
+        CONSTRAINT [PK_DataScopeRules] PRIMARY KEY ([Id]),
+        CONSTRAINT [FK_DataScopeRules_DataSources_DataSourceId] FOREIGN KEY ([DataSourceId]) REFERENCES [DataSources] ([Id]) ON DELETE CASCADE
+    );
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20260923015436_AddDataScopeRules'
+)
+BEGIN
+    EXEC(N'CREATE UNIQUE INDEX [IX_DataScopeRules_DataSourceId_ObjectName_ScopeKey] ON [DataScopeRules] ([DataSourceId], [ObjectName], [ScopeKey]) WHERE [ScopeKey] IS NOT NULL');
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20260923015436_AddDataScopeRules'
+)
+BEGIN
+    INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
+    VALUES (N'20260923015436_AddDataScopeRules', N'9.0.9');
+END;
+
 COMMIT;
 GO
 

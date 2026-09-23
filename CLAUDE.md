@@ -5,11 +5,9 @@ NuGet package (`QueryBuilder.Editor`) with a React/TS/Tailwind/shadcn frontend b
 into the assembly. Sibling product to `TemplateBuilder.Editor` — mirrors its architecture and
 integration ergonomics (single-call registration, embedded SPA, DBA-friendly migrations).
 
-- NuGet: https://www.nuget.org/packages/QueryBuilder.Editor — published version **1.0.10**. v1.0.11
-  is packed locally (`./nupkg/QueryBuilder.Editor.1.0.11.nupkg`, adds the admin catalog-allowlist
-  feature below) but **not yet pushed** — `<Version>` in the `.csproj` and the regenerated
-  `Scripts/QueryBuilder.schema.1.0.11.sql` are uncommitted local changes at this point; don't
-  re-bump or re-pack until the user confirms the 1.0.11 push succeeded and asks to commit.
+- NuGet: https://www.nuget.org/packages/QueryBuilder.Editor — published version **1.0.12** (adds
+  row-level data scoping, below), pushed to NuGet and committed/pushed to GitHub. The next release
+  is 1.0.13 — bump only when asked.
 - GitHub: https://github.com/nagendra571/QueryBuilderEditor
 - Hosted test deployment (user's own, real usage/bug reports come from here):
   http://templatebuilder.runasp.net/querybuilder
@@ -27,6 +25,8 @@ src/
   QueryBuilder.Api              sample host app — dotnet run this to try it locally
 client/                         React/TS/Tailwind/shadcn frontend — source for QueryBuilder.Editor's
                                  embedded wwwroot
+tests/QueryBuilder.Tests        xUnit (IsPackable=false) — SQL builder, data scoping, validation.
+                                 References all four src projects explicitly (Editor's are PrivateAssets)
 ```
 
 `Domain`/`Application`/`Infrastructure` are never published standalone — `QueryBuilder.Editor`
@@ -57,7 +57,7 @@ separate, deliberate asks, not implied by "implement this."
    cp -r client/dist/assets src/QueryBuilder.Editor/wwwroot/assets
    cp client/dist/index.html src/QueryBuilder.Editor/wwwroot/index.html
    ```
-3. Verify before packaging — see "Testing" below. Don't skip this; several real bugs (EF tracking,
+3. Verify before packaging (`dotnet test tests/QueryBuilder.Tests` plus a real run) — see "Testing" below. Don't skip this; several real bugs (EF tracking,
    Radix ScrollArea, a Zustand infinite-loop) were only caught by actually running the flow, not
    by reading the code or type-checking alone.
 4. Only once asked to "bump the version and prepare the package": bump `<Version>` in
@@ -79,6 +79,8 @@ version was hit once already).
 
 ## Testing
 
+- `dotnet test tests/QueryBuilder.Tests` — run before packaging; it's fast and needs no database
+  (`SqlServerDataCatalogService` tests pre-seed `IMemoryCache` with `catalog:{id}` instead).
 - **`localhost` is unreliable from the Claude-in-Chrome browser tool in this environment** — it
   resolves to `chrome-error://chromewebdata/` intermittently, while external sites work fine.
   **Use the Playwright MCP tools instead** (`mcp__plugin_playwright_playwright__*`) — different
@@ -107,6 +109,16 @@ version was hit once already).
   *absence of data/functionality* reaching a non-admin (e.g. via Playwright: nav item hidden, no
   admin data in the browser) rather than the exact status code, and revert the temporary Program.cs
   edit afterward same as the `ActorResolver` trick above.
+- To test row-level data scoping: the sample app configures no `DataScope` (feature off).
+  Temporarily add `options.DataScope.Keys = ["Country"]` and a `Resolver` reading an `X-Test-Scope`
+  header or `qb-test-scope` cookie (`all` → `DataScope.Unrestricted`, missing → `null`/denied,
+  `Canada|India` → `DataScope.For("Country", value.Split('|'))`) — the cookie lets Playwright
+  switch identity via `document.cookie`. The demo views need no changes: map `vw_OrderDetails`
+  Country → **`ShippingCountry`** (shows the key/column names needn't match) and
+  `vw_CustomerOrderSummary` Country → `Country`. Note the local "Sales Sample" source has an
+  allowlist (50 `vw_BulkTest_*` views + `vw_CustomerOrderSummary`) left over from earlier testing, so
+  `vw_OrderDetails` must be temporarily added to it (and restored after). Clear the test rules
+  (`PUT .../data-scope` with `{objects:[]}`) and revert Program.cs afterward.
 - To see generated SQL for debugging EF issues: temporarily override
   `"Microsoft.EntityFrameworkCore.Database.Command": "Information"` in
   `src/QueryBuilder.Api/appsettings.json`'s Serilog override section, then revert.
@@ -155,6 +167,17 @@ version was hit once already).
   that key too in the same `onSuccess` (see `useUpdateCatalogPolicy` in `client/src/hooks/useAdmin.ts`
   for the pattern: invalidates `['data-source-catalog', id]` and `['data-sources']` alongside its own
   key).
+- **Run/export/preview trust the `QueryDefinition` the browser sends** — the server never re-loads a
+  saved definition. So anything security-relevant (row-level data scope) must be enforced
+  server-side at SQL-build time, never in the UI or the saved query. Every business-SQL path goes
+  `ValidateAsync` → `IDataScopeGuard.AuthorizeAsync` → `Build(definition, scope)`; `Build`'s scope
+  parameter is required on purpose so a new path can't skip it. Runtime parameter names are the
+  one piece of browser text emitted raw into SQL (`@name`) — they're validated by
+  `QueryParameterNames` (letters/digits/underscore, `__` prefix reserved for `@__scope0`...); an
+  unvalidated name was a real injection hole until 1.0.12.
+- **A C# `params object[]` + generic `IEnumerable<T>` overload pair binds a single `string` to the
+  generic one** (string is `IEnumerable<char>`) — `DataScope.And("key", "14")` split into `"1"`,`"4"`.
+  `DataScope` now has only the `params` overload and flattens collections (excluding strings) itself.
 
 ## Feature status
 
@@ -172,6 +195,18 @@ satisfy both; defaults `Anonymous` like the rest of the package): per data sourc
 views-only/tables-only/both (`DataSource.CatalogScope`) and optionally restrict to specific
 tables/views (`DataSource.AllowedObjects`), replacing raw-SQL edits for this one concern. Spec:
 `docs/superpowers/specs/2026-09-22-admin-catalog-allowlist-design.md`.
+
+**Shipped in 1.0.12**: **row-level data scoping** — host declares
+`options.DataScope.Keys` + a `Resolver`/`ResolverAsync` returning `DataScope.Unrestricted` or
+`DataScope.For(key, values)` per user; admins map each key to a view column per data source
+(`DataScopeRules` table, admin UI section on the data-source policy page) or mark a view "not
+scoped". Fail closed throughout: undecided views hidden from scoped users; resolver `null`/throw =
+denied (never unrestricted); stale key or missing column hides the view. Enforced in
+`SqlServerQuerySqlBuilder`'s WHERE (`(scope) AND (user filters)`, before GROUP BY) via
+`Application/DataScoping/DataScopeGuard` (+ pure `DataScopeEvaluator`) on catalog/run/export/
+preview/save; shared queries run with the runner's scope; scope recorded in run/export audit
+details. No resolver = feature off. Also fixed the runtime-parameter-name SQL injection. Spec:
+`docs/superpowers/specs/2026-09-22-data-scoping-design.md`.
 
 **Discussed, not built**: full data-source registration/editing in the admin UI (name, connection
 string, provider, `AllowedSchemas`) — still raw SQL insert only, see the package README; multi-table
