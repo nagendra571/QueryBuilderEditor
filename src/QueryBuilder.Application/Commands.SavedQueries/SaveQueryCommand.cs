@@ -32,12 +32,14 @@ public sealed class SaveQueryCommandHandler(
     ISavedQueryRepository repository,
     IDataCatalogService catalogService,
     ICurrentUserService currentUser,
+    IDataScopeGuard dataScopeGuard,
     IAuditLogger auditLogger)
     : IRequestHandler<SaveQueryCommand, Guid>
 {
     public async Task<Guid> Handle(SaveQueryCommand request, CancellationToken cancellationToken)
     {
         await catalogService.ValidateAsync(request.DataSourceId, request.Definition, cancellationToken);
+        await dataScopeGuard.AuthorizeAsync(request.DataSourceId, request.Definition, cancellationToken);
 
         var definitionJson = QueryDefinitionSerializer.Serialize(request.Definition);
 

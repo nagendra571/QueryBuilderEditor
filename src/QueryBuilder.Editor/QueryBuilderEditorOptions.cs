@@ -57,4 +57,8 @@ public sealed class QueryBuilderEditorOptions
     /// set this before going to production, since the admin area lets a caller see a data
     /// source's full unfiltered schema and change what business users can query.</summary>
     public QueryBuilderAuthorizationOptions AdminAuthorization { get; } = new();
+
+    /// <summary>Row-level data scoping (e.g. a Program-admin only sees their ProgramId's rows). Off
+    /// unless a resolver is set — see <see cref="DataScopeOptions"/>.</summary>
+    public DataScopeOptions DataScope { get; } = new();
 }

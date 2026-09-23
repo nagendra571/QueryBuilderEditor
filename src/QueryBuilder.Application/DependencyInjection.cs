@@ -1,7 +1,9 @@
 using System.Reflection;
 using FluentValidation;
 using Microsoft.Extensions.DependencyInjection;
+using QueryBuilder.Application.Abstractions;
 using QueryBuilder.Application.Common;
+using QueryBuilder.Application.DataScoping;
 
 namespace QueryBuilder.Application;
 
@@ -12,6 +14,7 @@ public static class DependencyInjection
         var assembly = Assembly.GetExecutingAssembly();
 
         services.AddScoped<ISender, Sender>();
+        services.AddScoped<IDataScopeGuard, DataScopeGuard>();
         RegisterHandlers(services, assembly);
 
         services.AddValidatorsFromAssembly(assembly);

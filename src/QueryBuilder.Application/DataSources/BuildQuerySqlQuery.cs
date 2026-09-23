@@ -12,7 +12,8 @@ public sealed record BuildQuerySqlQuery(Guid DataSourceId, QueryDefinition Defin
 public sealed class BuildQuerySqlQueryHandler(
     IDataSourceRepository dataSourceRepository,
     IDataCatalogService catalogService,
-    IQuerySqlBuilderFactory sqlBuilderFactory)
+    IQuerySqlBuilderFactory sqlBuilderFactory,
+    IDataScopeGuard dataScopeGuard)
     : IRequestHandler<BuildQuerySqlQuery, QuerySqlPreviewDto>
 {
     public async Task<QuerySqlPreviewDto> Handle(BuildQuerySqlQuery request, CancellationToken cancellationToken)
@@ -21,9 +22,10 @@ public sealed class BuildQuerySqlQueryHandler(
             ?? throw new NotFoundException(nameof(DataSource), request.DataSourceId);
 
         await catalogService.ValidateAsync(request.DataSourceId, request.Definition, cancellationToken);
+        var scopePredicates = await dataScopeGuard.AuthorizeAsync(request.DataSourceId, request.Definition, cancellationToken);
 
         var builder = sqlBuilderFactory.GetBuilder(dataSource.Provider);
-        var generated = builder.Build(request.Definition);
+        var generated = builder.Build(request.Definition, scopePredicates);
 
         return new QuerySqlPreviewDto(
             generated.Sql,

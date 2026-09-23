@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.DependencyInjection;
 using QueryBuilder.Application;
 using QueryBuilder.Application.Abstractions;
+using QueryBuilder.Editor.DataScoping;
 using QueryBuilder.Editor.Diagnostics;
 using QueryBuilder.Editor.Identity;
 using QueryBuilder.Editor.Middleware;
@@ -38,10 +39,13 @@ public static class ServiceCollectionExtensions
                 $"{nameof(QueryBuilderEditorOptions)}.{nameof(QueryBuilderEditorOptions.ConnectionString)} must be set in the AddQueryBuilderEditor callback.");
         }
 
+        options.DataScope.Validate();
+
         // Registered as the resolved instance (not IOptions<T>) — there is exactly one QueryBuilder
         // configuration per host, set once here at startup.
         services.AddSingleton(options);
         services.AddScoped<ICurrentUserService, CurrentUserService>();
+        services.AddScoped<ICurrentDataScope, CurrentDataScopeService>();
 
         services.AddApplication();
         services.AddInfrastructure(options.ConnectionString, options.ApplyMigrations);

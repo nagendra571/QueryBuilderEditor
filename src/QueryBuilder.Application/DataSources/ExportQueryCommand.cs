@@ -24,6 +24,8 @@ public sealed class ExportQueryCommandHandler(
     IQuerySqlBuilderFactory sqlBuilderFactory,
     IQueryExecutionService executionService,
     IExportService exportService,
+    IDataScopeGuard dataScopeGuard,
+    ICurrentDataScope currentScope,
     IAuditLogger auditLogger)
     : IRequestHandler<ExportQueryCommand, ExportResult>
 {
@@ -43,9 +45,10 @@ public sealed class ExportQueryCommandHandler(
         }
 
         await catalogService.ValidateAsync(request.DataSourceId, request.Definition, cancellationToken);
+        var scopePredicates = await dataScopeGuard.AuthorizeAsync(request.DataSourceId, request.Definition, cancellationToken);
 
         var builder = sqlBuilderFactory.GetBuilder(dataSource.Provider);
-        var generated = builder.Build(request.Definition);
+        var generated = builder.Build(request.Definition, scopePredicates);
 
         // Exports are allowed a larger cap than the interactive grid preview.
         var result = await executionService.ExecuteAsync(
@@ -63,7 +66,7 @@ public sealed class ExportQueryCommandHandler(
                 entityName,
                 request.DataSourceId,
                 $"Exported '{entityName}' to {request.Format} ({result.RowCount} row(s))",
-                new { request.Format, result.RowCount }),
+                new { request.Format, result.RowCount, Scope = (await currentScope.GetAsync(cancellationToken)).Describe() }),
             cancellationToken);
 
         return new ExportResult(

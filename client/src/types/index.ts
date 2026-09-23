@@ -289,6 +289,7 @@ export type AuditAction =
   | 'queryDisabled'
   | 'queryEnabled'
   | 'dataSourceCatalogPolicyUpdated'
+  | 'dataSourceDataScopeUpdated'
 
 export interface AuditLogEntryDto {
   id: string
@@ -324,4 +325,33 @@ export interface AdminDataSourceDetailDto {
 export interface UpdateCatalogPolicyRequest {
   catalogScope: CatalogScope
   allowedObjects: string[]
+}
+
+export type DataScopeState = 'undecided' | 'notScoped' | 'scoped'
+
+export interface AdminDataScopeObjectDto {
+  objectName: string
+  kind: SchemaObjectKind
+  columns: string[]
+  state: DataScopeState
+  /** Declared scope key → column name, only for `scoped`. */
+  mappings: Record<string, string>
+  /** Keys mapped in the database that the host no longer declares. */
+  staleKeys: string[]
+}
+
+export interface AdminDataScopeDto {
+  enabled: boolean
+  declaredKeys: string[]
+  objects: AdminDataScopeObjectDto[]
+}
+
+export interface DataScopeObjectRuleDto {
+  objectName: string
+  state: DataScopeState
+  mappings?: Record<string, string> | null
+}
+
+export interface UpdateDataScopeRequest {
+  objects: DataScopeObjectRuleDto[]
 }

@@ -34,6 +34,9 @@ src/
                                   integration would, plus demo data seeding
 client/                         the React/TypeScript/Tailwind frontend (source for what's
                                   embedded into QueryBuilder.Editor at pack time)
+tests/
+  QueryBuilder.Tests            xUnit tests (SQL generation, row-level data scoping, validation) —
+                                  `dotnet test tests/QueryBuilder.Tests`
 ```
 
 `Domain`/`Application`/`Infrastructure` are never published on their own — `QueryBuilder.Editor`
@@ -92,6 +95,11 @@ migrations, API/UI wiring, JSON options, and the authorization pipeline in one p
 - Admin UI (role-gated via `AdminAuthorization`, separate from the main `Authorization` gate): per
   data source, control whether the catalog shows views only / tables only / both, and allowlist
   specific tables/views — replaces the previous raw-SQL-only path for this one concern
+- Row-level data scoping: the host declares scope keys (`ProgramId`, `ModuleId`, ...) and a
+  resolver returning each user's values or `DataScope.Unrestricted`; admins map each key to a view
+  column (or mark a view "not scoped"). Enforced server-side in the generated SQL's `WHERE` on every
+  path (catalog, run, export, preview, save); undecided views and failing resolvers fail closed.
+  See the package README's "Row-level Data Scoping" section
 - Configurable actor identity (`ActorResolver`) and access control (anonymous / authenticated /
   role / custom policy), applied uniformly across every route
 - DBA-friendly database story: auto-migration by default, or an idempotent SQL script for

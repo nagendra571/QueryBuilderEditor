@@ -29,6 +29,17 @@ public static class AdminEndpoints
             return Results.NoContent();
         });
 
+        group.MapGet("/data-sources/{id:guid}/data-scope", async (Guid id, ISender sender, CancellationToken ct) =>
+            Results.Json(await sender.Send(new GetDataScopeQuery(id), ct), QueryBuilderJson.Options));
+
+        group.MapPut("/data-sources/{id:guid}/data-scope", async (Guid id, HttpContext http, ISender sender, CancellationToken ct) =>
+        {
+            var request = await http.Request.ReadFromJsonAsync<UpdateDataScopeRequest>(QueryBuilderJson.Options, ct)
+                ?? throw new BadHttpRequestException("Request body is required.");
+            await sender.Send(new UpdateDataScopeCommand(id, request.Objects ?? []), ct);
+            return Results.NoContent();
+        });
+
         return group;
     }
 }

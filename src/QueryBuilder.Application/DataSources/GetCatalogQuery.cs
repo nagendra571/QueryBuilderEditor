@@ -6,9 +6,10 @@ namespace QueryBuilder.Application.DataSources;
 
 public sealed record GetCatalogQuery(Guid DataSourceId) : IRequest<DataSourceCatalog>;
 
-public sealed class GetCatalogQueryHandler(IDataCatalogService catalogService)
+public sealed class GetCatalogQueryHandler(IDataCatalogService catalogService, IDataScopeGuard dataScopeGuard)
     : IRequestHandler<GetCatalogQuery, DataSourceCatalog>
 {
-    public Task<DataSourceCatalog> Handle(GetCatalogQuery request, CancellationToken cancellationToken) =>
-        catalogService.GetCatalogAsync(request.DataSourceId, cancellationToken);
+    public async Task<DataSourceCatalog> Handle(GetCatalogQuery request, CancellationToken cancellationToken) =>
+        await dataScopeGuard.FilterCatalogAsync(
+            await catalogService.GetCatalogAsync(request.DataSourceId, cancellationToken), cancellationToken);
 }

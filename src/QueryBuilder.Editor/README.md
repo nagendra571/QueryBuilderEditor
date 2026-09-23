@@ -154,6 +154,45 @@ Same shape as `Authorization` (`Mode`/`RoleNames`/`PolicyName`), and composes wi
 must satisfy both. Defaults to `Anonymous` like the rest of the package; set this explicitly before
 production, since the admin area exposes a data source's full unfiltered schema.
 
+## Row-level Data Scoping
+
+Limit which **rows** a user sees — e.g. a Program-admin with `ProgramId = 10` only ever sees rows
+where `ProgramId = 10`, while Super admins see everything. The package stays generic: you name the
+scope keys (`ProgramId`, `ModuleId`, `SystemId`, ...) and supply each user's values; admins decide
+which view column each key filters on.
+
+```csharp
+options.DataScope.Keys = ["ProgramId"];
+options.DataScope.Resolver = ctx =>
+    ctx.User.IsInRole("SuperAdmin") || ctx.User.IsInRole("Admin")
+        ? DataScope.Unrestricted
+        : DataScope.For("ProgramId", GetProgramIds(ctx));   // one value, several, or a collection
+// Several keys: DataScope.For("ProgramId", 10).And("RegionId", "EU")
+// Need a DB/API lookup? Use options.DataScope.ResolverAsync instead (set one or the other).
+```
+
+Then, in the admin UI (**Row-level data scope** on a data source's page), mark each view as:
+
+| Admin decision | Scoped user | Unrestricted user |
+|---|---|---|
+| **Undecided** (default) | hidden | all rows |
+| **Not scoped** | all rows | all rows |
+| **Scoped** — key → column (e.g. `ProgramId` → `ProgramId`, or `Country` → `ShippingCountry`) | only rows where the column is in their values (`IN`, ANDed across keys); hidden if they have no value for a mapped key | all rows |
+
+Fail-closed by design:
+
+- A view nobody has decided on is hidden from scoped users, so a newly created view can't leak.
+- A resolver that returns `null` or throws means **denied** (only "not scoped" views are visible),
+  never unrestricted. Return `DataScope.Unrestricted` explicitly for users who see everything.
+- A mapping to a key your app no longer declares, or to a column the view no longer has, hides the
+  view until an admin fixes it.
+
+The filter is added server-side to the generated SQL's `WHERE` (before grouping, so totals only
+count in-scope rows) as bound parameters, on every path: catalog, run, export, SQL preview, and
+saving. Shared queries always run with the *runner's* scope. The SQL preview shows the filter, and
+the audit log records the scope for every run and export. With no resolver configured the feature
+is off and nothing changes.
+
 ## Access Control
 
 By default the editor is **open to all users** — no authentication required.
@@ -209,8 +248,10 @@ Every failing check includes a one-line fix. Returns 404 outside Development.
   owner-only, reversible
 - Admin UI (separately role-gated via `AdminAuthorization`) to control each data source's catalog
   scope (views/tables/both) and a specific table/view allowlist
+- Row-level data scoping: host-supplied scope keys/values per user (e.g. ProgramId), mapped to view
+  columns by an admin; fail-closed for undecided views
 - Full audit log (created/updated/deleted/run/exported/shared/unshared/disabled/enabled/catalog
-  policy updated) with a configurable actor identity and access control
+  policy updated/data scope updated) with a configurable actor identity and access control
 
 ## Links
 

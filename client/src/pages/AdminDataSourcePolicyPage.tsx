@@ -7,6 +7,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { DataScopeSection } from '@/features/admin/DataScopeSection'
 import { useAdminDataSourceDetail, useUpdateCatalogPolicy } from '@/hooks/useAdmin'
 import type { CatalogScope } from '@/types'
 
@@ -166,6 +167,8 @@ export function AdminDataSourcePolicyPage() {
           </p>
         )}
       </div>
+
+      <DataScopeSection dataSourceId={data.id} />
     </div>
   )
 }

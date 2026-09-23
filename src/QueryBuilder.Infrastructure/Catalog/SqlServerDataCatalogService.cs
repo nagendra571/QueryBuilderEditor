@@ -1,6 +1,7 @@
 using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Caching.Memory;
 using QueryBuilder.Application.Abstractions;
+using QueryBuilder.Application.Common;
 using QueryBuilder.Application.Exceptions;
 using QueryBuilder.Domain.Entities;
 using QueryBuilder.Domain.Enums;
@@ -110,6 +111,15 @@ public sealed class SqlServerDataCatalogService(
         if (definition.Having is not null)
         {
             ValidateFilterGroup(definition.Having, EnsureColumn);
+        }
+
+        foreach (var parameter in definition.Parameters)
+        {
+            if (!QueryParameterNames.IsValid(parameter.Name))
+            {
+                throw new CatalogValidationException(
+                    $"'{parameter.Name}' is not a valid parameter name (letters, digits and underscores only, not starting with '{QueryParameterNames.ReservedPrefix}').");
+            }
         }
 
         foreach (var parameterRef in definition.Filters.AllConditions().Concat(definition.Having?.AllConditions() ?? [])

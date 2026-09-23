@@ -6,4 +6,7 @@
     <Project Path="src/QueryBuilder.Editor/QueryBuilder.Editor.csproj" />
     <Project Path="src/QueryBuilder.Infrastructure/QueryBuilder.Infrastructure.csproj" />
   </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/QueryBuilder.Tests/QueryBuilder.Tests.csproj" />
+  </Folder>
 </Solution>

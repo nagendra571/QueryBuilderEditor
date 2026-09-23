@@ -13,6 +13,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<DataSource> DataSources => Set<DataSource>();
     public DbSet<QueryShare> QueryShares => Set<QueryShare>();
     public DbSet<AuditLogEntry> AuditLogEntries => Set<AuditLogEntry>();
+    public DbSet<DataScopeRule> DataScopeRules => Set<DataScopeRule>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

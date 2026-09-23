@@ -1,6 +1,8 @@
 using System.Text;
 using System.Text.Json;
 using QueryBuilder.Application.Abstractions;
+using QueryBuilder.Application.Common;
+using QueryBuilder.Application.Exceptions;
 using QueryBuilder.Domain.Enums;
 using QueryBuilder.Domain.Model;
 
@@ -16,8 +18,10 @@ public sealed class SqlServerQuerySqlBuilder : IQuerySqlBuilder
 {
     public DataSourceProvider Provider => DataSourceProvider.SqlServer;
 
-    public GeneratedQuery Build(QueryDefinition definition)
+    public GeneratedQuery Build(QueryDefinition definition, IReadOnlyList<ScopePredicate> scope)
     {
+        ArgumentNullException.ThrowIfNull(scope);
+
         var parameters = new List<GeneratedQueryParameter>();
         var parameterCounter = 0;
 
@@ -28,7 +32,7 @@ public sealed class SqlServerQuerySqlBuilder : IQuerySqlBuilder
         AppendSelect(sql, definition);
         AppendFrom(sql, definition);
         AppendJoins(sql, definition);
-        AppendWhere(sql, definition.Filters, parameters, NextParamName, isHaving: false);
+        AppendWhere(sql, definition.Filters, scope, parameters, NextParamName);
 
         var groupByColumns = ResolveGroupByColumns(definition);
         if (groupByColumns.Count > 0)
@@ -100,15 +104,47 @@ public sealed class SqlServerQuerySqlBuilder : IQuerySqlBuilder
         }
     }
 
+    /// <summary>
+    /// Row-level data-scope predicates go first and are ANDed with the user's filter group, which is
+    /// parenthesized whenever scope is present — the user's group may be OR-combined at its top
+    /// level, and without the parentheses <c>scope AND a OR b</c> would let <c>b</c> bypass the scope.
+    /// Being in WHERE (not HAVING) also means totals/GROUP BY only ever see in-scope rows.
+    /// </summary>
     private static void AppendWhere(
-        StringBuilder sql, FilterGroup filters, List<GeneratedQueryParameter> parameters, Func<string> nextParamName, bool isHaving)
+        StringBuilder sql, FilterGroup filters, IReadOnlyList<ScopePredicate> scope,
+        List<GeneratedQueryParameter> parameters, Func<string> nextParamName)
     {
-        if (filters.Conditions.Count == 0 && filters.Groups.Count == 0)
+        var parts = new List<string>();
+        var scopeParameterCounter = 0;
+        foreach (var predicate in scope)
         {
-            return;
+            if (predicate.Values.Count == 0)
+            {
+                // The guard never produces this (no values = object hidden), but if it ever did, the
+                // only safe reading of "allowed values: none" is no rows.
+                parts.Add("(1 = 0)");
+                continue;
+            }
+            var names = predicate.Values.Select(value =>
+            {
+                var name = $"@{QueryParameterNames.ReservedPrefix}scope{scopeParameterCounter++}";
+                parameters.Add(new GeneratedQueryParameter(name, predicate.DataType, value, IsRuntimeParameter: false, RuntimeParameterName: null));
+                return name;
+            }).ToList();
+            parts.Add($"({SqlIdentifier.QualifiedColumn(predicate.Alias, predicate.ColumnName)} IN ({string.Join(", ", names)}))");
         }
-        sql.Append("\nWHERE ");
-        AppendFilterGroup(sql, filters, parameters, nextParamName, isHaving, null);
+
+        if (filters.Conditions.Count > 0 || filters.Groups.Count > 0)
+        {
+            var userFilters = new StringBuilder();
+            AppendFilterGroup(userFilters, filters, parameters, nextParamName, isHaving: false, null);
+            parts.Add(scope.Count > 0 ? $"({userFilters})" : userFilters.ToString());
+        }
+
+        if (parts.Count > 0)
+        {
+            sql.Append("\nWHERE ").Append(string.Join(" AND ", parts));
+        }
     }
 
     private static void AppendFilterGroup(
@@ -223,6 +259,10 @@ public sealed class SqlServerQuerySqlBuilder : IQuerySqlBuilder
         };
 
         var isRuntime = allowRuntime && condition.IsParameterized;
+        if (isRuntime && !QueryParameterNames.IsValid(condition.ParameterName))
+        {
+            throw new CatalogValidationException($"'{condition.ParameterName}' is not a valid parameter name.");
+        }
         var name = isRuntime ? $"@{condition.ParameterName}" : nextParamName();
 
         parameters.Add(new GeneratedQueryParameter(

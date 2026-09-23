@@ -12,7 +12,10 @@ public interface IQuerySqlBuilder
 {
     DataSourceProvider Provider { get; }
 
-    GeneratedQuery Build(QueryDefinition definition);
+    /// <summary><paramref name="scope"/> is required (not optional) on purpose: every caller must
+    /// get it from <see cref="IDataScopeGuard.AuthorizeAsync"/>, so a new SQL path can't silently
+    /// skip row-level data scoping.</summary>
+    GeneratedQuery Build(QueryDefinition definition, IReadOnlyList<ScopePredicate> scope);
 }
 
 public sealed record GeneratedQuery(string Sql, IReadOnlyList<GeneratedQueryParameter> Parameters);

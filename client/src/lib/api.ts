@@ -1,5 +1,6 @@
 import { apiClient } from '@/lib/api-client'
 import type {
+  AdminDataScopeDto,
   AdminDataSourceDetailDto,
   AdminDataSourceSummaryDto,
   AppUsersResult,
@@ -16,6 +17,7 @@ import type {
   QueryResultDto,
   QuerySqlPreviewDto,
   UpdateCatalogPolicyRequest,
+  UpdateDataScopeRequest,
 } from '@/types'
 
 export const dataSourcesApi = {
@@ -65,5 +67,9 @@ export const adminApi = {
   getDataSource: async (id: string): Promise<AdminDataSourceDetailDto> => (await apiClient.get(`/admin/data-sources/${id}`)).data,
   updateCatalogPolicy: async (id: string, request: UpdateCatalogPolicyRequest): Promise<void> => {
     await apiClient.put(`/admin/data-sources/${id}/catalog-policy`, request)
+  },
+  getDataScope: async (id: string): Promise<AdminDataScopeDto> => (await apiClient.get(`/admin/data-sources/${id}/data-scope`)).data,
+  updateDataScope: async (id: string, request: UpdateDataScopeRequest): Promise<void> => {
+    await apiClient.put(`/admin/data-sources/${id}/data-scope`, request)
   },
 }

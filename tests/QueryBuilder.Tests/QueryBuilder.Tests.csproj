@@ -1,0 +1,34 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <!-- Every project referenced explicitly: QueryBuilder.Editor references the others with
+       PrivateAssets="all" (they're bundled into its package), so they don't flow transitively. -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\QueryBuilder.Domain\QueryBuilder.Domain.csproj" />
+    <ProjectReference Include="..\..\src\QueryBuilder.Application\QueryBuilder.Application.csproj" />
+    <ProjectReference Include="..\..\src\QueryBuilder.Infrastructure\QueryBuilder.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\src\QueryBuilder.Editor\QueryBuilder.Editor.csproj" />
+  </ItemGroup>
+
+</Project>

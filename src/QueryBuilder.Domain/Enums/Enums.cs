@@ -109,5 +109,15 @@ public enum AuditAction
     QueryUnshared = 6,
     QueryDisabled = 7,
     QueryEnabled = 8,
-    DataSourceCatalogPolicyUpdated = 9
+    DataSourceCatalogPolicyUpdated = 9,
+    DataSourceDataScopeUpdated = 10
+}
+
+/// <summary>An admin's row-level data-scope decision for one catalog object. Not persisted as-is —
+/// derived from (and written as) <see cref="Entities.DataScopeRule"/> rows.</summary>
+public enum DataScopeState
+{
+    Undecided = 0,
+    NotScoped = 1,
+    Scoped = 2
 }

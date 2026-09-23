@@ -21,6 +21,8 @@ public sealed class RunQueryCommandHandler(
     IDataCatalogService catalogService,
     IQuerySqlBuilderFactory sqlBuilderFactory,
     IQueryExecutionService executionService,
+    IDataScopeGuard dataScopeGuard,
+    ICurrentDataScope currentScope,
     IAuditLogger auditLogger)
     : IRequestHandler<RunQueryCommand, QueryResultDto>
 {
@@ -40,9 +42,10 @@ public sealed class RunQueryCommandHandler(
         }
 
         await catalogService.ValidateAsync(request.DataSourceId, request.Definition, cancellationToken);
+        var scopePredicates = await dataScopeGuard.AuthorizeAsync(request.DataSourceId, request.Definition, cancellationToken);
 
         var builder = sqlBuilderFactory.GetBuilder(dataSource.Provider);
-        var generated = builder.Build(request.Definition);
+        var generated = builder.Build(request.Definition, scopePredicates);
 
         var maxRows = request.MaxRows is > 0 and <= 10_000 ? request.MaxRows : 1000;
 
@@ -58,7 +61,7 @@ public sealed class RunQueryCommandHandler(
                 entityName,
                 request.DataSourceId,
                 $"Ran query against '{entityName}', returned {result.RowCount} row(s) in {result.ExecutionTimeMs}ms",
-                new { result.RowCount, result.ExecutionTimeMs, result.Truncated }),
+                new { result.RowCount, result.ExecutionTimeMs, result.Truncated, Scope = (await currentScope.GetAsync(cancellationToken)).Describe() }),
             cancellationToken);
 
         return new QueryResultDto(
