@@ -5,7 +5,11 @@ NuGet package (`QueryBuilder.Editor`) with a React/TS/Tailwind/shadcn frontend b
 into the assembly. Sibling product to `TemplateBuilder.Editor` — mirrors its architecture and
 integration ergonomics (single-call registration, embedded SPA, DBA-friendly migrations).
 
-- NuGet: https://www.nuget.org/packages/QueryBuilder.Editor — current version **1.0.9**
+- NuGet: https://www.nuget.org/packages/QueryBuilder.Editor — published version **1.0.10**. v1.0.11
+  is packed locally (`./nupkg/QueryBuilder.Editor.1.0.11.nupkg`, adds the admin catalog-allowlist
+  feature below) but **not yet pushed** — `<Version>` in the `.csproj` and the regenerated
+  `Scripts/QueryBuilder.schema.1.0.11.sql` are uncommitted local changes at this point; don't
+  re-bump or re-pack until the user confirms the 1.0.11 push succeeded and asks to commit.
 - GitHub: https://github.com/nagendra571/QueryBuilderEditor
 - Hosted test deployment (user's own, real usage/bug reports come from here):
   http://templatebuilder.runasp.net/querybuilder
@@ -58,7 +62,7 @@ separate, deliberate asks, not implied by "implement this."
    by reading the code or type-checking alone.
 4. Only once asked to "bump the version and prepare the package": bump `<Version>` in
    `src/QueryBuilder.Editor/QueryBuilder.Editor.csproj` (patch bump for a bug/feature release —
-   this project has been iterating fast: 1.0.0 → 1.0.9 so far, roughly one bump per fix/feature),
+   this project has been iterating fast: 1.0.0 → 1.0.11 so far, roughly one bump per fix/feature),
    `dotnet clean` + `dotnet pack -c Release -o ./nupkg`, give the user the push command — never run
    it yourself:
    ```
@@ -94,6 +98,15 @@ version was hit once already).
   `src/QueryBuilder.Api/Program.cs`, drive requests with an `X-Test-User` header for different
   simulated identities, then **revert Program.cs before packaging** — this is a real diff the user
   never asked for.
+- The sample app (`QueryBuilder.Api/Program.cs`) never calls `app.UseAuthentication()`/
+  `app.UseAuthorization()` — its own `Authorization`/`AdminAuthorization` are left at the `Anonymous`
+  default, which needs neither. If you temporarily set either to `Authenticated`/`Role` to test the
+  guard (e.g. confirming `RoleNames` validation, or that a non-default route is actually gated), a
+  live request against that route 500s instead of 401/403ing, because ASP.NET Core requires that
+  middleware whenever `RequireAuthorization` is in effect. This is expected, not a bug — verify the
+  *absence of data/functionality* reaching a non-admin (e.g. via Playwright: nav item hidden, no
+  admin data in the browser) rather than the exact status code, and revert the temporary Program.cs
+  edit afterward same as the `ActorResolver` trick above.
 - To see generated SQL for debugging EF issues: temporarily override
   `"Microsoft.EntityFrameworkCore.Database.Command": "Information"` in
   `src/QueryBuilder.Api/appsettings.json`'s Serilog override section, then revert.
@@ -127,6 +140,21 @@ version was hit once already).
   child-entity type.
 - **`dotnet pack` on a multi-project-bundled package needs a `dotnet clean` first** — incremental
   builds don't always regenerate the embedded-files manifest after `wwwroot` changes.
+- **TanStack Query v5 throws if a `queryFn` resolves to `undefined`** (`"<queryHash> data is
+  undefined"`), which puts the query into an error state — `isSuccess` never becomes `true`, with no
+  console error pointing at the cause. Bit us in `useAdminAccess` (`client/src/hooks/useAdmin.ts`),
+  whose probe endpoint returns `void`/204: `queryFn: someApiCall` where `someApiCall` returns
+  `Promise<void>` silently breaks any UI gated on that query's success. Fix: wrap it to resolve a
+  real value, e.g. `queryFn: async () => { await someApiCall(); return true }`.
+- **A client-side react-query cache with a `staleTime` can silently undo a server-side cache
+  eviction.** When a mutation's `onSuccess` only invalidates its own detail query, a *different*
+  query key reading related data (e.g. the business-facing catalog after an admin changes a data
+  source's policy) keeps serving stale data for up to `staleTime` on in-SPA navigation — a full page
+  reload masks this because it wipes the whole client cache, so a Playwright check that always
+  reloads won't catch it. When a mutation changes something another query key depends on, invalidate
+  that key too in the same `onSuccess` (see `useUpdateCatalogPolicy` in `client/src/hooks/useAdmin.ts`
+  for the pattern: invalidates `['data-source-catalog', id]` and `['data-sources']` alongside its own
+  key).
 
 ## Feature status
 
@@ -137,12 +165,19 @@ default data source, catalog browsing with collapsible tree + search, column tot
 Count/Distinct/Min/Max) with auto-`GROUP BY` and a HAVING filter, saved queries with SQL preview/
 run/export/audit history, single-data-source picker skip, **saved query sharing** (Viewer/Editor
 via an optional per-data-source `dbo.AppUsers` view — durable grant model, `AppUsers` is only the
-picker source, not re-checked live).
+picker source, not re-checked live), **disable a saved query** (owner-only toggle, blocks run/export
+without deleting it), **admin UI — catalog scope/allowlist** (`/admin` in the SPA, gated by a second,
+independent `AdminAuthorization` option that composes with `Authorization` via AND — a request must
+satisfy both; defaults `Anonymous` like the rest of the package): per data source, pick
+views-only/tables-only/both (`DataSource.CatalogScope`) and optionally restrict to specific
+tables/views (`DataSource.AllowedObjects`), replacing raw-SQL edits for this one concern. Spec:
+`docs/superpowers/specs/2026-09-22-admin-catalog-allowlist-design.md`.
 
-**Discussed, not built**: an in-app admin UI for registering additional data sources (currently
-raw SQL insert only — see the package README); multi-table joins (deliberately skipped — the
-user's take: "if there are joins, create a view instead, business users won't write joins");
-roadmap still has manual-SQL mode, saved-query-to-visualization, and dashboards.
+**Discussed, not built**: full data-source registration/editing in the admin UI (name, connection
+string, provider, `AllowedSchemas`) — still raw SQL insert only, see the package README; multi-table
+joins (deliberately skipped — the user's take: "if there are joins, create a view instead, business
+users won't write joins"); roadmap still has manual-SQL mode, saved-query-to-visualization, and
+dashboards.
 
 ## Conventions
 

@@ -186,6 +186,53 @@ BEGIN
     VALUES (N'20260922164327_AddQueryDisabled', N'9.0.9');
 END;
 
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20260922184156_AddCatalogScopeAndAllowedObjects'
+)
+BEGIN
+    ALTER TABLE [DataSources] ADD [CatalogScope] int NOT NULL DEFAULT 0;
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20260922184156_AddCatalogScopeAndAllowedObjects'
+)
+BEGIN
+    UPDATE DataSources SET CatalogScope = CASE WHEN ViewsOnly = 1 THEN 0 ELSE 2 END
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20260922184156_AddCatalogScopeAndAllowedObjects'
+)
+BEGIN
+    DECLARE @var sysname;
+    SELECT @var = [d].[name]
+    FROM [sys].[default_constraints] [d]
+    INNER JOIN [sys].[columns] [c] ON [d].[parent_column_id] = [c].[column_id] AND [d].[parent_object_id] = [c].[object_id]
+    WHERE ([d].[parent_object_id] = OBJECT_ID(N'[DataSources]') AND [c].[name] = N'ViewsOnly');
+    IF @var IS NOT NULL EXEC(N'ALTER TABLE [DataSources] DROP CONSTRAINT [' + @var + '];');
+    ALTER TABLE [DataSources] DROP COLUMN [ViewsOnly];
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20260922184156_AddCatalogScopeAndAllowedObjects'
+)
+BEGIN
+    ALTER TABLE [DataSources] ADD [AllowedObjects] nvarchar(max) NOT NULL DEFAULT N'';
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20260922184156_AddCatalogScopeAndAllowedObjects'
+)
+BEGIN
+    INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
+    VALUES (N'20260922184156_AddCatalogScopeAndAllowedObjects', N'9.0.9');
+END;
+
 COMMIT;
 GO
 
