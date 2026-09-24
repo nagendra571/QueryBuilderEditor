@@ -21,9 +21,19 @@ export class ApiError extends Error {
 
 apiClient.interceptors.response.use(
   (response) => response,
-  (error) => {
-    if (error.response?.data?.title) {
-      return Promise.reject(new ApiError(error.response.data as ApiProblemDetails))
+  async (error) => {
+    let data = error.response?.data
+    // Requests made with responseType 'blob' (export) receive their ProblemDetails error body as a
+    // Blob too — without parsing it, every export failure would surface as a generic message.
+    if (data instanceof Blob && data.type.includes('json')) {
+      try {
+        data = JSON.parse(await data.text())
+      } catch {
+        // not a ProblemDetails body after all — fall through to the raw error
+      }
+    }
+    if (data?.title) {
+      return Promise.reject(new ApiError(data as ApiProblemDetails))
     }
     return Promise.reject(error)
   },

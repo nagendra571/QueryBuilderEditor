@@ -71,7 +71,8 @@ public sealed record QueryResultDto(
     List<Dictionary<string, object?>> Rows,
     int RowCount,
     long ExecutionTimeMs,
-    bool Truncated);
+    bool Truncated,
+    int RowLimit);
 
 public sealed record QueryResultColumnDto(string Name, ColumnDataType DataType);
 

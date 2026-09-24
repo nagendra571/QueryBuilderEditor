@@ -26,6 +26,7 @@ public sealed class ExportQueryCommandHandler(
     IExportService exportService,
     IDataScopeGuard dataScopeGuard,
     ICurrentDataScope currentScope,
+    RecordLimitSettings recordLimitSettings,
     IAuditLogger auditLogger)
     : IRequestHandler<ExportQueryCommand, ExportResult>
 {
@@ -50,9 +51,18 @@ public sealed class ExportQueryCommandHandler(
         var builder = sqlBuilderFactory.GetBuilder(dataSource.Provider);
         var generated = builder.Build(request.Definition, scopePredicates);
 
-        // Exports are allowed a larger cap than the interactive grid preview.
+        // With a record limit, an oversized export is refused rather than cut off: a truncated file
+        // looks complete to whoever opens it. Without one, the legacy silent 100,000 cap applies.
+        var limit = RecordLimits.Effective(dataSource.MaxRecords, recordLimitSettings);
         var result = await executionService.ExecuteAsync(
-            dataSource, generated, request.ParameterValues, maxRows: 100_000, cancellationToken);
+            dataSource, generated, request.ParameterValues, maxRows: limit ?? RecordLimits.LegacyExportRows, cancellationToken);
+
+        if (limit is not null && result.Truncated)
+        {
+            throw new RecordLimitExceededException(
+                $"This query returns more than {limit.Value:N0} records, the limit for this data source. " +
+                "Add filters to narrow it down before exporting.");
+        }
 
         var fileNameSafe = string.IsNullOrWhiteSpace(request.FileName) ? "query-results" : request.FileName;
         var content = await exportService.ExportAsync(result, request.Format, fileNameSafe, cancellationToken);

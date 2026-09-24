@@ -35,5 +35,10 @@ public sealed class DataSource : AuditableEntity
     /// exposed) — same "empty = no restriction" convention as <see cref="AllowedSchemas"/>.</summary>
     public List<string> AllowedObjects { get; set; } = [];
 
+    /// <summary>Most records a query against this data source may return: the grid shows the
+    /// first this-many with a "narrow it down" warning, and exports beyond it are refused. Null =
+    /// fall back to the host's <c>DefaultMaxRecords</c> option (and if that's unset too, no limit).</summary>
+    public int? MaxRecords { get; set; }
+
     public bool IsActive { get; set; } = true;
 }

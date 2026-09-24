@@ -10,9 +10,14 @@ public sealed record AdminDataSourceDetailDto(
     string Name,
     CatalogScope CatalogScope,
     List<string> AllowedObjects,
-    List<SchemaObjectMetadata> Objects);
+    List<SchemaObjectMetadata> Objects,
+    int? MaxRecords,
+    int? DefaultMaxRecords);
 
 public sealed record UpdateCatalogPolicyRequest(CatalogScope CatalogScope, List<string> AllowedObjects);
+
+/// <param name="MaxRecords">Null clears the data source's own limit (falls back to the host default).</param>
+public sealed record UpdateRecordLimitRequest(int? MaxRecords);
 
 public sealed record AdminDataScopeDto(
     bool Enabled,

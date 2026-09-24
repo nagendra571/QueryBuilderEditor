@@ -61,4 +61,11 @@ public sealed class QueryBuilderEditorOptions
     /// <summary>Row-level data scoping (e.g. a Program-admin only sees their ProgramId's rows). Off
     /// unless a resolver is set — see <see cref="DataScopeOptions"/>.</summary>
     public DataScopeOptions DataScope { get; } = new();
+
+    /// <summary>Package-wide default for the most records a query may return (1 to 100,000). Each
+    /// data source can override it in the admin UI. Past the limit the results grid shows only the
+    /// first this-many rows with a "narrow it down" warning, and exports are refused. Left null (and
+    /// with no per-data-source value) there is no limit: the grid is capped at 1,000 rows and exports
+    /// at 100,000, both silently, as before this option existed.</summary>
+    public int? DefaultMaxRecords { get; set; }
 }

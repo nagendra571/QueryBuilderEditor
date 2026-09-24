@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { DataScopeSection } from '@/features/admin/DataScopeSection'
+import { RecordLimitSection } from '@/features/admin/RecordLimitSection'
 import { useAdminDataSourceDetail, useUpdateCatalogPolicy } from '@/hooks/useAdmin'
 import type { CatalogScope } from '@/types'
 
@@ -167,6 +168,8 @@ export function AdminDataSourcePolicyPage() {
           </p>
         )}
       </div>
+
+      <RecordLimitSection key={`${data.id}:${data.maxRecords ?? ''}`} dataSource={data} />
 
       <DataScopeSection dataSourceId={data.id} />
     </div>

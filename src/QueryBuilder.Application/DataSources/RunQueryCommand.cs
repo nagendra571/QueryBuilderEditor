@@ -23,6 +23,7 @@ public sealed class RunQueryCommandHandler(
     IQueryExecutionService executionService,
     IDataScopeGuard dataScopeGuard,
     ICurrentDataScope currentScope,
+    RecordLimitSettings recordLimitSettings,
     IAuditLogger auditLogger)
     : IRequestHandler<RunQueryCommand, QueryResultDto>
 {
@@ -47,7 +48,7 @@ public sealed class RunQueryCommandHandler(
         var builder = sqlBuilderFactory.GetBuilder(dataSource.Provider);
         var generated = builder.Build(request.Definition, scopePredicates);
 
-        var maxRows = request.MaxRows is > 0 and <= 10_000 ? request.MaxRows : 1000;
+        var maxRows = RecordLimits.GridRows(RecordLimits.Effective(dataSource.MaxRecords, recordLimitSettings), request.MaxRows);
 
         var result = await executionService.ExecuteAsync(
             dataSource, generated, request.ParameterValues, maxRows, cancellationToken);
@@ -69,6 +70,7 @@ public sealed class RunQueryCommandHandler(
             result.Rows,
             result.RowCount,
             result.ExecutionTimeMs,
-            result.Truncated);
+            result.Truncated,
+            maxRows);
     }
 }

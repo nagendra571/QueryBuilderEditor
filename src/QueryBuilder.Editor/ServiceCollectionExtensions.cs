@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.DependencyInjection;
 using QueryBuilder.Application;
 using QueryBuilder.Application.Abstractions;
+using QueryBuilder.Application.Common;
 using QueryBuilder.Editor.DataScoping;
 using QueryBuilder.Editor.Diagnostics;
 using QueryBuilder.Editor.Identity;
@@ -41,11 +42,19 @@ public static class ServiceCollectionExtensions
 
         options.DataScope.Validate();
 
+        if (options.DefaultMaxRecords is { } defaultMax && !RecordLimits.IsValid(defaultMax))
+        {
+            throw new InvalidOperationException(
+                $"{nameof(QueryBuilderEditorOptions)}.{nameof(QueryBuilderEditorOptions.DefaultMaxRecords)} must be between " +
+                $"{RecordLimits.Min} and {RecordLimits.Max}, or left unset for no limit.");
+        }
+
         // Registered as the resolved instance (not IOptions<T>) — there is exactly one QueryBuilder
         // configuration per host, set once here at startup.
         services.AddSingleton(options);
         services.AddScoped<ICurrentUserService, CurrentUserService>();
         services.AddScoped<ICurrentDataScope, CurrentDataScopeService>();
+        services.AddSingleton(new RecordLimitSettings(options.DefaultMaxRecords));
 
         services.AddApplication();
         services.AddInfrastructure(options.ConnectionString, options.ApplyMigrations);

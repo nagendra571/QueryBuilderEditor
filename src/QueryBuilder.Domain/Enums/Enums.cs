@@ -110,7 +110,8 @@ public enum AuditAction
     QueryDisabled = 7,
     QueryEnabled = 8,
     DataSourceCatalogPolicyUpdated = 9,
-    DataSourceDataScopeUpdated = 10
+    DataSourceDataScopeUpdated = 10,
+    DataSourceRecordLimitUpdated = 11
 }
 
 /// <summary>An admin's row-level data-scope decision for one catalog object. Not persisted as-is —

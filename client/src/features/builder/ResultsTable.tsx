@@ -15,7 +15,7 @@ import {
   useSortable,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { ArrowDown, ArrowUp, Check, ChevronsUpDown, GripVertical, X as XIcon } from 'lucide-react'
+import { AlertTriangle, ArrowDown, ArrowUp, Check, ChevronsUpDown, GripVertical, X as XIcon } from 'lucide-react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import {
   Table,
@@ -61,8 +61,17 @@ export function ResultsTable({ result }: { result: QueryResultDto }) {
         isDefaultView={view.isDefaultView}
         onReset={view.resetView}
         executionTimeMs={result.executionTimeMs}
-        truncated={result.truncated}
       />
+
+      {result.truncated && (
+        <Alert className="mx-(--space-section) mt-2 w-auto border-warning/40 text-warning">
+          <AlertTriangle className="size-4" />
+          <AlertDescription className="text-warning">
+            This query returns more than {result.rowLimit.toLocaleString()} records. Only the first{' '}
+            {result.rowLimit.toLocaleString()} are shown. Add filters to narrow down the results.
+          </AlertDescription>
+        </Alert>
+      )}
 
       {view.totalFiltered === 0 ? (
         <Alert className="m-(--space-section) w-auto">

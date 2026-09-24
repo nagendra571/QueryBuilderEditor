@@ -19,6 +19,7 @@ const ACTION_META: Record<AuditAction, { icon: ComponentType<{ className?: strin
   queryEnabled: { icon: Power, className: 'text-success' },
   dataSourceCatalogPolicyUpdated: { icon: Pencil, className: 'text-muted-foreground' },
   dataSourceDataScopeUpdated: { icon: Pencil, className: 'text-muted-foreground' },
+  dataSourceRecordLimitUpdated: { icon: Pencil, className: 'text-muted-foreground' },
 }
 
 export function HistoryPanel({ queryId }: { queryId: string }) {

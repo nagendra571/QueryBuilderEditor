@@ -9,7 +9,7 @@ namespace QueryBuilder.Application.Queries.Admin;
 public sealed record GetAdminDataSourceDetailQuery(Guid Id) : IRequest<AdminDataSourceDetailDto>;
 
 public sealed class GetAdminDataSourceDetailQueryHandler(
-    IDataSourceRepository repository, IDataCatalogService catalogService)
+    IDataSourceRepository repository, IDataCatalogService catalogService, RecordLimitSettings recordLimitSettings)
     : IRequestHandler<GetAdminDataSourceDetailQuery, AdminDataSourceDetailDto>
 {
     public async Task<AdminDataSourceDetailDto> Handle(GetAdminDataSourceDetailQuery request, CancellationToken cancellationToken)
@@ -24,6 +24,8 @@ public sealed class GetAdminDataSourceDetailQueryHandler(
             dataSource.Name,
             dataSource.CatalogScope,
             dataSource.AllowedObjects,
-            objects);
+            objects,
+            dataSource.MaxRecords,
+            recordLimitSettings.DefaultMaxRecords);
     }
 }

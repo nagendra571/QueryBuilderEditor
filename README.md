@@ -100,6 +100,10 @@ migrations, API/UI wiring, JSON options, and the authorization pipeline in one p
   column (or mark a view "not scoped"). Enforced server-side in the generated SQL's `WHERE` on every
   path (catalog, run, export, preview, save); undecided views and failing resolvers fail closed.
   See the package README's "Row-level Data Scoping" section
+- Record limits: `options.DefaultMaxRecords` plus a per-data-source "Maximum records per query" in
+  the admin UI. Past the limit the grid shows the first N rows with a warning to add filters, and
+  exports are refused instead of being silently cut off. Unset = unchanged behavior. See the package
+  README's "Record Limits" section
 - Configurable actor identity (`ActorResolver`) and access control (anonymous / authenticated /
   role / custom policy), applied uniformly across every route
 - DBA-friendly database story: auto-migration by default, or an idempotent SQL script for

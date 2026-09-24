@@ -193,6 +193,27 @@ saving. Shared queries always run with the *runner's* scope. The SQL preview sho
 the audit log records the scope for every run and export. With no resolver configured the feature
 is off and nothing changes.
 
+## Record Limits
+
+Stop business users pulling huge result sets by capping how many records a query may return:
+
+```csharp
+options.DefaultMaxRecords = 5000;   // package-wide default, 1 to 100,000
+```
+
+Each data source can override it in the admin UI (**Maximum records per query** on the data
+source's page; leave it empty to fall back to the default). When a query returns more than the limit:
+
+- **Results grid:** shows only the first *N* rows with a warning — *"This query returns more than
+  5,000 records. Only the first 5,000 are shown. Add filters to narrow down the results."*
+- **Export (CSV/Excel):** refused (HTTP 409) with a message asking the user to add filters, rather
+  than producing a file that silently stops at the limit.
+
+Detection costs one extra row (the query fetches *N + 1*), never a separate `COUNT(*)`. With neither
+`DefaultMaxRecords` nor a per-data-source limit set, behavior is unchanged from earlier versions: the
+grid shows up to 1,000 rows (now with the same warning banner when there are more) and exports stop
+at 100,000 rows without an error. Limit changes are recorded in the audit log.
+
 ## Access Control
 
 By default the editor is **open to all users** — no authentication required.
@@ -250,8 +271,11 @@ Every failing check includes a one-line fix. Returns 404 outside Development.
   scope (views/tables/both) and a specific table/view allowlist
 - Row-level data scoping: host-supplied scope keys/values per user (e.g. ProgramId), mapped to view
   columns by an admin; fail-closed for undecided views
+- Record limits: a package-wide default plus a per-data-source maximum; oversized results show the
+  first N rows with a "narrow it down" warning, oversized exports are refused
 - Full audit log (created/updated/deleted/run/exported/shared/unshared/disabled/enabled/catalog
-  policy updated/data scope updated) with a configurable actor identity and access control
+  policy updated/data scope updated/record limit updated) with a configurable actor identity and
+  access control
 
 ## Links
 

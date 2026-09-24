@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { adminApi } from '@/lib/api'
 import { ApiError } from '@/lib/api-client'
-import type { UpdateCatalogPolicyRequest, UpdateDataScopeRequest } from '@/types'
+import type { UpdateCatalogPolicyRequest, UpdateDataScopeRequest, UpdateRecordLimitRequest } from '@/types'
 
 export const adminDataSourcesKey = ['admin-data-sources'] as const
 const adminDataSourceDetailKey = (id: string) => ['admin-data-source', id] as const
@@ -75,5 +75,17 @@ export function useUpdateDataScope(id: string) {
       toast.success('Data scope updated.')
     },
     onError: (error) => toast.error(error instanceof ApiError ? error.message : 'Could not update the data scope.'),
+  })
+}
+
+export function useUpdateRecordLimit(id: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (request: UpdateRecordLimitRequest) => adminApi.updateRecordLimit(id, request),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: adminDataSourceDetailKey(id) })
+      toast.success('Record limit updated.')
+    },
+    onError: (error) => toast.error(error instanceof ApiError ? error.message : 'Could not update the record limit.'),
   })
 }

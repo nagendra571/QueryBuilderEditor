@@ -1,4 +1,4 @@
-import { AlertTriangle, Columns3, RotateCcw, Search } from 'lucide-react'
+import { Columns3, RotateCcw, Search } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -23,7 +23,6 @@ export function ResultsToolbar({
   isDefaultView,
   onReset,
   executionTimeMs,
-  truncated,
 }: {
   search: string
   onSearchChange: (value: string) => void
@@ -33,7 +32,6 @@ export function ResultsToolbar({
   isDefaultView: boolean
   onReset: () => void
   executionTimeMs: number
-  truncated: boolean
 }) {
   const visibleCount = allColumns.length - hiddenColumns.size
 
@@ -90,12 +88,6 @@ export function ResultsToolbar({
 
       <div className="ml-auto flex items-center gap-2 text-xs text-muted-foreground">
         <span>{executionTimeMs}ms</span>
-        {truncated && (
-          <Badge variant="outline" className="gap-1 border-warning/40 text-warning">
-            <AlertTriangle className="size-3" />
-            Capped
-          </Badge>
-        )}
       </div>
     </div>
   )

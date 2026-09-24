@@ -259,7 +259,9 @@ export interface QueryResultDto {
   rows: Record<string, unknown>[]
   rowCount: number
   executionTimeMs: number
+  /** True when the query had more rows than `rowLimit` and only the first `rowLimit` came back. */
   truncated: boolean
+  rowLimit: number
 }
 
 export interface ExportQueryRequest {
@@ -290,6 +292,7 @@ export type AuditAction =
   | 'queryEnabled'
   | 'dataSourceCatalogPolicyUpdated'
   | 'dataSourceDataScopeUpdated'
+  | 'dataSourceRecordLimitUpdated'
 
 export interface AuditLogEntryDto {
   id: string
@@ -320,6 +323,14 @@ export interface AdminDataSourceDetailDto {
   catalogScope: CatalogScope
   allowedObjects: string[]
   objects: SchemaObjectMetadata[]
+  /** This data source's own record limit; null = falls back to `defaultMaxRecords`. */
+  maxRecords: number | null
+  /** The host app's package-wide default; null = no limit when the data source has none either. */
+  defaultMaxRecords: number | null
+}
+
+export interface UpdateRecordLimitRequest {
+  maxRecords: number | null
 }
 
 export interface UpdateCatalogPolicyRequest {
