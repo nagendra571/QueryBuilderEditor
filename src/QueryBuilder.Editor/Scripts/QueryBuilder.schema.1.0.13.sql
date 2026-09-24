@@ -270,6 +270,23 @@ BEGIN
     VALUES (N'20260923015436_AddDataScopeRules', N'9.0.9');
 END;
 
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20260924191229_AddDataSourceMaxRecords'
+)
+BEGIN
+    ALTER TABLE [DataSources] ADD [MaxRecords] int NULL;
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20260924191229_AddDataSourceMaxRecords'
+)
+BEGIN
+    INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
+    VALUES (N'20260924191229_AddDataSourceMaxRecords', N'9.0.9');
+END;
+
 COMMIT;
 GO
 

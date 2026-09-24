@@ -40,7 +40,7 @@
     <PackageId>QueryBuilder.Editor</PackageId>
     <!-- Bump alongside a new EF Core migration, then regenerate Scripts/QueryBuilder.schema.<version>.sql
          (see Scripts/README.md) so DBA-managed deployments have a matching provisioning script. -->
-    <Version>1.0.12</Version>
+    <Version>1.0.13</Version>
     <Authors>Nagendra Chinnam</Authors>
     <Description>Visual, no-SQL-required query builder for business users: browse a catalog of SQL Server views/tables, build queries by dragging columns and setting filters/sorts, preview generated SQL, run and export results, with a full audit trail. Ships as an embeddable ASP.NET Core component with its UI built in — call AddQueryBuilderEditor() then app.UseQueryBuilderEditorUI() + app.MapQueryBuilderEditor().</Description>
     <PackageTags>query-builder;sql;low-code;reporting;data-analytics;aspnetcore</PackageTags>

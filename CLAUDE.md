@@ -5,9 +5,9 @@ NuGet package (`QueryBuilder.Editor`) with a React/TS/Tailwind/shadcn frontend b
 into the assembly. Sibling product to `TemplateBuilder.Editor` — mirrors its architecture and
 integration ergonomics (single-call registration, embedded SPA, DBA-friendly migrations).
 
-- NuGet: https://www.nuget.org/packages/QueryBuilder.Editor — published version **1.0.12** (adds
-  row-level data scoping, below), pushed to NuGet and committed/pushed to GitHub. The next release
-  is 1.0.13 — bump only when asked.
+- NuGet: https://www.nuget.org/packages/QueryBuilder.Editor — published version **1.0.13** (adds
+  record limits, below), pushed to NuGet and committed/pushed to GitHub. The next release is
+  1.0.14 — bump only when asked.
 - GitHub: https://github.com/nagendra571/QueryBuilderEditor
 - Hosted test deployment (user's own, real usage/bug reports come from here):
   http://templatebuilder.runasp.net/querybuilder
@@ -178,6 +178,13 @@ version was hit once already).
 - **A C# `params object[]` + generic `IEnumerable<T>` overload pair binds a single `string` to the
   generic one** (string is `IEnumerable<char>`) — `DataScope.And("key", "14")` split into `"1"`,`"4"`.
   `DataScope` now has only the `params` overload and flattens collections (excluding strings) itself.
+- **Requests made with axios `responseType: 'blob'` (export) receive their error body as a Blob
+  too**, so `error.response.data.title` is undefined and every failure surfaced as a generic "Export
+  failed." — the interceptor in `client/src/lib/api-client.ts` now parses JSON Blobs into
+  `ApiError`. Keep that if adding any other binary-download endpoint.
+- **Bodies are read with `ReadFromJsonAsync`, not minimal-API binding**, so a malformed or
+  wrongly-typed body throws `JsonException` inside the handler — `GlobalExceptionHandler` maps that
+  (and `BadHttpRequestException`) to 400. Before 1.0.13 both were unmapped 500s.
 
 ## Feature status
 
@@ -207,6 +214,15 @@ denied (never unrestricted); stale key or missing column hides the view. Enforce
 preview/save; shared queries run with the runner's scope; scope recorded in run/export audit
 details. No resolver = feature off. Also fixed the runtime-parameter-name SQL injection. Spec:
 `docs/superpowers/specs/2026-09-22-data-scoping-design.md`.
+
+**Shipped in 1.0.13**: **record limits** — `options.DefaultMaxRecords`
+(1–100,000) plus a per-data-source `DataSource.MaxRecords` set in the admin UI ("Maximum records per
+query"); resolution in `Application/Common/RecordLimits.cs` (data source → host default → none).
+With a limit, `RunQueryCommand` caps the grid at it (ignoring the browser's `maxRows`) and returns
+`rowLimit` + `truncated` (N+1 fetch, no COUNT), shown as a warning banner in `ResultsTable.tsx`;
+`ExportQueryCommand` throws `RecordLimitExceededException` (409) instead of writing a cut-off file.
+With neither set, the legacy 1,000 grid / 100,000 silent export caps apply unchanged, so upgrading
+never starts refusing exports by itself. Designed bounded, in chat (no spec file).
 
 **Discussed, not built**: full data-source registration/editing in the admin UI (name, connection
 string, provider, `AllowedSchemas`) — still raw SQL insert only, see the package README; multi-table
