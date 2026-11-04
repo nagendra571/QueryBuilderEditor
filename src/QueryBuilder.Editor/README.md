@@ -193,6 +193,38 @@ saving. Shared queries always run with the *runner's* scope. The SQL preview sho
 the audit log records the scope for every run and export. With no resolver configured the feature
 is off and nothing changes.
 
+## Query Parameters
+
+Any filter can be turned into a parameter with the sparkle button ("Ask the user at run time"). Its
+settings (gear icon) choose how it is asked, limited by the filter's column and condition:
+
+| Type | Filter it fits |
+|---|---|
+| Text, Number, Date, Date and time, True/false | a normal comparison on a matching column |
+| Dropdown list (fixed options) | a comparison, or *is any of* / *is none of* |
+| Dropdown from a query | same, with choices from another saved query |
+| Date range / Date-and-time range | *between* on a date or date-time column |
+
+- **Parameter bar:** parameters appear above the results with an **Apply** button; nothing runs until
+  Apply. Required parameters without a value disable Apply. Editors can **Save as defaults** (then Save).
+- **Several values:** a list parameter on an *is any of* / *is none of* filter can allow multi-select.
+- **Relative dates:** Today, Yesterday, This/Last week/month/year, Last 7/14/30/60/90 days and
+  Last 12 months are stored as tokens and worked out **on the server** when the query runs (server
+  local date, weeks start Monday, ranges include both ends).
+- **Links:** the bar's values are mirrored in the address as `p_<name>=...` (several values repeat the
+  key, ranges are `start~end`, relative dates are tokens); opening such a link pre-fills the bar.
+- **Safe by construction:** every value is validated on the server (type, list membership, at most
+  1,000 values, unknown names rejected, one error listing every invalid parameter) and then sent to
+  the database as a bound SQL parameter, never as SQL text. Row-level data scope and record limits
+  apply on every path (run, export, SQL preview, charts, dashboard tiles).
+- **Query-based dropdowns:** `GET .../api/queries/{id}/parameters/{name}/options` runs the source
+  query live as the caller (up to 1,000 distinct choices). The caller must be able to view the
+  source query (otherwise 403), the source must not be disabled, and the caller's row-level scope and
+  record limits apply, so a dropdown never shows values outside the caller's data. Columns named
+  `name`/`value` supply label/value, otherwise the first column; both can be chosen in the settings.
+- Queries saved before parameter types existed keep working unchanged. A filter left without a value
+  on an optional (not required) parameter is simply not applied.
+
 ## Record Limits
 
 Stop business users pulling huge result sets by capping how many records a query may return:
@@ -213,6 +245,167 @@ Detection costs one extra row (the query fetches *N + 1*), never a separate `COU
 `DefaultMaxRecords` nor a per-data-source limit set, behavior is unchanged from earlier versions: the
 grid shows up to 1,000 rows (now with the same warning banner when there are more) and exports stop
 at 100,000 rows without an error. Limit changes are recorded in the audit log.
+
+## Visualizations
+
+Turn a saved query's results into charts. Open a saved query, click **Add chart** next to the
+tabs, choose a type, and map the query's output columns:
+
+| Type | Needs |
+|---|---|
+| **Bar** (grouped, stacked or 100% stacked) | one category column + 1-5 number columns, or one number column split by a series column |
+| **Horizontal bar** | same as Bar; better for long names and rankings |
+| **Combo** | one category column + 2-5 number columns, each drawn as a bar or a line, on one shared axis |
+| **Waterfall** | one category column + one signed number column, at most 30 bars, with an automatic final total |
+| **Line** | one X column (date, number or text) + 1-5 number columns, or one number column split by a series column |
+| **Area** (optionally stacked or 100% stacked) | same as Line |
+| **Trend** | one date or number X column + one number column; the latest value, its change from the previous one, and a sparkline |
+| **Pie** | one category column + one number column, at most 12 slices, no negative values |
+| **Funnel** | one step column + one number column, at most 20 steps, no negative values; a table with in-cell bars, % of first and % of previous, in query order by default |
+| **Scatter / bubble** | a number or date X column + a number Y column; optional size (not negative), label and series columns |
+| **Table** | 1-30 columns in your order; paged 25 per page |
+| **Pivot** | 1-3 row columns, an optional column column (at most 50 distinct values), 1-5 number columns; optional totals and cell shading (a heatmap) |
+| **Counter** | one number column, shows the first row as a large figure; an optional target column adds "82% of target" and a thin bar |
+
+Every type offers a number format from a list: number, compact, currency (a three-letter code such as
+`USD`) or percent, with 0-4 decimals. Percent shows the value as stored: 42 reads `42%`.
+
+**Pivot totals are never made up.** Pivot works on your query's rows, which may already be totals, so the
+column's aggregate decides what is combined. Sum, Count and plain numbers add; Min and Max keep the
+smallest or largest; Average and Count Distinct can't be combined, so several rows in one cell and every
+total show "—" with a footnote.
+
+Table, Pivot and Funnel cells are always plain text. There's no option to show data as HTML, images or
+links, because data from a business table would then run or load in other users' browsers.
+
+Each chart appears as its own tab beside **Results**. Charts belong to one saved query and are
+listed for anyone who can open it:
+
+- **Who can change them:** the owner and Editor shares can add, edit and delete charts; Viewer
+  shares can only look (the server refuses the calls, not just the UI). At most 20 charts per query.
+- **How they are drawn:** a chart stores no data. When opened, the server loads the *saved* query
+  and runs it through the same catalog validation and row-level data scope as a normal run, using
+  the **viewer's** scope, never the owner's. Only the columns the chart uses are sent to the
+  browser. Results are not cached between users. Disabling the query, or revoking a share, takes
+  effect on the next render.
+- **Row limits:** a chart never draws a partial result. If the query returns more rows than the
+  effective record limit (see Record Limits), or more than 1,000 points, the chart is refused
+  (HTTP 409) with a message asking the user to add filters or totals. **Table is the one exception:**
+  it shows the first rows with the same banner as the results grid, since a list with a clear banner
+  can't mislead the way a partial chart can.
+- **Same X value:** when rows share an X value and no series is set, a footnote says so and suggests
+  a Split by column or a total.
+- **After the query changes:** a chart whose column was removed, renamed (alias) or hidden shows
+  "This chart needs updating" instead of a partial chart; owners and Editors can fix it with
+  **Edit chart**. Charts are never deleted by editing a query; deleting the query deletes its charts.
+- **Parameters:** on the query page a chart is drawn with the values applied in the parameter bar
+  (or the query's defaults); when a required parameter has no default it waits for you to Apply.
+- **Missing values:** a blank category is labelled "(blank)", and a missing number is left as a
+  gap, never drawn as zero.
+- **Accessibility:** every drawn chart has a text summary for screen readers and a **Show data**
+  toggle that lists the plotted values as a table; Table, Pivot and Funnel are real tables; series are
+  told apart by legend text and tooltips, not colour alone; animation is off under
+  `prefers-reduced-motion`.
+
+Adding the feature creates one new table, `QueryVisualizations` (migration `AddQueryVisualizations`),
+applied by auto-migration or by the idempotent script. The types beyond Bar, Line, Pie and Counter need no
+further migration, and charts saved earlier keep working unchanged. Chart create/update/delete are recorded in the
+audit log, and each render is recorded as a query run with the chart's id and the viewer's scope.
+
+## Dashboards
+
+A dashboard is a page of **tiles**: charts from saved queries (see Visualizations) and plain-text
+notes. Open **Dashboards** in the sidebar, choose **New dashboard**, then **Add chart** (pick from
+every chart on queries you own or that were shared with you) or **Add text**. **Add section** inserts a section heading: a title (up to 80 characters) with an optional
+one-line description (up to 160), drawn as bare text with a rule across the page rather than as a card; it is always
+full width and one row high, and counts toward the 30-tile limit. Tiles sit on a 12-column
+grid. In edit mode, drag a tile from anywhere on it and resize it from its bottom-right corner; the
+other tiles move out of the way and gaps close up automatically. Without a mouse, each tile's
+**Layout** menu moves it (left, right, up, down), makes it wider/narrower/taller/shorter, applies size
+presets, or removes it, and every change is announced to screen readers. **Fit height to content**
+lets a note or chart size its own height (resizing its height by hand turns that off). **Save** stores
+the layout; **Cancel** discards your changes. On screens narrower than 768px the dashboard shows as a
+single column and layout editing is off. At most 30 tiles; a note is plain text of up to 2,000
+characters (never HTML or markdown). The server checks every position (width 2–12 columns, height
+2–24 rows, inside the grid) and closes any gaps, so a malformed request cannot corrupt a layout;
+dashboards saved before this version are converted on first open (migration
+`AddDashboardGridPositions`). Grid library: `react-grid-layout` (MIT).
+
+- **Sharing never grants data access.** Share a dashboard from its page (owner only) as Viewer or
+  Editor, using the same `AppUsers` picker as query sharing. A dashboard stores only references to
+  charts. Every chart tile is drawn through the normal chart endpoint, which re-checks the viewer's
+  access to the query, whether it is disabled, the catalog policy, their row-level scope and the
+  record limits on each render. The dashboard endpoints never return data rows.
+- **Restricted tiles.** If a viewer cannot open a chart's query, the tile is returned as
+  *restricted*: only its position and size are sent, with no chart name, query name or ids.
+- **Add to dashboard from the query page.** Each chart on a saved query has **Add to dashboard**: pick
+  any dashboard you can edit (or create one in the same dialog) and the chart is appended as a new
+  tile (`POST /api/dashboards/{id}/tiles/chart`). The server requires edit rights on the dashboard and
+  view rights on the chart's query, and applies the 30-tile limit.
+- **Your zone is always visible.** When row-level data scoping is configured, the sidebar names the
+  signed-in user and their scope (e.g. "ZONE · ProgramId 10"), and each chart tile carries a small
+  "Your zone" key, so a viewer can tell the chart is drawn from their rows only. Restricted tiles are
+  drawn with a diagonal hatch. The shell reads this from `GET /api/me`, which only ever describes the
+  caller.
+- **Also share the queries.** When you share a dashboard, the dialog lists the charts that person
+  cannot see and offers (unchecked by default) **Also share these N queries as Viewer**. Only queries
+  you own, and that are used on the dashboard, can be shared this way; an existing Editor share is
+  never downgraded.
+- **Who can do what.** Owner: everything, including delete and sharing. Editor: rename and change
+  tiles (adding a chart needs access to that chart's query; charts an Editor cannot see are kept as
+  they are and can only be moved, resized or removed). Viewer: look only. The server enforces this.
+- **Concurrent edits.** Saving or renaming sends the dashboard's version; if someone else changed it
+  first the server answers 409 and the page offers **Reload** instead of overwriting their work.
+- **Refresh.** **Refresh all** re-runs every chart; auto-refresh can be Off, 1, 5, 15 or 30 minutes
+  (never faster than a minute) and pauses while the browser tab is hidden. At most 4 charts load at
+  once. A chart whose query needs a required value that no source supplies asks for it per tile (kept
+  in the browser only); see "Dashboard parameters" below.
+- **Deleted charts.** Deleting a chart (or its query) leaves the tile in place showing "This chart
+  was removed"; deleting a dashboard removes its tiles and shares.
+
+### Dashboard parameters
+
+Charts whose queries have run-time parameters (see "Query Parameters") can be driven from the
+dashboard. In **Edit** mode, open a chart tile's menu and choose **Parameters...**; for each
+parameter of that chart's query pick where its value comes from:
+
+| Source | Behaviour |
+|---|---|
+| Query default | The query's own default (today's behaviour; nothing stored). |
+| Dashboard parameter | An existing compatible dashboard parameter, or **New dashboard parameter** (copies the query parameter's type, choices and default). One dashboard parameter can feed charts from different queries. |
+| Tile input | A small labelled control with its own Apply in the chart's header. |
+| Fixed value | A value you set; viewers see no control for it. |
+
+Dashboard parameters appear as a bar above the tiles (same controls as a query's parameter bar). Edits
+apply only on **Apply**, which redraws every chart that uses them and mirrors the values in the
+address as `?p_<name>=...` (several values repeat the key, ranges are `start~end`, relative dates are
+tokens such as `last_30_days`), so a link opens the dashboard with those values. In Edit mode the gear
+beside a dashboard parameter renames it, sets the value viewers start from, or removes it. A dashboard
+can have up to 20 parameters; names are letters, digits and underscore.
+
+Compatibility: text, number, date/date-time, date range, dropdown (fixed or query-based) and true/false
+parameters connect only to query parameters of the same kind; a multi-select dashboard parameter only
+feeds a query parameter that allows several values. The server checks this on save, and checks that
+every mapped query parameter exists and that fixed values pass the same validation as a run.
+
+Security: nothing about a mapping weakens access. Every chart is still drawn by the render endpoint
+as the viewer, and each value (from the bar, a link, a tile control or a fixed mapping) is validated
+and bound as a SQL parameter exactly like a run, with the viewer's row-level scope and record limits
+applied. A tile whose query the viewer cannot see keeps its stored mappings but returns none of them.
+Dashboards saved before this version have no dashboard parameters and every chart uses its query
+defaults, with the per-tile **Set values** prompt still available for required values with no source.
+
+Stored as JSON: `Dashboards.ParametersJson` is
+`[{ "name", "title", "type", "options", "optionsQueryId", "optionsLabelColumn", "optionsValueColumn", "allowMultiple", "value" }]`
+and `DashboardTiles.ParameterMappingsJson` is
+`{ "<queryParam>": { "source": "dashboard|tile|fixed", "dashboardParameter", "value", "title" } }`.
+The save request (`PUT /api/dashboards/{id}/tiles`) carries `parameters` and a per-tile
+`parameterMappings`; leaving either out keeps what is stored, an empty list/object clears it.
+
+Adding the feature creates three tables, `Dashboards`, `DashboardTiles` and `DashboardShares`
+(migration `AddDashboards`), applied by auto-migration or by the idempotent script. Dashboard
+parameters add two nullable `nvarchar(max)` columns (migration `AddDashboardParameters`). Dashboard
+create/update/delete/share/unshare are recorded in the audit log.
 
 ## Access Control
 
@@ -243,7 +436,7 @@ manual migration steps required.
 If your SQL login has no DDL rights (a DBA-managed database), set `options.ApplyMigrations = false`
 and have your DBA run the idempotent script shipped at `scripts/QueryBuilder.schema.<version>.sql`
 in this package instead. It's safe to run against a fresh database or re-run against an
-already-migrated one.
+already-migrated one. With `sqlcmd`, pass `-I` (the script's filtered indexes need `QUOTED_IDENTIFIER`).
 
 ## Setup Diagnostics
 
@@ -258,7 +451,8 @@ Every failing check includes a one-line fix. Returns 404 outside Development.
 - Column totals (Sum, Average, Count, Distinct count, Min, Max) with automatic grouping and a
   totals-only filter (HAVING) — no separate "Group By" step
 - Visual filter builder with type-aware inputs (date picker, checkbox, number, text) and
-  run-time-prompted parameters
+  typed run-time parameters (text, number, date, date range with relative dates, dropdowns from a
+  list or another query, multi-select) in a parameter bar with Apply
 - Read-only generated SQL preview
 - Run queries and browse results with client-side pagination, search, column show/hide, reorder,
   and sort
@@ -273,8 +467,14 @@ Every failing check includes a one-line fix. Returns 404 outside Development.
   columns by an admin; fail-closed for undecided views
 - Record limits: a package-wide default plus a per-data-source maximum; oversized results show the
   first N rows with a "narrow it down" warning, oversized exports are refused
+- Saved visualizations: Bar, Horizontal bar, Combo, Waterfall, Line, Area, Trend, Pie, Funnel,
+  Scatter/bubble, Table, Pivot and Counter per saved query, with number formats, drawn with the
+  viewer's own data scope; charts over too many rows are refused instead of drawn partially (Table
+  shows the first rows with a banner)
+- Dashboards: charts from several saved queries plus text notes on one page, shared with named
+  users; each viewer sees only the charts their own query access and data scope allow
 - Full audit log (created/updated/deleted/run/exported/shared/unshared/disabled/enabled/catalog
-  policy updated/data scope updated/record limit updated) with a configurable actor identity and
+  policy updated/data scope updated/record limit updated/chart created/updated/deleted) with a configurable actor identity and
   access control
 
 ## Links

@@ -37,4 +37,12 @@ builder.Services.AddQueryBuilderEditor(options =>
 ```
 
 Have your DBA run the current `QueryBuilder.schema.<version>.sql` against the target database
-(via SSMS, sqlcmd, or your normal change-control process) before the app first starts.
+(via SSMS, sqlcmd, or your normal change-control process) before the app first starts, and again after
+each upgrade.
+
+With `sqlcmd`, **pass `-I`**. It turns on `QUOTED_IDENTIFIER`, which the script's filtered indexes need;
+without it the script fails with a "SET options have incorrect settings" error. SSMS has this on by default.
+
+```bash
+sqlcmd -S <server> -d <database> -I -b -i QueryBuilder.schema.<version>.sql
+```

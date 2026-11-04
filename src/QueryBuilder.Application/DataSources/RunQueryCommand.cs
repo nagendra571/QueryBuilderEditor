@@ -2,6 +2,7 @@ using QueryBuilder.Application.Abstractions;
 using QueryBuilder.Application.Common;
 using QueryBuilder.Application.Dtos;
 using QueryBuilder.Application.Exceptions;
+using QueryBuilder.Application.Parameters;
 using QueryBuilder.Domain.Entities;
 using QueryBuilder.Domain.Enums;
 using QueryBuilder.Domain.Model;
@@ -24,9 +25,13 @@ public sealed class RunQueryCommandHandler(
     IDataScopeGuard dataScopeGuard,
     ICurrentDataScope currentScope,
     RecordLimitSettings recordLimitSettings,
-    IAuditLogger auditLogger)
+    IAuditLogger auditLogger,
+    IParameterBinder parameterBinder)
     : IRequestHandler<RunQueryCommand, QueryResultDto>
 {
+    // Every parameter value was bound into the definition by the binder; nothing is left to supply at execution.
+    private static readonly Dictionary<string, string?> NoRuntimeValues = [];
+
     public async Task<QueryResultDto> Handle(RunQueryCommand request, CancellationToken cancellationToken)
     {
         var dataSource = await dataSourceRepository.GetByIdAsync(request.DataSourceId, cancellationToken)
@@ -43,15 +48,16 @@ public sealed class RunQueryCommandHandler(
         }
 
         await catalogService.ValidateAsync(request.DataSourceId, request.Definition, cancellationToken);
-        var scopePredicates = await dataScopeGuard.AuthorizeAsync(request.DataSourceId, request.Definition, cancellationToken);
+        var definition = await parameterBinder.MaterializeAsync(request.Definition, request.ParameterValues, cancellationToken);
+        var scopePredicates = await dataScopeGuard.AuthorizeAsync(request.DataSourceId, definition, cancellationToken);
 
         var builder = sqlBuilderFactory.GetBuilder(dataSource.Provider);
-        var generated = builder.Build(request.Definition, scopePredicates);
+        var generated = builder.Build(definition, scopePredicates);
 
         var maxRows = RecordLimits.GridRows(RecordLimits.Effective(dataSource.MaxRecords, recordLimitSettings), request.MaxRows);
 
         var result = await executionService.ExecuteAsync(
-            dataSource, generated, request.ParameterValues, maxRows, cancellationToken);
+            dataSource, generated, NoRuntimeValues, maxRows, cancellationToken);
 
         var entityName = $"{request.Definition.Source.SchemaName}.{request.Definition.Source.ObjectName}";
         await auditLogger.LogAsync(

@@ -111,7 +111,22 @@ public enum AuditAction
     QueryEnabled = 8,
     DataSourceCatalogPolicyUpdated = 9,
     DataSourceDataScopeUpdated = 10,
-    DataSourceRecordLimitUpdated = 11
+    DataSourceRecordLimitUpdated = 11,
+    VisualizationCreated = 12,
+    VisualizationUpdated = 13,
+    VisualizationDeleted = 14,
+    DashboardCreated = 15,
+    DashboardUpdated = 16,
+    DashboardDeleted = 17,
+    DashboardShared = 18,
+    DashboardUnshared = 19
+}
+
+public enum DashboardTileKind
+{
+    Chart = 0,
+    Text = 1,
+    Section = 2
 }
 
 /// <summary>An admin's row-level data-scope decision for one catalog object. Not persisted as-is —
@@ -121,4 +136,62 @@ public enum DataScopeState
     Undecided = 0,
     NotScoped = 1,
     Scoped = 2
+}
+
+public enum VisualizationType
+{
+    Bar = 0,
+    Line = 1,
+    Pie = 2,
+    Counter = 3,
+    Area = 4,
+    HorizontalBar = 5,
+    Combo = 6,
+    Scatter = 7,
+    Table = 8,
+    Pivot = 9,
+    Funnel = 10,
+    Waterfall = 11,
+    Trend = 12
+}
+
+public enum ValueFormatStyle
+{
+    Number = 0,
+    Compact = 1,
+    Currency = 2,
+    Percent = 3
+}
+
+public enum VisualizationSort
+{
+    None = 0,
+    Asc = 1,
+    Desc = 2
+}
+
+public enum ParameterType
+{
+    Text = 0,
+    Number = 1,
+    Date = 2,
+    DateTime = 3,
+    DateRange = 4,
+    DateTimeRange = 5,
+    List = 6,
+    QueryList = 7,
+    Boolean = 8
+}
+
+/// <summary>Where a dashboard tile gets the value of one of its query's parameters.</summary>
+public enum ParameterMappingSource
+{
+    /// <summary>The query's own default (or nothing, for an optional parameter).</summary>
+    Default = 0,
+    /// <summary>A dashboard-wide parameter, shared with other tiles.</summary>
+    Dashboard = 1,
+    /// <summary>A small control in this tile's header.</summary>
+    Tile = 2,
+    /// <summary>A value the editor set; viewers see no control.</summary>
+    Fixed = 3
 }

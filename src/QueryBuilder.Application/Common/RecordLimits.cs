@@ -18,12 +18,19 @@ public static class RecordLimits
     public const int LegacyGridMaxRows = 10_000;
     public const int LegacyExportRows = 100_000;
 
+    /// <summary>Hard ceiling on points a chart will draw, whatever the record limit says.</summary>
+    public const int ChartMaxRows = 1_000;
+
     public static int? Effective(int? dataSourceMaxRecords, RecordLimitSettings settings) =>
         dataSourceMaxRecords ?? settings.DefaultMaxRecords;
 
     /// <summary>With a limit set the browser's requested row count is ignored — the limit is the cap.</summary>
     public static int GridRows(int? effectiveLimit, int? requestedRows) =>
         effectiveLimit ?? (requestedRows is > 0 and <= LegacyGridMaxRows ? requestedRows.Value : LegacyGridDefaultRows);
+
+    /// <summary>A chart is never given more rows than <see cref="ChartMaxRows"/>; a lower record limit wins.</summary>
+    public static int ChartRows(int? effectiveLimit) =>
+        effectiveLimit is { } limit && limit < ChartMaxRows ? limit : ChartMaxRows;
 
     public static bool IsValid(int value) => value is >= Min and <= Max;
 }

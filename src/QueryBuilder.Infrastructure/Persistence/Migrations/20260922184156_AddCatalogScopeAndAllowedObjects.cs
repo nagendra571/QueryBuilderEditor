@@ -17,7 +17,9 @@ namespace QueryBuilder.Infrastructure.Persistence.Migrations
                 nullable: false,
                 defaultValue: 0);
 
-            migrationBuilder.Sql("UPDATE DataSources SET CatalogScope = CASE WHEN ViewsOnly = 1 THEN 0 ELSE 2 END");
+            // EXEC defers compilation: in the idempotent DBA script this batch is compiled even when the
+            // migration is skipped, and on an upgraded database ViewsOnly no longer exists.
+            migrationBuilder.Sql("EXEC(N'UPDATE DataSources SET CatalogScope = CASE WHEN ViewsOnly = 1 THEN 0 ELSE 2 END')");
 
             migrationBuilder.DropColumn(
                 name: "ViewsOnly",

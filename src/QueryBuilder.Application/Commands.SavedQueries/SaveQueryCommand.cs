@@ -2,6 +2,8 @@ using FluentValidation;
 using QueryBuilder.Application.Abstractions;
 using QueryBuilder.Application.Common;
 using QueryBuilder.Application.Exceptions;
+using QueryBuilder.Application.Parameters;
+using QueryBuilder.Application.Visualizations;
 using QueryBuilder.Domain.Entities;
 using QueryBuilder.Domain.Enums;
 using QueryBuilder.Domain.Model;
@@ -40,6 +42,7 @@ public sealed class SaveQueryCommandHandler(
     {
         await catalogService.ValidateAsync(request.DataSourceId, request.Definition, cancellationToken);
         await dataScopeGuard.AuthorizeAsync(request.DataSourceId, request.Definition, cancellationToken);
+        await ValidateParametersAsync(request, cancellationToken);
 
         var definitionJson = QueryDefinitionSerializer.Serialize(request.Definition);
 
@@ -93,5 +96,27 @@ public sealed class SaveQueryCommandHandler(
             cancellationToken);
 
         return savedQuery.Id;
+    }
+
+    private async Task ValidateParametersAsync(SaveQueryCommand request, CancellationToken cancellationToken)
+    {
+        var errors = ParameterValidator.Validate(request.Definition).ToList();
+
+        // A saver can only point a parameter at a query they may view themselves; otherwise saving would
+        // be a way to name (and later read through) queries that were never shared with them.
+        foreach (var parameter in request.Definition.Parameters.Where(p => ParameterTypes.Effective(p) == ParameterType.QueryList && p.OptionsQueryId is { } id && id != Guid.Empty))
+        {
+            var sourceId = parameter.OptionsQueryId!.Value;
+            var source = sourceId == request.Id ? null : await repository.GetByIdAsync(sourceId, cancellationToken);
+            if (source is null || !SavedQueryAccess.CanView(source, currentUser.UserId))
+            {
+                errors.Add($"{ParameterTypes.Title(parameter)}: the source query is not available to you.");
+            }
+        }
+
+        if (errors.Count > 0)
+        {
+            throw new CatalogValidationException(string.Join(" ", errors));
+        }
     }
 }

@@ -41,6 +41,8 @@ public static class DependencyInjection
         services.AddScoped<ISavedQueryRepository, SavedQueryRepository>();
         services.AddScoped<IDataSourceRepository, DataSourceRepository>();
         services.AddScoped<IDataScopeRuleRepository, DataScopeRuleRepository>();
+        services.AddScoped<IVisualizationRepository, VisualizationRepository>();
+        services.AddScoped<IDashboardRepository, DashboardRepository>();
 
         services.AddScoped<IAuditLogger, AuditLogger>();
         services.AddScoped<IAuditLogRepository, AuditLogRepository>();

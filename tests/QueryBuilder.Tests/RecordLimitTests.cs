@@ -54,7 +54,8 @@ public class RecordLimitTests
         var execution = new FakeExecution(truncated: true);
         var handler = new RunQueryCommandHandler(
             new FakeDataSources(maxRecords: 5), null!, new NoopCatalog(), new FakeBuilders(), execution,
-            new NoScopeGuard(), new UnrestrictedScope(), new RecordLimitSettings(null), new NoopAudit());
+            new NoScopeGuard(), new UnrestrictedScope(), new RecordLimitSettings(null), new NoopAudit(),
+            new QueryBuilder.Application.Parameters.ParameterBinder(null!, TimeProvider.System));
 
         var result = await handler.Handle(new RunQueryCommand(TestData.DataSourceId, TestData.Definition(), [], 1000, null), default);
 
@@ -100,7 +101,8 @@ public class RecordLimitTests
 
     private static ExportQueryCommandHandler ExportHandler(FakeDataSources dataSources, FakeExecution execution, int? hostDefault) =>
         new(dataSources, null!, new NoopCatalog(), new FakeBuilders(), execution, new NoopExport(),
-            new NoScopeGuard(), new UnrestrictedScope(), new RecordLimitSettings(hostDefault), new NoopAudit());
+            new NoScopeGuard(), new UnrestrictedScope(), new RecordLimitSettings(hostDefault), new NoopAudit(),
+            new QueryBuilder.Application.Parameters.ParameterBinder(null!, TimeProvider.System));
 
     private sealed class FakeDataSources(int? maxRecords) : IDataSourceRepository
     {

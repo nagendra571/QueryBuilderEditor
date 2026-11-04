@@ -105,7 +105,7 @@ export function AdminDataSourcePolicyPage() {
           <ArrowLeft className="size-4" />
         </Button>
         <div>
-          <h1 className="text-xl font-semibold tracking-tight">{data.name}</h1>
+          <h1 className="text-[1.75rem] leading-tight font-bold tracking-tight">{data.name}</h1>
           <p className="text-sm text-muted-foreground">Control which tables and views this data source exposes to the catalog.</p>
         </div>
       </div>

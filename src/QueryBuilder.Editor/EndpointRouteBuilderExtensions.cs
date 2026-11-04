@@ -27,6 +27,10 @@ public static class EndpointRouteBuilderExtensions
 
         group.MapDataSourceEndpoints();
         group.MapSavedQueryEndpoints();
+        group.MapParameterEndpoints();
+        group.MapVisualizationEndpoints();
+        group.MapDashboardEndpoints();
+        group.MapMeEndpoints();
         group.MapAuditEndpoints();
 
         var adminGroup = group.MapAdminEndpoints();

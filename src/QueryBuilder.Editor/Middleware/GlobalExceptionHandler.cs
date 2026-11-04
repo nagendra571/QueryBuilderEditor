@@ -45,6 +45,7 @@ public sealed class GlobalExceptionHandler(ILogger<GlobalExceptionHandler> logge
         CatalogValidationException => (StatusCodes.Status400BadRequest, "Invalid query definition", null),
         QueryExecutionException => (StatusCodes.Status400BadRequest, "Query failed", null),
         QueryDisabledException => (StatusCodes.Status409Conflict, "Query disabled", null),
+        ConcurrencyConflictException => (StatusCodes.Status409Conflict, "Conflict", null),
         RecordLimitExceededException => (StatusCodes.Status409Conflict, "Too many records", null),
         // Endpoints read bodies explicitly via ReadFromJsonAsync, so a malformed or wrongly-typed body
         // (e.g. 1.5 for an int) surfaces here rather than through minimal-API binding's own 400.

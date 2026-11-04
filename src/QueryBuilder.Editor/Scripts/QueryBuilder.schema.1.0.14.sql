@@ -199,7 +199,7 @@ IF NOT EXISTS (
     WHERE [MigrationId] = N'20260922184156_AddCatalogScopeAndAllowedObjects'
 )
 BEGIN
-    UPDATE DataSources SET CatalogScope = CASE WHEN ViewsOnly = 1 THEN 0 ELSE 2 END
+    EXEC(N'UPDATE DataSources SET CatalogScope = CASE WHEN ViewsOnly = 1 THEN 0 ELSE 2 END')
 END;
 
 IF NOT EXISTS (
@@ -285,6 +285,216 @@ IF NOT EXISTS (
 BEGIN
     INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
     VALUES (N'20260924191229_AddDataSourceMaxRecords', N'9.0.9');
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261103040624_AddQueryVisualizations'
+)
+BEGIN
+    CREATE TABLE [QueryVisualizations] (
+        [Id] uniqueidentifier NOT NULL,
+        [SavedQueryId] uniqueidentifier NOT NULL,
+        [Name] nvarchar(200) NOT NULL,
+        [Type] nvarchar(20) NOT NULL,
+        [OptionsJson] nvarchar(max) NOT NULL,
+        [DisplayOrder] int NOT NULL,
+        [CreatedBy] nvarchar(450) NOT NULL,
+        [CreatedAtUtc] datetimeoffset NOT NULL,
+        [UpdatedBy] nvarchar(450) NULL,
+        [UpdatedAtUtc] datetimeoffset NULL,
+        CONSTRAINT [PK_QueryVisualizations] PRIMARY KEY ([Id]),
+        CONSTRAINT [FK_QueryVisualizations_SavedQueries_SavedQueryId] FOREIGN KEY ([SavedQueryId]) REFERENCES [SavedQueries] ([Id]) ON DELETE CASCADE
+    );
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261103040624_AddQueryVisualizations'
+)
+BEGIN
+    CREATE INDEX [IX_QueryVisualizations_SavedQueryId] ON [QueryVisualizations] ([SavedQueryId]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261103040624_AddQueryVisualizations'
+)
+BEGIN
+    INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
+    VALUES (N'20261103040624_AddQueryVisualizations', N'9.0.9');
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261103044216_AddDashboards'
+)
+BEGIN
+    CREATE TABLE [Dashboards] (
+        [Id] uniqueidentifier NOT NULL,
+        [Name] nvarchar(200) NOT NULL,
+        [Description] nvarchar(1000) NULL,
+        [OwnerId] nvarchar(450) NOT NULL,
+        [OwnerName] nvarchar(256) NOT NULL,
+        [Version] int NOT NULL,
+        [CreatedBy] nvarchar(450) NOT NULL,
+        [CreatedAtUtc] datetimeoffset NOT NULL,
+        [UpdatedBy] nvarchar(450) NULL,
+        [UpdatedAtUtc] datetimeoffset NULL,
+        CONSTRAINT [PK_Dashboards] PRIMARY KEY ([Id])
+    );
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261103044216_AddDashboards'
+)
+BEGIN
+    CREATE TABLE [DashboardShares] (
+        [Id] uniqueidentifier NOT NULL,
+        [DashboardId] uniqueidentifier NOT NULL,
+        [SharedWithUserId] nvarchar(450) NOT NULL,
+        [SharedWithUserEmail] nvarchar(256) NOT NULL,
+        [AccessLevel] int NOT NULL,
+        [CreatedBy] nvarchar(450) NOT NULL,
+        [CreatedAtUtc] datetimeoffset NOT NULL,
+        [UpdatedBy] nvarchar(450) NULL,
+        [UpdatedAtUtc] datetimeoffset NULL,
+        CONSTRAINT [PK_DashboardShares] PRIMARY KEY ([Id]),
+        CONSTRAINT [FK_DashboardShares_Dashboards_DashboardId] FOREIGN KEY ([DashboardId]) REFERENCES [Dashboards] ([Id]) ON DELETE CASCADE
+    );
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261103044216_AddDashboards'
+)
+BEGIN
+    CREATE TABLE [DashboardTiles] (
+        [Id] uniqueidentifier NOT NULL,
+        [DashboardId] uniqueidentifier NOT NULL,
+        [Kind] nvarchar(10) NOT NULL,
+        [VisualizationId] uniqueidentifier NULL,
+        [Title] nvarchar(200) NULL,
+        [Text] nvarchar(2000) NULL,
+        [Order] int NOT NULL,
+        [Width] int NOT NULL,
+        [Height] int NOT NULL,
+        [CreatedBy] nvarchar(450) NOT NULL,
+        [CreatedAtUtc] datetimeoffset NOT NULL,
+        [UpdatedBy] nvarchar(450) NULL,
+        [UpdatedAtUtc] datetimeoffset NULL,
+        CONSTRAINT [PK_DashboardTiles] PRIMARY KEY ([Id]),
+        CONSTRAINT [FK_DashboardTiles_Dashboards_DashboardId] FOREIGN KEY ([DashboardId]) REFERENCES [Dashboards] ([Id]) ON DELETE CASCADE,
+        CONSTRAINT [FK_DashboardTiles_QueryVisualizations_VisualizationId] FOREIGN KEY ([VisualizationId]) REFERENCES [QueryVisualizations] ([Id]) ON DELETE SET NULL
+    );
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261103044216_AddDashboards'
+)
+BEGIN
+    CREATE INDEX [IX_Dashboards_OwnerId] ON [Dashboards] ([OwnerId]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261103044216_AddDashboards'
+)
+BEGIN
+    CREATE UNIQUE INDEX [IX_DashboardShares_DashboardId_SharedWithUserId] ON [DashboardShares] ([DashboardId], [SharedWithUserId]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261103044216_AddDashboards'
+)
+BEGIN
+    CREATE INDEX [IX_DashboardTiles_DashboardId] ON [DashboardTiles] ([DashboardId]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261103044216_AddDashboards'
+)
+BEGIN
+    CREATE INDEX [IX_DashboardTiles_VisualizationId] ON [DashboardTiles] ([VisualizationId]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261103044216_AddDashboards'
+)
+BEGIN
+    INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
+    VALUES (N'20261103044216_AddDashboards', N'9.0.9');
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261103235143_AddDashboardGridPositions'
+)
+BEGIN
+    ALTER TABLE [DashboardTiles] ADD [AutoHeight] bit NOT NULL DEFAULT CAST(0 AS bit);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261103235143_AddDashboardGridPositions'
+)
+BEGIN
+    ALTER TABLE [DashboardTiles] ADD [X] int NOT NULL DEFAULT 0;
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261103235143_AddDashboardGridPositions'
+)
+BEGIN
+    ALTER TABLE [DashboardTiles] ADD [Y] int NOT NULL DEFAULT 0;
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261103235143_AddDashboardGridPositions'
+)
+BEGIN
+    ALTER TABLE [Dashboards] ADD [GridVersion] int NOT NULL DEFAULT 1;
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261103235143_AddDashboardGridPositions'
+)
+BEGIN
+    INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
+    VALUES (N'20261103235143_AddDashboardGridPositions', N'9.0.9');
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261104005823_AddDashboardParameters'
+)
+BEGIN
+    ALTER TABLE [DashboardTiles] ADD [ParameterMappingsJson] nvarchar(max) NULL;
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261104005823_AddDashboardParameters'
+)
+BEGIN
+    ALTER TABLE [Dashboards] ADD [ParametersJson] nvarchar(max) NULL;
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261104005823_AddDashboardParameters'
+)
+BEGIN
+    INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
+    VALUES (N'20261104005823_AddDashboardParameters', N'9.0.9');
 END;
 
 COMMIT;

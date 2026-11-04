@@ -14,6 +14,10 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<QueryShare> QueryShares => Set<QueryShare>();
     public DbSet<AuditLogEntry> AuditLogEntries => Set<AuditLogEntry>();
     public DbSet<DataScopeRule> DataScopeRules => Set<DataScopeRule>();
+    public DbSet<QueryVisualization> QueryVisualizations => Set<QueryVisualization>();
+    public DbSet<Dashboard> Dashboards => Set<Dashboard>();
+    public DbSet<DashboardTile> DashboardTiles => Set<DashboardTile>();
+    public DbSet<DashboardShare> DashboardShares => Set<DashboardShare>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

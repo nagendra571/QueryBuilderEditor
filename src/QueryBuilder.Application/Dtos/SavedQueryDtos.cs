@@ -74,7 +74,7 @@ public sealed record QueryResultDto(
     bool Truncated,
     int RowLimit);
 
-public sealed record QueryResultColumnDto(string Name, ColumnDataType DataType);
+public sealed record QueryResultColumnDto(string Name, ColumnDataType DataType, AggregateFunction? Aggregate = null);
 
 public sealed record ExportQueryRequest(
     Guid DataSourceId,
@@ -83,3 +83,5 @@ public sealed record ExportQueryRequest(
     string Format,
     string FileName,
     Guid? SavedQueryId = null);
+
+public sealed record ParameterOptionsPreviewRequest(Guid? DataSourceId, QueryParameter Parameter);

@@ -1,6 +1,7 @@
 using QueryBuilder.Application.Abstractions;
 using QueryBuilder.Application.Common;
 using QueryBuilder.Application.Exceptions;
+using QueryBuilder.Application.Parameters;
 using QueryBuilder.Domain.Entities;
 using QueryBuilder.Domain.Enums;
 using QueryBuilder.Domain.Model;
@@ -27,7 +28,8 @@ public sealed class ExportQueryCommandHandler(
     IDataScopeGuard dataScopeGuard,
     ICurrentDataScope currentScope,
     RecordLimitSettings recordLimitSettings,
-    IAuditLogger auditLogger)
+    IAuditLogger auditLogger,
+    IParameterBinder parameterBinder)
     : IRequestHandler<ExportQueryCommand, ExportResult>
 {
     public async Task<ExportResult> Handle(ExportQueryCommand request, CancellationToken cancellationToken)
@@ -46,16 +48,17 @@ public sealed class ExportQueryCommandHandler(
         }
 
         await catalogService.ValidateAsync(request.DataSourceId, request.Definition, cancellationToken);
-        var scopePredicates = await dataScopeGuard.AuthorizeAsync(request.DataSourceId, request.Definition, cancellationToken);
+        var definition = await parameterBinder.MaterializeAsync(request.Definition, request.ParameterValues, cancellationToken);
+        var scopePredicates = await dataScopeGuard.AuthorizeAsync(request.DataSourceId, definition, cancellationToken);
 
         var builder = sqlBuilderFactory.GetBuilder(dataSource.Provider);
-        var generated = builder.Build(request.Definition, scopePredicates);
+        var generated = builder.Build(definition, scopePredicates);
 
         // With a record limit, an oversized export is refused rather than cut off: a truncated file
         // looks complete to whoever opens it. Without one, the legacy silent 100,000 cap applies.
         var limit = RecordLimits.Effective(dataSource.MaxRecords, recordLimitSettings);
         var result = await executionService.ExecuteAsync(
-            dataSource, generated, request.ParameterValues, maxRows: limit ?? RecordLimits.LegacyExportRows, cancellationToken);
+            dataSource, generated, new Dictionary<string, string?>(), maxRows: limit ?? RecordLimits.LegacyExportRows, cancellationToken);
 
         if (limit is not null && result.Truncated)
         {

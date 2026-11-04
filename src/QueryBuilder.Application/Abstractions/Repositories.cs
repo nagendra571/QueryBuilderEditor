@@ -22,3 +22,29 @@ public interface IDataSourceRepository
     void Update(DataSource dataSource);
     Task<int> SaveChangesAsync(CancellationToken cancellationToken);
 }
+
+public interface IVisualizationRepository
+{
+    Task<List<QueryVisualization>> GetForQueryAsync(Guid savedQueryId, CancellationToken cancellationToken);
+    Task<List<QueryVisualization>> GetForQueriesAsync(IReadOnlyCollection<Guid> savedQueryIds, CancellationToken cancellationToken);
+    Task<QueryVisualization?> GetByIdAsync(Guid id, CancellationToken cancellationToken);
+    Task AddAsync(QueryVisualization visualization, CancellationToken cancellationToken);
+    void Update(QueryVisualization visualization);
+    void Remove(QueryVisualization visualization);
+    Task<int> SaveChangesAsync(CancellationToken cancellationToken);
+}
+
+public interface IDashboardRepository
+{
+    /// <summary>Tracked, with tiles, shares, and each tile's visualization, query and query shares loaded.</summary>
+    Task<Dashboard?> GetByIdAsync(Guid id, CancellationToken cancellationToken);
+    Task<List<Dashboard>> GetForUserAsync(string userId, CancellationToken cancellationToken);
+    Task AddAsync(Dashboard dashboard, CancellationToken cancellationToken);
+    void Remove(Dashboard dashboard);
+    Task AddTileAsync(DashboardTile tile, CancellationToken cancellationToken);
+    void RemoveTile(DashboardTile tile);
+    Task AddShareAsync(DashboardShare share, CancellationToken cancellationToken);
+    void RemoveShare(DashboardShare share);
+    /// <summary>Throws ConcurrencyConflictException if another writer changed the dashboard first.</summary>
+    Task<int> SaveChangesAsync(CancellationToken cancellationToken);
+}

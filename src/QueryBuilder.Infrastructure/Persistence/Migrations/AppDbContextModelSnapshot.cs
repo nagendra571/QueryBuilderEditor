@@ -77,6 +77,186 @@ namespace QueryBuilder.Infrastructure.Persistence.Migrations
                     b.ToTable("AuditLogEntries", (string)null);
                 });
 
+            modelBuilder.Entity("QueryBuilder.Domain.Entities.Dashboard", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<int>("GridVersion")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(1);
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("OwnerId")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<string>("OwnerName")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)");
+
+                    b.Property<string>("ParametersJson")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTimeOffset?>("UpdatedAtUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<int>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OwnerId");
+
+                    b.ToTable("Dashboards", (string)null);
+                });
+
+            modelBuilder.Entity("QueryBuilder.Domain.Entities.DashboardShare", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("AccessLevel")
+                        .HasColumnType("int");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<Guid>("DashboardId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("SharedWithUserEmail")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)");
+
+                    b.Property<string>("SharedWithUserId")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<DateTimeOffset?>("UpdatedAtUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DashboardId", "SharedWithUserId")
+                        .IsUnique();
+
+                    b.ToTable("DashboardShares", (string)null);
+                });
+
+            modelBuilder.Entity("QueryBuilder.Domain.Entities.DashboardTile", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<bool>("AutoHeight")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false);
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<Guid>("DashboardId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("Height")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("nvarchar(10)");
+
+                    b.Property<int>("Order")
+                        .HasColumnType("int");
+
+                    b.Property<string>("ParameterMappingsJson")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Text")
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.Property<string>("Title")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<DateTimeOffset?>("UpdatedAtUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<Guid?>("VisualizationId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("Width")
+                        .HasColumnType("int");
+
+                    b.Property<int>("X")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(0);
+
+                    b.Property<int>("Y")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(0);
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DashboardId");
+
+                    b.HasIndex("VisualizationId");
+
+                    b.ToTable("DashboardTiles", (string)null);
+                });
+
             modelBuilder.Entity("QueryBuilder.Domain.Entities.DataScopeRule", b =>
                 {
                     b.Property<Guid>("Id")
@@ -228,6 +408,54 @@ namespace QueryBuilder.Infrastructure.Persistence.Migrations
                     b.ToTable("QueryShares", (string)null);
                 });
 
+            modelBuilder.Entity("QueryBuilder.Domain.Entities.QueryVisualization", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<int>("DisplayOrder")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("OptionsJson")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<Guid>("SavedQueryId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<DateTimeOffset?>("UpdatedAtUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SavedQueryId");
+
+                    b.ToTable("QueryVisualizations", (string)null);
+                });
+
             modelBuilder.Entity("QueryBuilder.Domain.Entities.SavedQuery", b =>
                 {
                     b.Property<Guid>("Id")
@@ -292,6 +520,35 @@ namespace QueryBuilder.Infrastructure.Persistence.Migrations
                     b.ToTable("SavedQueries", (string)null);
                 });
 
+            modelBuilder.Entity("QueryBuilder.Domain.Entities.DashboardShare", b =>
+                {
+                    b.HasOne("QueryBuilder.Domain.Entities.Dashboard", "Dashboard")
+                        .WithMany("Shares")
+                        .HasForeignKey("DashboardId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Dashboard");
+                });
+
+            modelBuilder.Entity("QueryBuilder.Domain.Entities.DashboardTile", b =>
+                {
+                    b.HasOne("QueryBuilder.Domain.Entities.Dashboard", "Dashboard")
+                        .WithMany("Tiles")
+                        .HasForeignKey("DashboardId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("QueryBuilder.Domain.Entities.QueryVisualization", "Visualization")
+                        .WithMany()
+                        .HasForeignKey("VisualizationId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("Dashboard");
+
+                    b.Navigation("Visualization");
+                });
+
             modelBuilder.Entity("QueryBuilder.Domain.Entities.DataScopeRule", b =>
                 {
                     b.HasOne("QueryBuilder.Domain.Entities.DataSource", null)
@@ -312,6 +569,17 @@ namespace QueryBuilder.Infrastructure.Persistence.Migrations
                     b.Navigation("SavedQuery");
                 });
 
+            modelBuilder.Entity("QueryBuilder.Domain.Entities.QueryVisualization", b =>
+                {
+                    b.HasOne("QueryBuilder.Domain.Entities.SavedQuery", "SavedQuery")
+                        .WithMany()
+                        .HasForeignKey("SavedQueryId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("SavedQuery");
+                });
+
             modelBuilder.Entity("QueryBuilder.Domain.Entities.SavedQuery", b =>
                 {
                     b.HasOne("QueryBuilder.Domain.Entities.DataSource", "DataSource")
@@ -321,6 +589,13 @@ namespace QueryBuilder.Infrastructure.Persistence.Migrations
                         .IsRequired();
 
                     b.Navigation("DataSource");
+                });
+
+            modelBuilder.Entity("QueryBuilder.Domain.Entities.Dashboard", b =>
+                {
+                    b.Navigation("Shares");
+
+                    b.Navigation("Tiles");
                 });
 
             modelBuilder.Entity("QueryBuilder.Domain.Entities.SavedQuery", b =>

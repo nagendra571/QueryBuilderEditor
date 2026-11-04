@@ -29,17 +29,32 @@ public static class ApplicationBuilderExtensions
         var basePath = QueryBuilderRoutes.BasePath;
 
         app.UseDefaultFiles(new DefaultFilesOptions { FileProvider = fileProvider, RequestPath = basePath });
-        app.UseStaticFiles(new StaticFileOptions { FileProvider = fileProvider, RequestPath = basePath });
+        app.UseStaticFiles(new StaticFileOptions { FileProvider = fileProvider, RequestPath = basePath, OnPrepareResponse = SetCacheHeaders });
 
         // Anything under /querybuilder not matched by a real static file falls back to index.html,
         // letting the SPA's own client-side router take over. Two patterns: the bare base path
         // (no trailing segment) and everything nested under it. Deliberately no RequestPath here —
         // MapFallbackToFile always serves the fixed "index.html" regardless of the matched path, so
         // path-stripping (RequestPath's job for UseStaticFiles) doesn't apply and actively breaks it.
-        var fallbackOptions = new StaticFileOptions { FileProvider = fileProvider };
+        var fallbackOptions = new StaticFileOptions { FileProvider = fileProvider, OnPrepareResponse = SetCacheHeaders };
         app.MapFallbackToFile(basePath, "index.html", fallbackOptions);
         app.MapFallbackToFile(basePath + "/{*path:nonfile}", "index.html", fallbackOptions);
 
         return app;
+    }
+
+    // index.html names the hashed bundle, so a cached copy after a package upgrade points at assets
+    // that no longer exist; it must always revalidate. The hashed assets themselves never change.
+    private static void SetCacheHeaders(Microsoft.AspNetCore.StaticFiles.StaticFileResponseContext context)
+    {
+        var headers = context.Context.Response.Headers;
+        if (context.File.Name.Equals("index.html", StringComparison.OrdinalIgnoreCase))
+        {
+            headers.CacheControl = "no-cache";
+        }
+        else if (context.Context.Request.Path.Value?.Contains("/assets/", StringComparison.OrdinalIgnoreCase) == true)
+        {
+            headers.CacheControl = "public, max-age=31536000, immutable";
+        }
     }
 }

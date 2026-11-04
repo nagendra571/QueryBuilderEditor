@@ -6,9 +6,22 @@ import type {
   AppUsersResult,
   AuditLogEntryDto,
   DataSourceCatalog,
+  DashboardDetailDto,
+  DashboardSharePreviewDto,
+  DashboardSummaryDto,
   DataSourceDto,
   ExportQueryRequest,
+  ParameterOption,
+  PickableVisualizationDto,
+  QueryParameter,
   QueryShareDto,
+  RenderVisualizationRequest,
+  SaveDashboardRequest,
+  SaveDashboardTilesRequest,
+  SaveVisualizationRequest,
+  ShareDashboardRequest,
+  VisualizationDataDto,
+  VisualizationDto,
   RunQueryRequest,
   SaveQueryRequest,
   SavedQueryDetailDto,
@@ -47,12 +60,20 @@ export const savedQueriesApi = {
     (await apiClient.post('/queries/run', request)).data,
   export: async (request: ExportQueryRequest): Promise<Blob> =>
     (await apiClient.post('/queries/export', request, { responseType: 'blob' })).data,
+  parameterOptions: async (id: string, name: string): Promise<ParameterOption[]> =>
+    (await apiClient.get(`/queries/${id}/parameters/${encodeURIComponent(name)}/options`)).data,
   getShares: async (id: string): Promise<QueryShareDto[]> => (await apiClient.get(`/queries/${id}/shares`)).data,
   share: async (id: string, request: ShareQueryRequest): Promise<{ id: string }> =>
     (await apiClient.post(`/queries/${id}/shares`, request)).data,
   removeShare: async (id: string, shareId: string): Promise<void> => {
     await apiClient.delete(`/queries/${id}/shares/${shareId}`)
   },
+}
+
+export const parametersApi = {
+  /** Choices for a query-list parameter that is still being edited (not saved yet). */
+  previewOptions: async (parameter: QueryParameter, dataSourceId?: string | null): Promise<ParameterOption[]> =>
+    (await apiClient.post('/parameters/options', { dataSourceId: dataSourceId ?? null, parameter })).data,
 }
 
 export const auditApi = {
@@ -76,4 +97,55 @@ export const adminApi = {
   updateDataScope: async (id: string, request: UpdateDataScopeRequest): Promise<void> => {
     await apiClient.put(`/admin/data-sources/${id}/data-scope`, request)
   },
+}
+
+export const visualizationsApi = {
+  list: async (queryId: string): Promise<VisualizationDto[]> =>
+    (await apiClient.get(`/queries/${queryId}/visualizations`)).data,
+  create: async (queryId: string, request: SaveVisualizationRequest): Promise<VisualizationDto> =>
+    (await apiClient.post(`/queries/${queryId}/visualizations`, request)).data,
+  update: async (queryId: string, id: string, request: SaveVisualizationRequest): Promise<VisualizationDto> =>
+    (await apiClient.put(`/queries/${queryId}/visualizations/${id}`, request)).data,
+  remove: async (queryId: string, id: string): Promise<void> => {
+    await apiClient.delete(`/queries/${queryId}/visualizations/${id}`)
+  },
+  render: async (queryId: string, id: string, request: RenderVisualizationRequest): Promise<VisualizationDataDto> =>
+    (await apiClient.post(`/queries/${queryId}/visualizations/${id}/data`, request)).data,
+}
+
+export interface MeDto {
+  userId: string
+  displayName: string
+  /** Null when the host configured no data scoping. */
+  zone: { unrestricted: boolean; values: Record<string, string[]> } | null
+}
+
+export const meApi = {
+  get: async (): Promise<MeDto> => (await apiClient.get('/me')).data,
+}
+
+export const dashboardsApi = {
+  list: async (): Promise<DashboardSummaryDto[]> => (await apiClient.get('/dashboards')).data,
+  getById: async (id: string): Promise<DashboardDetailDto> => (await apiClient.get(`/dashboards/${id}`)).data,
+  create: async (request: SaveDashboardRequest): Promise<DashboardDetailDto> =>
+    (await apiClient.post('/dashboards', request)).data,
+  rename: async (id: string, request: SaveDashboardRequest): Promise<DashboardDetailDto> =>
+    (await apiClient.put(`/dashboards/${id}`, request)).data,
+  saveTiles: async (id: string, request: SaveDashboardTilesRequest): Promise<DashboardDetailDto> =>
+    (await apiClient.put(`/dashboards/${id}/tiles`, request)).data,
+  addChart: async (id: string, visualizationId: string): Promise<DashboardSummaryDto> =>
+    (await apiClient.post(`/dashboards/${id}/tiles/chart`, { visualizationId })).data,
+  remove: async (id: string): Promise<void> => {
+    await apiClient.delete(`/dashboards/${id}`)
+  },
+  getShares: async (id: string): Promise<QueryShareDto[]> => (await apiClient.get(`/dashboards/${id}/shares`)).data,
+  share: async (id: string, request: ShareDashboardRequest): Promise<{ id: string }> =>
+    (await apiClient.post(`/dashboards/${id}/shares`, request)).data,
+  removeShare: async (id: string, shareId: string): Promise<void> => {
+    await apiClient.delete(`/dashboards/${id}/shares/${shareId}`)
+  },
+  sharePreview: async (id: string, userId: string): Promise<DashboardSharePreviewDto> =>
+    (await apiClient.get(`/dashboards/${id}/share-preview`, { params: { userId } })).data,
+  pickableVisualizations: async (): Promise<PickableVisualizationDto[]> =>
+    (await apiClient.get('/visualizations/pickable')).data,
 }

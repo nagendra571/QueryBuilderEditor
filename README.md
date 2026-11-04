@@ -83,7 +83,8 @@ migrations, API/UI wiring, JSON options, and the authorization pipeline in one p
 - Column totals (Sum, Average, Count, Distinct count, Min, Max) with automatic grouping and a
   totals-only filter (HAVING) — no separate "Group By" step
 - Visual filter builder with type-aware inputs (date picker, checkbox, number, text) and
-  run-time-prompted parameters (`{{ selected_date }}`-style placeholders, filled in at run time)
+  typed run-time parameters (text, number, date, date range with relative dates, fixed or
+  query-based dropdowns, multi-select) in a parameter bar with Apply, values bound as SQL parameters
 - Read-only generated SQL preview with syntax highlighting
 - Run queries and browse results with client-side pagination, search, column show/hide, reorder,
   and sort
@@ -104,6 +105,28 @@ migrations, API/UI wiring, JSON options, and the authorization pipeline in one p
   the admin UI. Past the limit the grid shows the first N rows with a warning to add filters, and
   exports are refused instead of being silently cut off. Unset = unchanged behavior. See the package
   README's "Record Limits" section
+- Saved visualizations: add Bar, Horizontal bar, Combo, Waterfall, Line, Area, Trend, Pie, Funnel,
+  Scatter/bubble, Table, Pivot or Counter charts to a saved query, with number formats. Charts are drawn
+  server-side from the saved query with the *viewer's own* row-level scope, so nobody sees rows
+  they couldn't get by running the query; charts over too many rows are refused rather than
+  drawn partially (Table shows the first rows with a banner). See the package README's
+  "Visualizations" section
+- Dashboards: put charts from several saved queries (plus plain-text notes and section headings) on one page, arrange
+  them freely on a 12-column grid (drag, corner-resize, automatic gap closing, fit-to-content height,
+  full keyboard control), and share the page with named colleagues. Sharing a
+  dashboard never shares data: each viewer sees a chart only if they already have access to its
+  query, drawn with their own row-level scope; other charts show as "restricted" without revealing
+  their names. See the package README's "Dashboards" section
+- Dashboard parameters: a bar of shared filters above the tiles (with Apply and `?p_<name>=` links)
+  that charts from different queries can all follow, plus per-chart value sources in edit mode
+  (Parameters... on a tile): a dashboard parameter, a small control in the tile header, a hidden
+  fixed value, or the query's own default. Every value is validated and bound server-side on each
+  render, so a viewer's row-level scope still applies
+- "Add to dashboard" on every chart of a saved query, and a "Zoning Map" visual design: a navy
+  sidebar naming the signed-in user's data zone, a "Your zone" key on each chart tile, hatched
+  no-access tiles, and the query builder shown as numbered steps (Source → Columns → Filters →
+  Totals filter → Sort). Light and dark themes; fonts are bundled (Public Sans, Barlow Condensed,
+  both SIL OFL), so nothing loads from a font CDN.
 - Configurable actor identity (`ActorResolver`) and access control (anonymous / authenticated /
   role / custom policy), applied uniformly across every route
 - DBA-friendly database story: auto-migration by default, or an idempotent SQL script for
@@ -119,8 +142,6 @@ Not yet built, tracked for a future version:
 - Admin UI for registering/editing data sources themselves (name, connection string, provider,
   `AllowedSchemas`) — still raw-SQL-only; only the catalog scope/allowlist is admin-manageable so far
 - Manually-written SQL as an alternative to the visual builder
-- Turning a result set into a saved visualization
-- Dashboards composed of multiple visualizations
 
 ## Contributing
 

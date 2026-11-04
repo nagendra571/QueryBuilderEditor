@@ -10,11 +10,13 @@ export const apiClient = axios.create({
 
 export class ApiError extends Error {
   status: number
+  title: string
   errors?: Record<string, string[]>
 
   constructor(problem: ApiProblemDetails) {
     super(problem.detail || problem.title || 'Request failed')
     this.status = problem.status
+    this.title = problem.title
     this.errors = problem.errors
   }
 }

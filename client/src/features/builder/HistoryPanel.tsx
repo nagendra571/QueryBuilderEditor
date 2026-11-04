@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { formatDistanceToNow } from 'date-fns'
-import { Ban, Download, FilePlus, History, Loader2, Pencil, Play, Power, Share2, Trash2 } from 'lucide-react'
+import { Ban, ChartColumn, Download, FilePlus, History, Loader2, Pencil, Play, Power, Share2, Trash2 } from 'lucide-react'
 import type { ComponentType } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { auditApi } from '@/lib/api'
@@ -20,6 +20,9 @@ const ACTION_META: Record<AuditAction, { icon: ComponentType<{ className?: strin
   dataSourceCatalogPolicyUpdated: { icon: Pencil, className: 'text-muted-foreground' },
   dataSourceDataScopeUpdated: { icon: Pencil, className: 'text-muted-foreground' },
   dataSourceRecordLimitUpdated: { icon: Pencil, className: 'text-muted-foreground' },
+  visualizationCreated: { icon: ChartColumn, className: 'text-success' },
+  visualizationUpdated: { icon: ChartColumn, className: 'text-primary' },
+  visualizationDeleted: { icon: ChartColumn, className: 'text-destructive' },
 }
 
 export function HistoryPanel({ queryId }: { queryId: string }) {

@@ -13,8 +13,10 @@ import { aggregateResultDataType, describeAggregate } from '@/features/builder/a
 import { useBuilderStore } from '@/features/builder/builder-store'
 import { FilterValueInput } from '@/features/builder/FilterValueInput'
 import { isFilterConditionComplete, operatorsForDataType, OPERATOR_LABELS } from '@/features/builder/filter-operators'
+import { ParameterChip } from '@/features/parameters/ParameterChip'
+import { allowedTypesFor } from '@/features/parameters/param-values'
 import { cn } from '@/lib/utils'
-import type { QueryColumn } from '@/types'
+import type { ColumnDataType, FilterOperator, QueryColumn } from '@/types'
 
 function measureKey(m: Pick<QueryColumn, 'tableAlias' | 'columnName' | 'aggregate'>) {
   return `${m.tableAlias}.${m.columnName}.${m.aggregate}`
@@ -159,10 +161,7 @@ export function HavingPanel() {
             </Select>
 
             {condition.isParameterized ? (
-              <span className="inline-flex h-7 items-center gap-1 rounded-md bg-query/10 px-2 text-xs font-medium text-query">
-                <Sparkles className="size-3" />
-                Prompted as "{condition.parameterName}"
-              </span>
+              <ParameterChip name={condition.parameterName ?? ''} />
             ) : (
               <FilterValueInput
                 dataType={condition.dataType}
@@ -174,17 +173,27 @@ export function HavingPanel() {
 
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className={cn('size-6', condition.isParameterized && 'text-query')}
-                  onClick={() => toggleHavingParameterized(index)}
-                  aria-label="Toggle prompt at run time"
-                >
-                  <Sparkles className="size-3.5" />
-                </Button>
+                {/* span wrapper so the tooltip still fires while the button is disabled */}
+                <span>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className={cn('size-6', condition.isParameterized && 'text-query')}
+                    disabled={!condition.isParameterized && !canAsk(condition)}
+                    onClick={() => toggleHavingParameterized(index)}
+                    aria-label="Toggle prompt at run time"
+                  >
+                    <Sparkles className="size-3.5" />
+                  </Button>
+                </span>
               </TooltipTrigger>
-              <TooltipContent>{condition.isParameterized ? 'Use a fixed value' : 'Ask the user at run time'}</TooltipContent>
+              <TooltipContent>
+                {condition.isParameterized
+                  ? 'Use a fixed value'
+                  : canAsk(condition)
+                    ? 'Ask the user at run time'
+                    : "This condition can't be asked at run time."}
+              </TooltipContent>
             </Tooltip>
 
             <Button
@@ -201,4 +210,8 @@ export function HavingPanel() {
       })}
     </div>
   )
+}
+
+function canAsk(condition: { dataType: ColumnDataType; operator: FilterOperator }) {
+  return allowedTypesFor(condition.dataType, condition.operator).length > 0
 }

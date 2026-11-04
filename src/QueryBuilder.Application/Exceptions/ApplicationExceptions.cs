@@ -14,3 +14,6 @@ public sealed class QueryDisabledException(string message) : Exception(message);
 /// <summary>A query returned more records than its data source's record limit allows for the
 /// requested operation (export). The message is shown to the user as-is.</summary>
 public sealed class RecordLimitExceededException(string message) : Exception(message);
+
+/// <summary>An optimistic-concurrency check failed: someone else changed the object since it was loaded.</summary>
+public sealed class ConcurrencyConflictException(string message) : Exception(message);

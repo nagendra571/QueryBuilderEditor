@@ -140,12 +140,39 @@ export interface FilterGroup {
   groups: FilterGroup[]
 }
 
+export type ParameterType =
+  | 'text'
+  | 'number'
+  | 'date'
+  | 'dateTime'
+  | 'dateRange'
+  | 'dateTimeRange'
+  | 'list'
+  | 'queryList'
+  | 'boolean'
+
 export interface QueryParameter {
   name: string
   label: string
   dataType: ColumnDataType
+  /** Absent on queries saved before parameter types existed; then derived from `dataType`. */
+  type?: ParameterType | null
+  /**
+   * Single value, a JSON array string for several values, `start~end` for a range, or a relative
+   * token such as `last_30_days` / `today` that the server resolves at run time.
+   */
   defaultValue?: string | null
   isRequired: boolean
+  options?: string[]
+  optionsQueryId?: string | null
+  optionsLabelColumn?: string | null
+  optionsValueColumn?: string | null
+  allowMultiple?: boolean
+}
+
+export interface ParameterOption {
+  label: string
+  value: string
 }
 
 export interface QueryDefinition {
@@ -252,6 +279,7 @@ export interface QuerySqlPreviewDto {
 export interface QueryResultColumnDto {
   name: string
   dataType: ColumnDataType
+  aggregate?: AggregateFunction | null
 }
 
 export interface QueryResultDto {
@@ -293,6 +321,9 @@ export type AuditAction =
   | 'dataSourceCatalogPolicyUpdated'
   | 'dataSourceDataScopeUpdated'
   | 'dataSourceRecordLimitUpdated'
+  | 'visualizationCreated'
+  | 'visualizationUpdated'
+  | 'visualizationDeleted'
 
 export interface AuditLogEntryDto {
   id: string
@@ -365,4 +396,234 @@ export interface DataScopeObjectRuleDto {
 
 export interface UpdateDataScopeRequest {
   objects: DataScopeObjectRuleDto[]
+}
+
+// ---- Visualizations ----
+
+export type VisualizationType =
+  | 'bar'
+  | 'line'
+  | 'pie'
+  | 'counter'
+  | 'area'
+  | 'horizontalBar'
+  | 'combo'
+  | 'scatter'
+  | 'table'
+  | 'pivot'
+  | 'funnel'
+  | 'waterfall'
+  | 'trend'
+
+export type ValueFormatStyle = 'number' | 'compact' | 'currency' | 'percent'
+
+export interface ValueFormat {
+  style: ValueFormatStyle
+  decimals?: number | null
+  currency?: string | null
+}
+
+export interface TableOptions {
+  columns: string[]
+}
+
+export interface PivotOptions {
+  rows: string[]
+  column?: string | null
+  values: string[]
+  totals: boolean
+  shade: boolean
+}
+
+export type VisualizationSort = 'none' | 'asc' | 'desc'
+
+export interface CounterOptions {
+  value: string
+  label?: string | null
+  decimals: number
+  target?: string | null
+}
+
+/** Columns are referenced by output name (a column's alias, or its name when it has none). */
+export interface VisualizationOptions {
+  version: number
+  x?: string | null
+  measures: string[]
+  series?: string | null
+  stacked: boolean
+  sortX: VisualizationSort
+  counter?: CounterOptions | null
+  percent?: boolean
+  lineMeasures?: string[]
+  size?: string | null
+  label?: string | null
+  table?: TableOptions | null
+  pivot?: PivotOptions | null
+  format?: ValueFormat | null
+}
+
+export interface VisualizationDto {
+  id: string
+  savedQueryId: string
+  name: string
+  type: VisualizationType
+  options: VisualizationOptions
+  displayOrder: number
+  createdBy: string
+  createdAtUtc: string
+  updatedBy?: string | null
+  updatedAtUtc?: string | null
+}
+
+export interface SaveVisualizationRequest {
+  name: string
+  type: VisualizationType
+  options: VisualizationOptions
+}
+
+export interface RenderVisualizationRequest {
+  parameterValues: Record<string, string | null>
+}
+
+/** Only the columns the chart references — never the query's full output. */
+export interface VisualizationDataDto {
+  columns: QueryResultColumnDto[]
+  rows: Record<string, unknown>[]
+  rowCount: number
+  executionTimeMs: number
+  rowLimit: number
+  truncated?: boolean
+}
+
+export type DashboardTileKind = 'chart' | 'text' | 'section'
+
+export interface DashboardSummaryDto {
+  id: string
+  name: string
+  description?: string | null
+  ownerId: string
+  ownerName: string
+  isOwner: boolean
+  accessLevel: QueryAccessLevel
+  tileCount: number
+  createdAtUtc: string
+  updatedAtUtc?: string | null
+}
+
+export interface DashboardTileChartDto {
+  savedQueryId: string
+  savedQueryName: string
+  visualizationId: string
+  visualizationName: string
+  type: VisualizationType
+}
+
+/** A restricted tile carries only id, kind, order, width, height and restricted = true. */
+export interface DashboardTileDto {
+  id: string
+  kind: DashboardTileKind
+  order: number
+  /** Grid units in a 12-column grid: column and row of the top-left corner. */
+  x: number
+  y: number
+  width: number
+  height: number
+  autoHeight: boolean
+  restricted: boolean
+  missing: boolean
+  title?: string | null
+  text?: string | null
+  chart?: DashboardTileChartDto | null
+  /** Absent for restricted, removed and text tiles, and for charts that use every query default. */
+  parameterMappings?: Record<string, ParameterMappingDto> | null
+}
+
+/** A parameter shared by several tiles. Same shape rules as a query parameter, plus the saved default. */
+export interface DashboardParameterDto {
+  name: string
+  title?: string | null
+  type: ParameterType
+  options?: string[] | null
+  optionsQueryId?: string | null
+  optionsLabelColumn?: string | null
+  optionsValueColumn?: string | null
+  allowMultiple: boolean
+  value?: string | null
+}
+
+export type ParameterMappingSource = 'default' | 'dashboard' | 'tile' | 'fixed'
+
+/** Where one query parameter of a chart tile gets its value. `default` is never stored. */
+export interface ParameterMappingDto {
+  source: ParameterMappingSource
+  dashboardParameter?: string | null
+  value?: string | null
+  title?: string | null
+}
+
+export interface DashboardDetailDto {
+  id: string
+  name: string
+  description?: string | null
+  ownerId: string
+  ownerName: string
+  isOwner: boolean
+  accessLevel: QueryAccessLevel
+  version: number
+  tiles: DashboardTileDto[]
+  parameters?: DashboardParameterDto[] | null
+}
+
+export interface SaveDashboardRequest {
+  name: string
+  description?: string | null
+  version?: number | null
+}
+
+export interface SaveDashboardTileRequest {
+  id?: string | null
+  kind: DashboardTileKind
+  order: number
+  x: number
+  y: number
+  width: number
+  height: number
+  autoHeight: boolean
+  title?: string | null
+  text?: string | null
+  visualizationId?: string | null
+  /** Omitted = keep what is stored; `{}` = clear. */
+  parameterMappings?: Record<string, ParameterMappingDto> | null
+}
+
+export interface SaveDashboardTilesRequest {
+  version: number
+  tiles: SaveDashboardTileRequest[]
+  /** Omitted = keep the stored list; `[]` = clear. */
+  parameters?: DashboardParameterDto[]
+}
+
+export interface ShareDashboardRequest {
+  sharedWithUserId: string
+  sharedWithUserEmail: string
+  accessLevel: QueryAccessLevel
+  alsoShareQueryIds?: string[]
+}
+
+export interface InaccessibleQueryDto {
+  id: string
+  name: string
+  canShare: boolean
+}
+
+export interface DashboardSharePreviewDto {
+  inaccessibleQueries: InaccessibleQueryDto[]
+}
+
+export interface PickableVisualizationDto {
+  visualizationId: string
+  visualizationName: string
+  type: VisualizationType
+  savedQueryId: string
+  savedQueryName: string
 }

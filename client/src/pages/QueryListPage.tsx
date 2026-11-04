@@ -67,7 +67,7 @@ export function QueryListPage() {
     <div className="mx-auto flex max-w-6xl flex-col gap-(--space-section) p-(--space-section)">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-semibold tracking-tight">Queries</h1>
+          <h1 className="text-[1.75rem] leading-tight font-bold tracking-tight">Queries</h1>
           <p className="text-sm text-muted-foreground">Build, run, and share reusable queries over your data views.</p>
         </div>
         <Button onClick={handleNewQuery}>

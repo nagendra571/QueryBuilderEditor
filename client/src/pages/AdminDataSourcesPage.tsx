@@ -27,7 +27,7 @@ export function AdminDataSourcesPage() {
   return (
     <div className="mx-auto flex max-w-4xl flex-col gap-(--space-section) p-(--space-section)">
       <div>
-        <h1 className="text-xl font-semibold tracking-tight">Admin — Data Sources</h1>
+        <h1 className="text-[1.75rem] leading-tight font-bold tracking-tight">Admin — Data Sources</h1>
         <p className="text-sm text-muted-foreground">Control which tables and views each data source exposes to the catalog.</p>
       </div>
 
