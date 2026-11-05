@@ -72,6 +72,17 @@ export function neighbourRow<T extends Keyed>(tiles: T[], key: string, direction
   return below ? below.y + below.height : null
 }
 
+let tileKeys = 0
+
+/**
+ * Identifies a tile until it is saved; the server assigns the real id, so this only has to be unique on
+ * the page. Not the browser's UUID generator: it is undefined on a plain-http page, and hosts serve this package over http.
+ */
+export function newTileKey(): string {
+  tileKeys += 1
+  return `new-tile-${tileKeys}`
+}
+
 export function bottomRow(tiles: Box[]): number {
   return tiles.reduce((max, t) => Math.max(max, t.y + t.height), 0)
 }

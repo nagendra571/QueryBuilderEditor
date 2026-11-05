@@ -8,8 +8,9 @@ integration ergonomics (single-call registration, embedded SPA, DBA-friendly mig
 - NuGet: https://www.nuget.org/packages/QueryBuilder.Editor — published version **1.0.14** (charts,
   dashboards, parameters, Zoning Map design, more chart types, section headings), pushed to NuGet by the
   user; its code is commit `9ccf081`, pushed to GitHub on branch `feature/rea1`, not merged to `main`.
-  **1.0.15** (removing a filter also removes its parameter) is packed but not pushed; bump past it if more
-  changes are needed once it's published.
+  **1.0.15** (removing a filter also removes its parameter) is published too, commit `8fd1410` on the same
+  branch, and is what the hosted site runs. **1.0.16** (Add chart/text/section work on plain http) is packed
+  but not pushed, and its changes are uncommitted; bump past it if more changes are needed once it's published.
 - GitHub: https://github.com/nagendra571/QueryBuilderEditor — local `main` is **1 commit ahead** of
   `origin/main`: `bca3dcb` (adds `docs/row-level-data-scoping.docx`), committed at the user's request
   but **not pushed** (they only asked to commit). Push only if asked.
@@ -173,7 +174,7 @@ version was hit once already).
 ## Related repo: TemplateBuilderClient (the user's consuming app)
 
 `C:\Users\nchinnam\source\repos\TemplateBuilderClient` — the user authorized access. ASP.NET Core MVC,
-`net10.0`, references `QueryBuilder.Editor` **1.0.14** and `TemplateBuilder.Editor` 3.1.0. Deployed
+`net10.0`, references `QueryBuilder.Editor` (the hosted site runs 1.0.15's bundle) and `TemplateBuilder.Editor` 3.1.0. Deployed
 by Web Deploy (`Properties/PublishProfiles/site75698-WebDeploy.pubxml`) to the public
 **templatebuilder.runasp.net**. All changes there are **uncommitted** (never commit or push there
 unless asked): QueryBuilder wiring in `Program.cs`, `DevPersonas.cs`, a Personas nav link in
@@ -277,6 +278,12 @@ unless asked): QueryBuilder wiring in `Program.cs`, `DevPersonas.cs`, a Personas
 - **A stale browser-cached `index.html` hides a new bundle** (fixed with no-cache headers, but browsers
   that cached it earlier need Ctrl+F5). If a screenshot shows an old UI, compare `index-*.js` in the page
   with `wwwroot/index.html` before suspecting the build.
+- **`localhost` and `https://localhost:7044` hide bugs that only appear on plain http.** Browsers leave
+  `crypto.randomUUID`, `crypto.subtle` and `navigator.clipboard` undefined outside a secure context, and the
+  hosted site is http: Add chart/text/section threw right after closing the dialog, so nothing was added.
+  `client/tests/insecure-context.test.ts` rejects those APIs in `client/src`, comments included. To test http
+  without exposing the app, route a fake origin to it in Playwright (`context.route('http://qb.test/**', …)`
+  fulfilled from `route.fetch({ url })` at localhost:5080); `isSecureContext` is then really false.
 - **Git Bash mangles Windows paths passed to `sqlcmd -i`**; run `sqlcmd` from PowerShell with backslash
   paths. Verify DBA scripts by applying `migrations script --idempotent` to a throwaway LocalDB database
   with `sqlcmd -I -b`, **twice**, then drop it.
@@ -378,7 +385,7 @@ the local Redash instance runs at http://localhost:5000 (never driven; runtime c
    and `optionsProblem` in step. Pure model files (`chart-data.ts`, `format.ts`, `pivot-model.ts`,
    `story-models.ts`, `single-number.ts`) use `import type` from `@/…` and relative `.ts` runtime imports,
    so Node can run them. Docs and known issues: `features/visualization-types/`.
-Tests: 424 server (`dotnet test tests/QueryBuilder.Tests`), 127 client (`cd client && npm test`, Node's
+Tests: 424 server (`dotnet test tests/QueryBuilder.Tests`), 130 client (`cd client && npm test`, Node's
 built-in runner, no dependency). Both READMEs document all of the above.
 
 **Temporary state that must be cleaned up before packaging/commit**:
@@ -400,8 +407,8 @@ built-in runner, no dependency). Both READMEs document all of the above.
 - 20 `npm audit` advisories untriaged; main JS bundle ~1.3 MB (lazy-load suggested).
 - Impeccable finish-review leftovers: grey status pills on Queries/Admin lists, catalog 11px/9px labels,
   generic drag shadows, top bar mostly empty.
-- Release: 1.0.15 is bumped and packed (`nupkg/QueryBuilder.Editor.1.0.15.nupkg`), not pushed to NuGet, and
-  its changes are uncommitted on `feature/rea1`. `TemplateBuilderClient` is on 1.0.14. NuGet push and
+- Release: 1.0.16 is bumped and packed (`nupkg/QueryBuilder.Editor.1.0.16.nupkg`, bundle `index-KbAyoLt7.js`),
+  not pushed to NuGet, and its changes are uncommitted on `feature/rea1`. NuGet push and
   commit/push only when asked.
 
 **Discussed, not built**: full data-source registration/editing in the admin UI (name, connection

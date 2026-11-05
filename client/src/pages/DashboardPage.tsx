@@ -14,7 +14,7 @@ import { DashboardValuesContext, toQueryParameter } from '@/features/dashboards/
 import { ParameterMappingDialog } from '@/features/dashboards/ParameterMappingDialog'
 import { defaultValues, valuesFromSearchParams, writeValuesToSearchParams, type ParameterValues } from '@/features/parameters/param-values'
 import { DashboardGrid, type DraftTile } from '@/features/dashboards/DashboardGrid'
-import { bottomRow } from '@/features/dashboards/layout'
+import { bottomRow, newTileKey } from '@/features/dashboards/layout'
 import { DashboardNameDialog } from '@/features/dashboards/DashboardNameDialog'
 import { RefreshControl } from '@/features/dashboards/RefreshControl'
 import { createLimiter, RenderLimiterContext } from '@/features/dashboards/render-limiter'
@@ -153,7 +153,7 @@ export function DashboardPage() {
 
   function addChart(viz: PickableVisualizationDto) {
     setAddChartOpen(false)
-    const key = crypto.randomUUID()
+    const key = newTileKey()
     update((current) => [
       ...current,
       {
@@ -187,7 +187,7 @@ export function DashboardPage() {
       update((current) => current.map((t) => (t.key === target ? { ...t, title: title || null, text } : t)))
       return
     }
-    const key = crypto.randomUUID()
+    const key = newTileKey()
     update((current) => [
       ...current,
       {
@@ -216,7 +216,7 @@ export function DashboardPage() {
       update((current) => current.map((t) => (t.key === target ? { ...t, title, text: description || null } : t)))
       return
     }
-    const key = crypto.randomUUID()
+    const key = newTileKey()
     update((current) => [
       ...current,
       {
