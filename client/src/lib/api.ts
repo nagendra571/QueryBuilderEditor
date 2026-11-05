@@ -1,3 +1,4 @@
+import { dropOrphanParameters } from '@/features/parameters/param-values'
 import { apiClient } from '@/lib/api-client'
 import type {
   AdminDataScopeDto,
@@ -44,7 +45,12 @@ export const dataSourcesApi = {
 
 export const savedQueriesApi = {
   list: async (): Promise<SavedQuerySummaryDto[]> => (await apiClient.get('/queries')).data,
-  getById: async (id: string): Promise<SavedQueryDetailDto> => (await apiClient.get(`/queries/${id}`)).data,
+  // Queries saved before removing a filter also removed its parameter can still hold orphans. The server
+  // ignores them, but every screen reading this would ask for a value that nothing uses.
+  getById: async (id: string): Promise<SavedQueryDetailDto> => {
+    const query: SavedQueryDetailDto = (await apiClient.get(`/queries/${id}`)).data
+    return { ...query, definition: dropOrphanParameters(query.definition) }
+  },
   save: async (request: SaveQueryRequest): Promise<{ id: string }> =>
     (await apiClient.post('/queries', request)).data,
   remove: async (id: string): Promise<void> => {

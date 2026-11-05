@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { aggregateResultDataType, describeAggregate } from '@/features/builder/aggregate-functions'
-import { allowedTypesFor, defaultTypeFor, effectiveType, initialDefault, type ParameterValues } from '@/features/parameters/param-values'
+import { allowedTypesFor, defaultTypeFor, dropOrphanParameters, effectiveType, initialDefault, type ParameterValues } from '@/features/parameters/param-values'
 import type {
   AggregateFunction,
   ColumnDataType,
@@ -205,7 +205,7 @@ export const useBuilderStore = create<BuilderState>((set) => ({
         .filter((c) => columnKey(c.tableAlias, c.columnName, c.aggregate) !== key)
         .map((c, i) => ({ ...c, orderIndex: i }))
       return {
-        definition: { ...state.definition, columns, having: pruneHaving(state.definition.having, columns) },
+        definition: dropOrphanParameters({ ...state.definition, columns, having: pruneHaving(state.definition.having, columns) }),
         isDirty: true,
       }
     }),
@@ -258,7 +258,7 @@ export const useBuilderStore = create<BuilderState>((set) => ({
         columnKey(c.tableAlias, c.columnName, c.aggregate) === key ? { ...c, aggregate, alias } : c,
       )
       return {
-        definition: { ...state.definition, columns, having: pruneHaving(state.definition.having, columns) },
+        definition: dropOrphanParameters({ ...state.definition, columns, having: pruneHaving(state.definition.having, columns) }),
         isDirty: true,
       }
     }),
@@ -298,13 +298,13 @@ export const useBuilderStore = create<BuilderState>((set) => ({
 
   removeFilterCondition: (index) =>
     set((state) => ({
-      definition: {
+      definition: dropOrphanParameters({
         ...state.definition,
         filters: {
           ...state.definition.filters,
           conditions: state.definition.filters.conditions.filter((_, i) => i !== index),
         },
-      },
+      }),
       isDirty: true,
     })),
 
@@ -402,7 +402,7 @@ export const useBuilderStore = create<BuilderState>((set) => ({
       const having = state.definition.having
       if (!having) return state
       return {
-        definition: { ...state.definition, having: { ...having, conditions: having.conditions.filter((_, i) => i !== index) } },
+        definition: dropOrphanParameters({ ...state.definition, having: { ...having, conditions: having.conditions.filter((_, i) => i !== index) } }),
         isDirty: true,
       }
     }),

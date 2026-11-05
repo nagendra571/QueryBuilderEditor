@@ -7,8 +7,9 @@ integration ergonomics (single-call registration, embedded SPA, DBA-friendly mig
 
 - NuGet: https://www.nuget.org/packages/QueryBuilder.Editor — published version **1.0.14** (charts,
   dashboards, parameters, Zoning Map design, more chart types, section headings), pushed to NuGet by the
-  user; its code is not yet committed. **1.0.13** is the last version committed and pushed to GitHub. The
-  next release is 1.0.15 — bump only when asked.
+  user; its code is commit `9ccf081`, pushed to GitHub on branch `feature/rea1`, not merged to `main`.
+  **1.0.15** (removing a filter also removes its parameter) is packed but not pushed; bump past it if more
+  changes are needed once it's published.
 - GitHub: https://github.com/nagendra571/QueryBuilderEditor — local `main` is **1 commit ahead** of
   `origin/main`: `bca3dcb` (adds `docs/row-level-data-scoping.docx`), committed at the user's request
   but **not pushed** (they only asked to commit). Push only if asked.
@@ -377,7 +378,7 @@ the local Redash instance runs at http://localhost:5000 (never driven; runtime c
    and `optionsProblem` in step. Pure model files (`chart-data.ts`, `format.ts`, `pivot-model.ts`,
    `story-models.ts`, `single-number.ts`) use `import type` from `@/…` and relative `.ts` runtime imports,
    so Node can run them. Docs and known issues: `features/visualization-types/`.
-Tests: 408 server (`dotnet test tests/QueryBuilder.Tests`), 113 client (`cd client && npm test`, Node's
+Tests: 424 server (`dotnet test tests/QueryBuilder.Tests`), 127 client (`cd client && npm test`, Node's
 built-in runner, no dependency). Both READMEs document all of the above.
 
 **Temporary state that must be cleaned up before packaging/commit**:
@@ -399,8 +400,9 @@ built-in runner, no dependency). Both READMEs document all of the above.
 - 20 `npm audit` advisories untriaged; main JS bundle ~1.3 MB (lazy-load suggested).
 - Impeccable finish-review leftovers: grey status pills on Queries/Admin lists, catalog 11px/9px labels,
   generic drag shadows, top bar mostly empty.
-- Release: 1.0.14 is on NuGet (user pushed it) and consumed by `TemplateBuilderClient`, but its code is
-  still uncommitted on `feature/rea1`. Commit/push to GitHub only when asked. The next NuGet version is 1.0.15.
+- Release: 1.0.15 is bumped and packed (`nupkg/QueryBuilder.Editor.1.0.15.nupkg`), not pushed to NuGet, and
+  its changes are uncommitted on `feature/rea1`. `TemplateBuilderClient` is on 1.0.14. NuGet push and
+  commit/push only when asked.
 
 **Discussed, not built**: full data-source registration/editing in the admin UI (name, connection
 string, provider, `AllowedSchemas`) — still raw SQL insert only, see the package README; multi-table

@@ -1,4 +1,4 @@
-import type { ColumnDataType, FilterCondition, FilterOperator, ParameterType, QueryDefinition, QueryParameter } from '@/types'
+import type { ColumnDataType, FilterCondition, FilterGroup, FilterOperator, ParameterType, QueryDefinition, QueryParameter } from '@/types'
 
 /** Wire format of parameter values, shared with the server (see ParameterBinder). */
 export type ParameterValues = Record<string, string | null>
@@ -158,6 +158,25 @@ export function pickKnown(parameters: QueryParameter[], values: ParameterValues 
   if (!values) return picked
   for (const p of parameters) if (p.name in values) picked[p.name] = values[p.name]
   return picked
+}
+
+function collectBoundNames(group: FilterGroup | null | undefined, into: Set<string>) {
+  if (!group) return
+  for (const c of group.conditions) if (c.isParameterized && c.parameterName) into.add(c.parameterName)
+  for (const g of group.groups) collectBoundNames(g, into)
+}
+
+/**
+ * A parameter exists only to feed a filter. One left without a filter would stay in the parameter
+ * bar with no way to remove it, because its settings open from the filter's chip, and a required one
+ * with no value would block Run. Returns the same object when nothing changed.
+ */
+export function dropOrphanParameters(definition: QueryDefinition): QueryDefinition {
+  const bound = new Set<string>()
+  collectBoundNames(definition.filters, bound)
+  collectBoundNames(definition.having, bound)
+  const parameters = definition.parameters.filter((p) => bound.has(p.name))
+  return parameters.length === definition.parameters.length ? definition : { ...definition, parameters }
 }
 
 // ---- URL (`p_<name>`) -----------------------------------------------------------------------
