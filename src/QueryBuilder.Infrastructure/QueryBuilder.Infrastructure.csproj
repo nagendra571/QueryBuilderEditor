@@ -13,16 +13,27 @@
     <PackageReference Include="ClosedXML" Version="0.105.1" />
     <PackageReference Include="CsvHelper" Version="33.1.0" />
     <PackageReference Include="Microsoft.Data.SqlClient" Version="7.1.0" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="9.0.9">
+    <PackageReference Include="Microsoft.Extensions.Caching.Memory" Version="10.0.14" />
+  </ItemGroup>
+
+  <!-- EF Core 10 only runs on .NET 10, so each target gets the newest EF Core it can use. -->
+  <ItemGroup Condition="'$(TargetFramework)' == 'net8.0'">
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="9.0.22">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
-    <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="9.0.9" />
-    <PackageReference Include="Microsoft.Extensions.Caching.Memory" Version="10.0.12" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="9.0.22" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(TargetFramework)' == 'net10.0'">
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.14">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="10.0.14" />
   </ItemGroup>
 
   <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <!-- Internal layer, never published on its own — bundled into QueryBuilder.Editor's package. -->

@@ -22,6 +22,7 @@ Whenever a new EF Core migration is added under `QueryBuilder.Infrastructure/Per
    dotnet tool run dotnet-ef migrations script --idempotent \
      --project src/QueryBuilder.Infrastructure \
      --startup-project src/QueryBuilder.Api \
+     --framework net10.0 \
      --output src/QueryBuilder.Editor/Scripts/QueryBuilder.schema.<version>.sql
    ```
 3. Delete the previous version's `.sql` file — it's superseded, not additive (see above).

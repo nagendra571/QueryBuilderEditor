@@ -112,9 +112,13 @@ IF NOT EXISTS (
 )
 BEGIN
     INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
-    VALUES (N'20260920223446_InitialCreate', N'9.0.9');
+    VALUES (N'20260920223446_InitialCreate', N'10.0.14');
 END;
 
+COMMIT;
+GO
+
+BEGIN TRANSACTION;
 IF NOT EXISTS (
     SELECT * FROM [__EFMigrationsHistory]
     WHERE [MigrationId] = N'20260921010653_AddAuditLog'
@@ -166,9 +170,13 @@ IF NOT EXISTS (
 )
 BEGIN
     INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
-    VALUES (N'20260921010653_AddAuditLog', N'9.0.9');
+    VALUES (N'20260921010653_AddAuditLog', N'10.0.14');
 END;
 
+COMMIT;
+GO
+
+BEGIN TRANSACTION;
 IF NOT EXISTS (
     SELECT * FROM [__EFMigrationsHistory]
     WHERE [MigrationId] = N'20260922164327_AddQueryDisabled'
@@ -183,9 +191,13 @@ IF NOT EXISTS (
 )
 BEGIN
     INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
-    VALUES (N'20260922164327_AddQueryDisabled', N'9.0.9');
+    VALUES (N'20260922164327_AddQueryDisabled', N'10.0.14');
 END;
 
+COMMIT;
+GO
+
+BEGIN TRANSACTION;
 IF NOT EXISTS (
     SELECT * FROM [__EFMigrationsHistory]
     WHERE [MigrationId] = N'20260922184156_AddCatalogScopeAndAllowedObjects'
@@ -207,12 +219,12 @@ IF NOT EXISTS (
     WHERE [MigrationId] = N'20260922184156_AddCatalogScopeAndAllowedObjects'
 )
 BEGIN
-    DECLARE @var sysname;
-    SELECT @var = [d].[name]
+    DECLARE @var nvarchar(max);
+    SELECT @var = QUOTENAME([d].[name])
     FROM [sys].[default_constraints] [d]
     INNER JOIN [sys].[columns] [c] ON [d].[parent_column_id] = [c].[column_id] AND [d].[parent_object_id] = [c].[object_id]
     WHERE ([d].[parent_object_id] = OBJECT_ID(N'[DataSources]') AND [c].[name] = N'ViewsOnly');
-    IF @var IS NOT NULL EXEC(N'ALTER TABLE [DataSources] DROP CONSTRAINT [' + @var + '];');
+    IF @var IS NOT NULL EXEC(N'ALTER TABLE [DataSources] DROP CONSTRAINT ' + @var + ';');
     ALTER TABLE [DataSources] DROP COLUMN [ViewsOnly];
 END;
 
@@ -230,9 +242,13 @@ IF NOT EXISTS (
 )
 BEGIN
     INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
-    VALUES (N'20260922184156_AddCatalogScopeAndAllowedObjects', N'9.0.9');
+    VALUES (N'20260922184156_AddCatalogScopeAndAllowedObjects', N'10.0.14');
 END;
 
+COMMIT;
+GO
+
+BEGIN TRANSACTION;
 IF NOT EXISTS (
     SELECT * FROM [__EFMigrationsHistory]
     WHERE [MigrationId] = N'20260923015436_AddDataScopeRules'
@@ -267,9 +283,13 @@ IF NOT EXISTS (
 )
 BEGIN
     INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
-    VALUES (N'20260923015436_AddDataScopeRules', N'9.0.9');
+    VALUES (N'20260923015436_AddDataScopeRules', N'10.0.14');
 END;
 
+COMMIT;
+GO
+
+BEGIN TRANSACTION;
 IF NOT EXISTS (
     SELECT * FROM [__EFMigrationsHistory]
     WHERE [MigrationId] = N'20260924191229_AddDataSourceMaxRecords'
@@ -284,9 +304,13 @@ IF NOT EXISTS (
 )
 BEGIN
     INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
-    VALUES (N'20260924191229_AddDataSourceMaxRecords', N'9.0.9');
+    VALUES (N'20260924191229_AddDataSourceMaxRecords', N'10.0.14');
 END;
 
+COMMIT;
+GO
+
+BEGIN TRANSACTION;
 IF NOT EXISTS (
     SELECT * FROM [__EFMigrationsHistory]
     WHERE [MigrationId] = N'20261103040624_AddQueryVisualizations'
@@ -322,9 +346,13 @@ IF NOT EXISTS (
 )
 BEGIN
     INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
-    VALUES (N'20261103040624_AddQueryVisualizations', N'9.0.9');
+    VALUES (N'20261103040624_AddQueryVisualizations', N'10.0.14');
 END;
 
+COMMIT;
+GO
+
+BEGIN TRANSACTION;
 IF NOT EXISTS (
     SELECT * FROM [__EFMigrationsHistory]
     WHERE [MigrationId] = N'20261103044216_AddDashboards'
@@ -428,9 +456,13 @@ IF NOT EXISTS (
 )
 BEGIN
     INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
-    VALUES (N'20261103044216_AddDashboards', N'9.0.9');
+    VALUES (N'20261103044216_AddDashboards', N'10.0.14');
 END;
 
+COMMIT;
+GO
+
+BEGIN TRANSACTION;
 IF NOT EXISTS (
     SELECT * FROM [__EFMigrationsHistory]
     WHERE [MigrationId] = N'20261103235143_AddDashboardGridPositions'
@@ -469,9 +501,13 @@ IF NOT EXISTS (
 )
 BEGIN
     INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
-    VALUES (N'20261103235143_AddDashboardGridPositions', N'9.0.9');
+    VALUES (N'20261103235143_AddDashboardGridPositions', N'10.0.14');
 END;
 
+COMMIT;
+GO
+
+BEGIN TRANSACTION;
 IF NOT EXISTS (
     SELECT * FROM [__EFMigrationsHistory]
     WHERE [MigrationId] = N'20261104005823_AddDashboardParameters'
@@ -494,7 +530,7 @@ IF NOT EXISTS (
 )
 BEGIN
     INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
-    VALUES (N'20261104005823_AddDashboardParameters', N'9.0.9');
+    VALUES (N'20261104005823_AddDashboardParameters', N'10.0.14');
 END;
 
 COMMIT;

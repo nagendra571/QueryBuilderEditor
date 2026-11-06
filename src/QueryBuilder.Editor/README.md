@@ -13,7 +13,7 @@ process to run or deploy — one call wires up the API, the UI, and the database
 
 ## Requirements
 
-- .NET 8
+- .NET 8 (uses EF Core 9) or .NET 10 (uses EF Core 10)
 - SQL Server (for both QueryBuilder's own metadata store and the business data sources it queries)
 
 ## Install

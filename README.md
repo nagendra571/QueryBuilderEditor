@@ -46,7 +46,9 @@ for how.
 
 ## Running the sample app locally
 
-**Prerequisites:** .NET 8 SDK, Node.js 18+, SQL Server (LocalDB is fine for development).
+**Prerequisites:** .NET 10 SDK, plus the .NET 8 runtime to run the tests on both frameworks, Node.js 18+,
+SQL Server (LocalDB is fine for development). The package targets .NET 8 (EF Core 9) and .NET 10 (EF Core 10);
+the sample app runs on .NET 10.
 
 ```bash
 # Backend — migrations and demo data seed automatically on first run
