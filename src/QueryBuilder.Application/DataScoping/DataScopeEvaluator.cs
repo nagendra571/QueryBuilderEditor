@@ -21,7 +21,8 @@ public static class DataScopeEvaluator
         string objectKey,
         IReadOnlyList<DataScopeRule> dataSourceRules,
         ResolvedDataScope scope,
-        IReadOnlyCollection<string> declaredKeys)
+        IReadOnlyCollection<string> declaredKeys,
+        StringComparison identifierComparison)
     {
         if (scope.IsUnrestricted)
         {
@@ -29,7 +30,7 @@ public static class DataScopeEvaluator
         }
 
         var objectRules = dataSourceRules
-            .Where(r => string.Equals(r.ObjectName, objectKey, StringComparison.OrdinalIgnoreCase))
+            .Where(r => string.Equals(r.ObjectName, objectKey, identifierComparison))
             .ToList();
 
         if (objectRules.Count == 0)

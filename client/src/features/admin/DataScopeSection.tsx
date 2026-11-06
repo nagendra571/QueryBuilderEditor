@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
+import { adminUnavailableReason, objectRowKey, qualifiedName } from '@/features/catalog/unavailable'
 import { useAdminDataScope, useUpdateDataScope } from '@/hooks/useAdmin'
 import type { AdminDataScopeObjectDto, DataScopeState } from '@/types'
 
@@ -37,6 +38,9 @@ export function DataScopeSection({ dataSourceId }: { dataSourceId: string }) {
   }
 
   const objects = data?.objects ?? []
+  const unavailable = (data?.unavailable ?? []).filter(
+    (o) => !search.trim() || qualifiedName(o.schemaName, o.name).toLowerCase().includes(search.trim().toLowerCase()),
+  )
   const visibleObjects = useMemo(() => {
     const term = search.trim().toLowerCase()
     return objects.filter((o) => {
@@ -176,7 +180,19 @@ export function DataScopeSection({ dataSourceId }: { dataSourceId: string }) {
             </div>
           )
         })}
-        {visibleObjects.length === 0 && (
+        {unavailable.map((o) => (
+          <div key={objectRowKey(o.schemaName, o.name)} className="flex flex-col gap-1 border-b border-border px-3 py-2 text-muted-foreground last:border-b-0">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="size-3.5 shrink-0 text-warning" aria-hidden="true" />
+              <span className="min-w-0 flex-1 truncate text-sm">{qualifiedName(o.schemaName, o.name)}</span>
+              <Badge variant="secondary" className="shrink-0 text-[10px] font-normal">
+                {o.kind}
+              </Badge>
+            </div>
+            <p className="pl-5 text-xs">{adminUnavailableReason(o.clashesWith)}</p>
+          </div>
+        ))}
+        {visibleObjects.length === 0 && unavailable.length === 0 && (
           <div className="px-3 py-6 text-center text-sm text-muted-foreground">No views match.</div>
         )}
       </div>

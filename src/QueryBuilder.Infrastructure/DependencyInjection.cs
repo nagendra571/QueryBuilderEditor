@@ -50,13 +50,18 @@ public static class DependencyInjection
         // Resolves connection strings for the business data sources users query (by DataSource.ConnectionStringName)
         // via the host's own IConfiguration — already registered by the host, no wiring needed here.
         services.AddSingleton<IConnectionStringResolver, ConnectionStringResolver>();
-        services.AddScoped<IDataCatalogService, SqlServerDataCatalogService>();
+        services.AddSingleton<ICatalogReader, SqlServerCatalogReader>();
+        services.AddSingleton<ICatalogReader, PostgresCatalogReader>();
+        services.AddScoped<IDataCatalogService, DataCatalogService>();
         services.AddScoped<IAppUsersDirectory, AppUsersDirectory>();
 
         services.AddSingleton<IQuerySqlBuilder, SqlServerQuerySqlBuilder>();
+        services.AddSingleton<IQuerySqlBuilder, PostgresQuerySqlBuilder>();
         services.AddSingleton<IQuerySqlBuilderFactory, QuerySqlBuilderFactory>();
 
-        services.AddScoped<IQueryExecutionService, SqlServerQueryExecutionService>();
+        services.AddScoped<SqlServerQueryExecutionService>();
+        services.AddScoped<PostgresQueryExecutionService>();
+        services.AddScoped<IQueryExecutionService, RoutingQueryExecutionService>();
         services.AddSingleton<IExportService, ExportService>();
 
         return services;

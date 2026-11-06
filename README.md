@@ -47,7 +47,7 @@ for how.
 ## Running the sample app locally
 
 **Prerequisites:** .NET 10 SDK, plus the .NET 8 runtime to run the tests on both frameworks, Node.js 18+,
-SQL Server (LocalDB is fine for development). The package targets .NET 8 (EF Core 9) and .NET 10 (EF Core 10);
+SQL Server (LocalDB is fine for development; PostgreSQL is optional, only for the PostgreSQL integration tests). The package targets .NET 8 (EF Core 9) and .NET 10 (EF Core 10);
 the sample app runs on .NET 10.
 
 ```bash
@@ -79,8 +79,11 @@ migrations, API/UI wiring, JSON options, and the authorization pipeline in one p
 
 ## Features
 
+- Business data sources on SQL Server or PostgreSQL, mixed freely on one host (QueryBuilder's own
+  tables stay on SQL Server). See "PostgreSQL data sources" below
 - Searchable catalog sidebar (schemas → tables/views → columns) with type-aware icons, sourced
-  live from `sys.tables`/`sys.views` — no manual schema configuration
+  live from the database's own catalog (`sys.tables`/`sys.views`, or `pg_class` on PostgreSQL) — no
+  manual schema configuration
 - Drag-and-drop column selection, reordering, and aliasing
 - Column totals (Sum, Average, Count, Distinct count, Min, Max) with automatic grouping and a
   totals-only filter (HAVING) — no separate "Group By" step
@@ -136,6 +139,54 @@ migrations, API/UI wiring, JSON options, and the authorization pipeline in one p
 - Auto-registers a default data source (against its own connection string) on first run so the
   catalog is never empty out of the box
 - Compact/comfortable density modes, light/dark theme
+
+## PostgreSQL data sources
+
+A data source can be a PostgreSQL database instead of SQL Server, with the same catalog, builder,
+parameters, run, export, charts, dashboards, sharing, record limits and row-level scope. One host can
+use both kinds at once.
+
+**QueryBuilder's own tables stay on SQL Server.** `options.ConnectionString` must point at SQL Server,
+so a company that only runs PostgreSQL still needs SQL Server for QueryBuilder itself.
+
+1. Add an Npgsql connection string (including its SSL options) under `ConnectionStrings`:
+   `"SalesPg": "Host=db.example.com;Port=5432;Database=sales;Username=qb_reader;Password=...;SSL Mode=Require"`.
+2. Insert a row into the metadata database's `DataSources` table with `Provider = 1`:
+
+```sql
+INSERT INTO DataSources (Id, Name, Provider, ConnectionStringName, AllowedSchemas, AllowedObjects, CatalogScope, IsActive, CreatedBy, CreatedAtUtc)
+VALUES (NEWID(), 'Sales PG', 1, 'SalesPg', '', '', 2, 1, 'admin', SYSUTCDATETIME());
+```
+
+Empty `AllowedSchemas`/`AllowedObjects` mean no restriction. `CatalogScope` is an integer: `0` views
+only, `1` tables only, `2` both. Partition children, `information_schema`, `pg_*` schemas and anything
+the login can't read are hidden.
+
+Use a read-only login: queries run in a read-only transaction with a 60-second timeout, but that
+guards against mistakes, not a hostile database. Sharing on a PostgreSQL source uses an opt-in view
+`public.app_users` with columns `id`, `display_name` and `email`; without it sharing is reported as
+not available.
+
+Limits to know about:
+
+- `money` displays as the database formats it (`$12.50`) and can't be totaled or charted. Workaround:
+  a view casting it to `numeric`.
+- `numeric` beyond what `decimal` holds displays exactly, but charts plot it at the nearest double.
+- Objects whose `schema.name` clash, ignoring case (`public.Orders` and `public.orders`), are shown
+  disabled and can't be used. Scoped users don't see them. Use a uniquely named view.
+- Columns with a nondeterministic collation can't be scope columns.
+- `NaN` and `Infinity` display as blank.
+- Equals on `citext` is case-sensitive.
+- Enum columns filtered through `::text` don't use their index.
+- The login should be read-only anyway.
+- PostgreSQL 12 is the minimum: the catalog reads `collisdeterministic`.
+- A table the login can read only through column-level grants doesn't appear; grant `SELECT` on the whole table or add a view.
+- An object name containing a comma can't be allowlisted.
+- Sessions are pinned to UTC, so a `timestamptz` displays and filters as UTC, and `current_date` or `::date` inside a view follows UTC rather than the database's time zone.
+- A value over Excel's 32,767-character cell limit refuses the Excel export with the row and column named; CSV export still works.
+- PgBouncer is untested.
+
+The package README has the full guide.
 
 ## Roadmap
 

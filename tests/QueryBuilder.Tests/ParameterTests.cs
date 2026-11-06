@@ -614,6 +614,22 @@ public class ParameterOptionsServiceTests
     }
 
     [Fact]
+    public async Task Conventional_name_and_value_columns_match_by_exact_case_first_then_ignoring_case()
+    {
+        var (service, f) = Arrange();
+        f.Executor.Result = VizFixture.Result([Row(("Id", 1), ("Name", "Program A"), ("Value", 10L))],
+            columns: [("Id", ColumnDataType.Number), ("Name", ColumnDataType.Text), ("Value", ColumnDataType.Number)]);
+
+        Assert.Equal([new ParameterOption("Program A", "10")], await service.GetOptionsAsync(For(f), default));
+
+        var (service2, f2) = Arrange();
+        f2.Executor.Result = VizFixture.Result([Row(("x", 1), ("name", "lower"), ("NAME", "upper"), ("value", 5L))],
+            columns: [("x", ColumnDataType.Number), ("name", ColumnDataType.Text), ("NAME", ColumnDataType.Text), ("value", ColumnDataType.Number)]);
+
+        Assert.Equal([new ParameterOption("lower", "5")], await service2.GetOptionsAsync(For(f2), default));
+    }
+
+    [Fact]
     public async Task The_first_column_is_label_and_value_otherwise()
     {
         var (service, f) = Arrange();

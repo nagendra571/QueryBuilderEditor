@@ -4,7 +4,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/nagendra571/QueryBuilderEditor/blob/main/LICENSE)
 
 A visual, no-SQL-required query builder for business users, embeddable as a Razor-free ASP.NET
-Core component: browse a catalog of your SQL Server views and tables, build a query by dragging
+Core component: browse a catalog of your SQL Server or PostgreSQL views and tables, build a query by dragging
 columns and setting filters/sorts, preview the generated SQL, run it, export to CSV/Excel, and
 share it — all backed by a full audit trail of who did what and when.
 
@@ -14,7 +14,8 @@ process to run or deploy — one call wires up the API, the UI, and the database
 ## Requirements
 
 - .NET 8 (uses EF Core 9) or .NET 10 (uses EF Core 10)
-- SQL Server (for both QueryBuilder's own metadata store and the business data sources it queries)
+- SQL Server for QueryBuilder's own metadata store (always), and for business data sources
+- PostgreSQL is supported for business data sources too (see "PostgreSQL data sources")
 
 ## Install
 
@@ -80,18 +81,90 @@ fatal, if it can't (e.g. the schema isn't provisioned yet in a DBA-managed setup
 
 No admin UI registers additional business data sources yet in this release — insert a row into the
 `DataSources` table (or run your own seeding code) pointing `ConnectionStringName` at another
-entry under `ConnectionStrings` in your configuration. The catalog sidebar reads directly from
-that source's `sys.tables`/`sys.views`.
+entry under `ConnectionStrings` in your configuration. For SQL Server the catalog sidebar reads
+directly from that source's `sys.tables`/`sys.views`.
 
 ```sql
-INSERT INTO DataSources (Id, Name, Description, Provider, ConnectionStringName, AllowedSchemas, ViewsOnly, IsActive, CreatedBy, CreatedAtUtc)
-VALUES (NEWID(), 'Reporting', 'Views over the reporting database', 0, 'ReportingDb', 'reporting', 1, 1, 'system-seed', SYSUTCDATETIME());
+INSERT INTO DataSources (Id, Name, Description, Provider, ConnectionStringName, AllowedSchemas, AllowedObjects, CatalogScope, IsActive, CreatedBy, CreatedAtUtc)
+VALUES (NEWID(), 'Reporting', 'Views over the reporting database', 0, 'ReportingDb', 'reporting', '', 0, 1, 'system-seed', SYSUTCDATETIME());
 ```
 
 `ConnectionStringName` ('ReportingDb' above) must match a key under `ConnectionStrings` in your
 own configuration — QueryBuilder resolves it through your app's `IConfiguration`, never stores the
-raw string itself. `ViewsOnly = 1` is recommended: keep business logic in SQL views and let
-business users only ever pick from those, not raw tables.
+raw string itself. `Provider` is `0` for SQL Server and `1` for PostgreSQL. `AllowedSchemas` and
+`AllowedObjects` are comma-separated lists; an empty string means no restriction. `CatalogScope` is an
+integer: `0` = views only (recommended: keep business logic in SQL views and let business users only
+ever pick from those, not raw tables), `1` = tables only, `2` = tables and views.
+
+## PostgreSQL data sources
+
+A data source can be a PostgreSQL database instead of SQL Server. Business users get the same
+catalog, builder, parameters, run, export, charts, dashboards, sharing, record limits and row-level
+scope. One host can use both kinds of source at the same time, and a dashboard can mix tiles from both.
+
+**QueryBuilder's own tables stay on SQL Server.** `options.ConnectionString` (the metadata store) must
+still point at SQL Server, so a company that only runs PostgreSQL still needs a SQL Server database
+for QueryBuilder itself. Only the business data sources can be PostgreSQL.
+
+**1. Add an Npgsql connection string.** The entry uses Npgsql syntax, including its SSL options:
+
+```json
+{
+  "ConnectionStrings": {
+    "SalesPg": "Host=db.example.com;Port=5432;Database=sales;Username=qb_reader;Password=...;SSL Mode=Require"
+  }
+}
+```
+
+**2. Register the data source** in the metadata database (SQL Server), with `Provider = 1`:
+
+```sql
+INSERT INTO DataSources (Id, Name, Provider, ConnectionStringName, AllowedSchemas, AllowedObjects, CatalogScope, IsActive, CreatedBy, CreatedAtUtc)
+VALUES (NEWID(), 'Sales PG', 1, 'SalesPg', '', '', 2, 1, 'admin', SYSUTCDATETIME());
+```
+
+`AllowedSchemas` and `AllowedObjects` are empty here, which means no restriction. `CatalogScope` `2`
+shows tables and views; use `0` for views only. Table kinds shown: ordinary, partitioned (parent
+only), and foreign tables as tables; views and materialized views as views. Partition children, the
+`information_schema` and `pg_*` schemas are hidden, and so is anything the login can't read.
+
+**Use a read-only login.** Give the `Username` above only `SELECT` on what business users should see.
+QueryBuilder also runs every query in a read-only transaction with a 60-second timeout, but that
+guards against mistakes, not against a hostile database.
+
+**Sharing** uses an opt-in view `public.app_users` in that PostgreSQL database, with the columns
+`id`, `display_name` and `email`. `id` is read as text and must equal what `ActorResolver` returns.
+Without the view, sharing is reported as not available for that data source.
+
+```sql
+CREATE VIEW public.app_users AS
+SELECT id, display_name, email FROM your_users_table;
+```
+
+**Limits to know about**
+
+- `money` columns display as the database formats them (`$12.50`) and can't be totaled or charted.
+  Workaround: a view that casts the column to `numeric`.
+- `numeric` values beyond what .NET's `decimal` holds display exactly in the grid and exports, but
+  charts plot them at the nearest double.
+- Objects whose `schema.name` clash, ignoring case, with another object (for example `public.Orders`
+  and `public.orders`) are shown disabled and can't be used. Scoped users don't see them at all. Add a
+  uniquely named view over the one you want to expose.
+- A column with a nondeterministic collation can't be a scope column.
+- `NaN` and `Infinity` display as blank.
+- Equals on a `citext` column is case-sensitive. Contains, Starts with and Ends with ignore case.
+- Filtering an enum column goes through `::text`, so it doesn't use the column's index.
+- Column aliases longer than 63 bytes are refused.
+- The login should be read-only anyway (above).
+- PostgreSQL 12 is the minimum: the catalog reads `collisdeterministic`.
+- A table the login can read only through column-level grants doesn't appear; grant `SELECT` on the whole table or add a view.
+- An object name containing a comma can't be allowlisted.
+- Sessions are pinned to UTC, so a `timestamptz` displays and filters as UTC, and `current_date` or `::date` inside a view follows UTC rather than the database's time zone.
+- A value over Excel's 32,767-character cell limit refuses the Excel export with the row and column named; CSV export still works.
+- PgBouncer is untested.
+
+Result ordering follows PostgreSQL: `NULL`s sort last ascending, and `AVG` of integers keeps its
+fraction.
 
 ## Author Identity (CreatedBy)
 
@@ -129,6 +202,8 @@ SELECT Id, DisplayName, Email FROM YourExistingUsersTable;
 - `Id` **must equal exactly what `ActorResolver` returns for that person** — it's what access
   checks match against, the same way `CreatedBy` is stamped.
 - `DisplayName` and `Email` are just for the picker UI.
+
+(PostgreSQL data sources use `public.app_users` instead, see "PostgreSQL data sources".)
 
 The Share dialog only appears once this view is queryable for a query's data source — no separate
 setting to flip. Since each data source can define its own `AppUsers`, sharing is naturally scoped:
@@ -446,6 +521,7 @@ Every failing check includes a one-line fix. Returns 404 outside Development.
 
 ## What's included
 
+- Business data sources on SQL Server or PostgreSQL, mixed freely on one host
 - Searchable catalog sidebar (schemas → tables/views → columns) with type-aware icons
 - Drag-and-drop column selection, reordering, and aliasing
 - Column totals (Sum, Average, Count, Distinct count, Min, Max) with automatic grouping and a

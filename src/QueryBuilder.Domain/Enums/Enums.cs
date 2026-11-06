@@ -34,6 +34,11 @@ public enum SchemaObjectKind
     View = 1
 }
 
+public enum UnavailableReason
+{
+    NameClash = 0
+}
+
 public enum JoinType
 {
     Inner = 0,

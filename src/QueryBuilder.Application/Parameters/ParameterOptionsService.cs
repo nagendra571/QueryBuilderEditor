@@ -95,7 +95,7 @@ public sealed class ParameterOptionsService(
         var fetch = limit is { } l ? Math.Min(l, MaxFetchRows) : MaxFetchRows;
         var result = await executionService.ExecuteAsync(dataSource, generated, new Dictionary<string, string?>(), fetch, ct);
 
-        var (labelColumn, valueColumn) = PickColumns(parameter, result);
+        var (labelColumn, valueColumn) = PickColumns(parameter, result, IdentifierMatching.Comparison(dataSource.Provider));
 
         var options = new List<ParameterOption>();
         var seen = new HashSet<string>(StringComparer.Ordinal);
@@ -115,7 +115,7 @@ public sealed class ParameterOptionsService(
         return options;
     }
 
-    private static (string Label, string Value) PickColumns(QueryParameter parameter, QueryResultSet result)
+    private static (string Label, string Value) PickColumns(QueryParameter parameter, QueryResultSet result, StringComparison comparison)
     {
         if (result.Columns.Count == 0)
         {
@@ -123,7 +123,7 @@ public sealed class ParameterOptionsService(
         }
 
         string? Find(string? wanted) =>
-            string.IsNullOrWhiteSpace(wanted) ? null : result.Columns.FirstOrDefault(c => string.Equals(c.Name, wanted, StringComparison.OrdinalIgnoreCase))?.Name;
+            string.IsNullOrWhiteSpace(wanted) ? null : result.Columns.FirstOrDefault(c => string.Equals(c.Name, wanted, comparison))?.Name;
 
         var configuredLabel = Find(parameter.OptionsLabelColumn);
         var configuredValue = Find(parameter.OptionsValueColumn);
@@ -136,8 +136,13 @@ public sealed class ParameterOptionsService(
             throw new CatalogValidationException($"{ParameterTypes.Title(parameter)}: the source query has no column '{parameter.OptionsValueColumn}'.");
         }
 
-        var named = Find("name");
-        var valued = Find("value");
+        // Conventional names aren't identifiers being authorized, so a differently-cased alias still counts.
+        string? FindConvention(string wanted) =>
+            result.Columns.FirstOrDefault(c => c.Name == wanted)?.Name
+            ?? result.Columns.FirstOrDefault(c => string.Equals(c.Name, wanted, StringComparison.OrdinalIgnoreCase))?.Name;
+
+        var named = FindConvention("name");
+        var valued = FindConvention("value");
         var first = result.Columns[0].Name;
 
         var value = configuredValue ?? configuredLabel ?? valued ?? named ?? first;

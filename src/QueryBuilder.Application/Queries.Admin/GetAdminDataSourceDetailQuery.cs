@@ -18,6 +18,7 @@ public sealed class GetAdminDataSourceDetailQueryHandler(
             ?? throw new NotFoundException(nameof(DataSource), request.Id);
 
         var objects = await catalogService.GetRawObjectsAsync(request.Id, cancellationToken);
+        var unavailable = await catalogService.GetUnavailableObjectsAsync(request.Id, cancellationToken);
 
         return new AdminDataSourceDetailDto(
             dataSource.Id,
@@ -26,6 +27,7 @@ public sealed class GetAdminDataSourceDetailQueryHandler(
             dataSource.AllowedObjects,
             objects,
             dataSource.MaxRecords,
-            recordLimitSettings.DefaultMaxRecords);
+            recordLimitSettings.DefaultMaxRecords,
+            unavailable);
     }
 }

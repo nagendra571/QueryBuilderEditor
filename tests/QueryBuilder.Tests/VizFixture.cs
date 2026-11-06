@@ -172,6 +172,7 @@ internal sealed class VizFixture
             return Task.CompletedTask;
         }
         public Task<List<SchemaObjectMetadata>> GetRawObjectsAsync(Guid dataSourceId, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<List<AdminUnavailableObject>> GetUnavailableObjectsAsync(Guid dataSourceId, CancellationToken cancellationToken) => Task.FromResult(new List<AdminUnavailableObject>());
         public void InvalidateCatalogCache(Guid dataSourceId) { }
     }
 

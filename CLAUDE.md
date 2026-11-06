@@ -31,7 +31,15 @@ src/
   QueryBuilder.Domain           entities, enums, QueryDefinition model — no dependencies
   QueryBuilder.Application      commands/queries (hand-rolled mediator, not MediatR — see below),
                                  validation, service abstractions
-  QueryBuilder.Infrastructure   EF Core, SQL generation, catalog introspection, audit log, export
+  QueryBuilder.Infrastructure   EF Core, SQL generation, catalog introspection, audit log, export.
+                                 Per-provider pieces (SQL Server and PostgreSQL): `Sql/ISqlDialect` +
+                                 `SqlServerDialect`/`PostgresDialect` under one shared `SqlQueryBuilder`;
+                                 `Catalog/ICatalogReader` (`SqlServerCatalogReader`, `PostgresCatalogReader`)
+                                 behind the shared `DataCatalogService` (cache, `ValidateAsync`,
+                                 unavailable objects); `Execution/RoutingQueryExecutionService` picks
+                                 `SqlServerQueryExecutionService` or `PostgresQueryExecutionService` (+
+                                 `PostgresValueParser`) by provider; `Application/Common/IdentifierMatching`
+                                 supplies the per-provider name comparer
   QueryBuilder.Editor           the published package: DI/endpoint wiring, access control,
                                  setup diagnostics, embedded React app (wwwroot/)
   QueryBuilder.Api              sample host app — dotnet run this to try it locally
@@ -69,7 +77,11 @@ separate, deliberate asks, not implied by "implement this."
    cp -r client/dist/assets src/QueryBuilder.Editor/wwwroot/assets
    cp client/dist/index.html src/QueryBuilder.Editor/wwwroot/index.html
    ```
-3. Verify before packaging (`dotnet test tests/QueryBuilder.Tests` plus a real run) — see "Testing" below. Don't skip this; several real bugs (EF tracking,
+3. **Required before any package release: run `dotnet test tests/QueryBuilder.Tests` with `QB_TEST_POSTGRES` and
+   `QB_TEST_METADATA_SQLSERVER` set, on both `net8.0` and `net10.0`** (details under "Testing"). A skipped
+   integration test counts as *not verified*, not as passed; if either variable can't be set, say so instead of
+   claiming the release is verified.
+   Verify before packaging (`dotnet test tests/QueryBuilder.Tests` plus a real run) — see "Testing" below. Don't skip this; several real bugs (EF tracking,
    Radix ScrollArea, a Zustand infinite-loop) were only caught by actually running the flow, not
    by reading the code or type-checking alone.
 4. Only once asked to "bump the version and prepare the package": bump `<Version>` in
@@ -93,9 +105,14 @@ version was hit once already).
 
 ## Testing
 
-- `dotnet test tests/QueryBuilder.Tests` — run before packaging; it's fast, needs no database
-  (`SqlServerDataCatalogService` tests pre-seed `IMemoryCache` with `catalog:{id}` instead) and runs on both
-  `net8.0` and `net10.0`. The sample app is `net10.0` only, so a real run never exercises EF 9: to check `net8.0`,
+- `dotnet test tests/QueryBuilder.Tests` — run before packaging; it's fast, needs no database by default
+  (`DataCatalogService` tests pre-seed `IMemoryCache` with `catalog:{id}` instead) and runs on both
+  `net8.0` and `net10.0`. Two groups of tests **skip themselves** unless an environment variable is set, and a
+  skip is not a pass:
+  - `QB_TEST_POSTGRES`: a superuser connection string to a throwaway PostgreSQL server. The fixture creates a
+    throwaway database and a role `qb_it_reader`, and needs trust authentication for that role.
+  - `QB_TEST_METADATA_SQLSERVER`: a SQL Server connection string with **no** database (LocalDB is fine). The
+    fixture creates and drops `qb_meta_it_<guid>`. The sample app is `net10.0` only, so a real run never exercises EF 9: to check `net8.0`,
   pack to a scratch folder and run a throwaway multi-target host from that package against a throwaway database.
 - `cd client && npm test` — pure chart maths under `client/tests/`, on Node's built-in runner. Views have
   no render tests, so layout needs a real browser check; Recharts animates, so wait about 4 seconds before
@@ -216,6 +233,29 @@ unless asked): QueryBuilder wiring in `Program.cs`, `DevPersonas.cs`, a Personas
   per-data-source override; unset = legacy behavior.
 
 ## Known sharp edges (already hit once — don't reintroduce)
+
+- **PostgreSQL reads are text-mode on purpose.** `PostgresQueryExecutionService` sets
+  `AllResultTypesAreUnknown = true` and parses each cell by its reported type in `PostgresValueParser`, because
+  Npgsql's typed reads throw on values .NET can't hold (`infinity`, BC and year>9999 dates, huge `numeric`). A
+  `numeric` becomes `decimal` only if formatting it back gives the identical string; otherwise it stays text.
+  Don't switch to typed reads.
+- **PostgreSQL session settings only apply when pinned to one transaction.** Read-only, `statement_timeout`,
+  `DateStyle`, `TimeZone`, `IntervalStyle` and `extra_float_digits` are set with `LOCAL` inside the execution's
+  transaction, which is rolled back. Never set them session-wide: pooled connections (and PgBouncer) would leak
+  them to other callers.
+- **`::text` and collations on PostgreSQL.** Text and Unknown columns are cast `::text` in filters and scope
+  predicates; contains/starts/ends use `col::text COLLATE "default" ILIKE @p ESCAPE ''` (`ILIKE` errors on a
+  nondeterministic collation even after `::text`; `ESCAPE ''` stops `\` acting as an escape). But `IN` with
+  `::text` still follows a nondeterministic column's collation (`'acme'` matched `ACME`), so such a column can't
+  be a scope column. Whole numbers bind as `bigint`, not `decimal`, or Postgres casts the column and skips its
+  index.
+- **Clashing `schema.name` objects (PostgreSQL) are unavailable, not hidden.** Names equal ignoring case
+  (`public.Orders` / `public.orders`, or `a.b`+`c` vs `a`+`b.c`) go to `DataSourceCatalog.UnavailableObjects`
+  (no columns, never in `Schemas`), because `DataScopeRules`' unique index is case-insensitive on typical
+  metadata collations. Scoped users get none of them. Saving data scope or catalog policy must carry existing
+  decisions on unavailable objects forward. Identifier matching goes through the provider's comparer
+  (`IdentifierMatching`: Ordinal for PostgreSQL, OrdinalIgnoreCase for SQL Server), never a hardcoded
+  `OrdinalIgnoreCase`.
 
 - **Zustand selectors must never return a newly-constructed array/object** (e.g.
   `useStore(s => s.items.filter(...))`). Breaks `useSyncExternalStore`'s snapshot-stability
@@ -397,7 +437,16 @@ the local Redash instance runs at http://localhost:5000 (never driven; runtime c
    and `optionsProblem` in step. Pure model files (`chart-data.ts`, `format.ts`, `pivot-model.ts`,
    `story-models.ts`, `single-number.ts`) use `import type` from `@/…` and relative `.ts` runtime imports,
    so Node can run them. Docs and known issues: `features/visualization-types/`.
-Tests: 424 server on each framework (`dotnet test tests/QueryBuilder.Tests`), 130 client (`cd client && npm test`, Node's
+**PostgreSQL data sources — committed on branch `feature/rea1`, not merged to `main` (release 1.2.0).
+Accepted on PostgreSQL 16 on both targets from a packed test package; not yet run in `TemplateBuilderClient` or on
+the hosted site. See `VERIFICATION.md`, including what wasn't verified.** A data source with `Provider = 1` is queried
+through Npgsql (9.0.5 on `net8.0`, 10.0.3 on `net10.0`); QueryBuilder's own metadata store stays on SQL Server,
+and no migration or DBA script is involved. Same catalog, builder, parameters, charts, dashboards, sharing
+(`public.app_users`: `id`, `display_name`, `email`), record limits and data scope as SQL Server; SQL Server SQL
+stays byte-identical. Limits (documented in both READMEs): `money` shown as text, huge `numeric` charted at the
+nearest double, clashing names unavailable, nondeterministic scope columns refused, NaN/Infinity blank,
+PgBouncer untested. Docs: `docs/redash-parity/features/postgresql/` (SPEC, PLAN, ANALYSIS, VERIFICATION).
+Tests: 820 server on each framework with both database variables set (591 pass and the rest skip without them) (`dotnet test tests/QueryBuilder.Tests`), 143 client (`cd client && npm test`, Node's
 built-in runner, no dependency). Both READMEs document all of the above.
 
 **Temporary state that must be cleaned up before packaging/commit**:
@@ -419,11 +468,14 @@ built-in runner, no dependency). Both READMEs document all of the above.
 - 20 `npm audit` advisories untriaged; main JS bundle ~1.3 MB (lazy-load suggested).
 - Impeccable finish-review leftovers: grey status pills on Queries/Admin lists, catalog 11px/9px labels,
   generic drag shadows, top bar mostly empty.
-- Release: 1.1.0 is published (bundle `index-KbAyoLt7.js`) and committed on `feature/rea1`. NuGet push and
-  commit/push only when asked.
-- `System.Security.Cryptography.Pkcs` advisories (GHSA-846f-f764-76mx high, GHSA-2fmv-rv2c-59x7 moderate): brought in
-  by `Microsoft.Data.SqlClient` 7.1.0 at 8.0.1 on `net8.0` and 9.0.18 on `net10.0`; patched in 8.0.2, 9.0.21 and 10.0.13.
-  Not fixed yet.
+- Release: 1.1.0 is published (bundle `index-KbAyoLt7.js`) and committed on `feature/rea1`. **1.2.0 (PostgreSQL data
+  sources, `Pkcs` fix, bundle `index-CXBS3rAW.js`) is packed at `nupkg/` and its code is committed on `feature/rea1`, not merged to `main`.
+  It wasn't on nuget.org when committed, so confirm that before calling it published.** Any further change after the
+  user pushes it needs a new version. NuGet push and commit/push only when asked.
+- `System.Security.Cryptography.Pkcs` advisories (GHSA-846f-f764-76mx high, GHSA-2fmv-rv2c-59x7 moderate): fixed for the
+  next release by a direct pin in `Infrastructure` and `Editor` (8.0.2 on `net8.0`, 10.0.14 on `net10.0`), since
+  `Microsoft.Data.SqlClient` through 7.1.1 still brings 8.0.1 and 9.0.18. Published 1.1.0 and earlier still carry them.
+  Drop the pin once SqlClient moves past those versions.
 
 **Discussed, not built**: full data-source registration/editing in the admin UI (name, connection
 string, provider, `AllowedSchemas`) — still raw SQL insert only, see the package README; multi-table

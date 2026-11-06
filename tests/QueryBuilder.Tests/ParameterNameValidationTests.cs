@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Logging.Abstractions;
 using QueryBuilder.Application.Common;
 using QueryBuilder.Application.Exceptions;
 using QueryBuilder.Domain.Enums;
@@ -23,11 +24,11 @@ public class ParameterNameValidationTests
     public void IsValid(string? name, bool expected) => Assert.Equal(expected, QueryParameterNames.IsValid(name));
 
     // GetCatalogAsync is served from the cache, so ValidateAsync never touches a database here.
-    private static SqlServerDataCatalogService CatalogService()
+    private static DataCatalogService CatalogService()
     {
         var cache = new MemoryCache(new MemoryCacheOptions());
         cache.Set($"catalog:{TestData.DataSourceId}", TestData.Catalog());
-        return new SqlServerDataCatalogService(null!, null!, cache);
+        return new DataCatalogService(null!, null!, [], cache, NullLogger<DataCatalogService>.Instance);
     }
 
     private static QueryDefinition ParameterizedDefinition(string parameterName)

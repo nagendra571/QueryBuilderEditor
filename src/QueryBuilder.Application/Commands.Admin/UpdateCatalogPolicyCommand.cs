@@ -21,11 +21,21 @@ public sealed class UpdateCatalogPolicyCommandHandler(
         var dataSource = await repository.GetByIdAsync(request.DataSourceId, cancellationToken)
             ?? throw new NotFoundException(nameof(DataSource), request.DataSourceId);
 
+        var comparer = IdentifierMatching.Comparer(dataSource.Provider);
         var rawObjects = await catalogService.GetRawObjectsAsync(request.DataSourceId, cancellationToken);
         var kindByKey = rawObjects
-            .GroupBy(o => $"{o.SchemaName}.{o.Name}", StringComparer.OrdinalIgnoreCase)
-            .ToDictionary(g => g.Key, g => g.First().Kind, StringComparer.OrdinalIgnoreCase);
-        var unknown = request.AllowedObjects.Where(key => !kindByKey.ContainsKey(key)).ToList();
+            .GroupBy(o => $"{o.SchemaName}.{o.Name}", comparer)
+            .ToDictionary(g => g.Key, g => g.First().Kind, comparer);
+
+        // An entry that was already allowed and has since become unavailable stays, or saving any
+        // other change would be refused; a newly added one is still unknown.
+        var unavailableKeys = (await catalogService.GetUnavailableObjectsAsync(request.DataSourceId, cancellationToken))
+            .Select(u => $"{u.SchemaName}.{u.Name}")
+            .ToHashSet(comparer);
+        var keptUnavailable = dataSource.AllowedObjects.Where(unavailableKeys.Contains).ToHashSet(comparer);
+        var unknown = request.AllowedObjects
+            .Where(key => !kindByKey.ContainsKey(key) && !keptUnavailable.Contains(key))
+            .ToList();
         if (unknown.Count > 0)
         {
             throw new CatalogValidationException($"Unknown table/view reference(s): {string.Join(", ", unknown)}.");
@@ -34,7 +44,7 @@ public sealed class UpdateCatalogPolicyCommandHandler(
         if (request.CatalogScope != CatalogScope.TablesAndViews)
         {
             var requiredKind = request.CatalogScope == CatalogScope.Tables ? SchemaObjectKind.Table : SchemaObjectKind.View;
-            var outOfScope = request.AllowedObjects.Where(key => kindByKey[key] != requiredKind).ToList();
+            var outOfScope = request.AllowedObjects.Where(key => kindByKey.TryGetValue(key, out var kind) && kind != requiredKind).ToList();
             if (outOfScope.Count > 0)
             {
                 throw new CatalogValidationException(

@@ -27,9 +27,13 @@
     <PackageReference Include="Microsoft.Extensions.Caching.Memory" Version="10.0.14" />
   </ItemGroup>
   <ItemGroup Condition="'$(TargetFramework)' == 'net8.0'">
+    <PackageReference Include="System.Security.Cryptography.Pkcs" Version="8.0.2" />
+    <PackageReference Include="Npgsql" Version="9.0.5" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="9.0.22" />
   </ItemGroup>
   <ItemGroup Condition="'$(TargetFramework)' == 'net10.0'">
+    <PackageReference Include="System.Security.Cryptography.Pkcs" Version="10.0.14" />
+    <PackageReference Include="Npgsql" Version="10.0.3" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="10.0.14" />
   </ItemGroup>
 
@@ -45,7 +49,7 @@
     <PackageId>QueryBuilder.Editor</PackageId>
     <!-- Bump alongside a new EF Core migration, then regenerate Scripts/QueryBuilder.schema.<version>.sql
          (see Scripts/README.md) so DBA-managed deployments have a matching provisioning script. -->
-    <Version>1.1.0</Version>
+    <Version>1.2.0</Version>
     <Authors>Nagendra Chinnam</Authors>
     <Description>Visual, no-SQL-required query builder for business users: browse a catalog of SQL Server views/tables, build queries by dragging columns and setting filters/sorts, preview generated SQL, run and export results, with a full audit trail. Ships as an embeddable ASP.NET Core component with its UI built in — call AddQueryBuilderEditor() then app.UseQueryBuilderEditorUI() + app.MapQueryBuilderEditor().</Description>
     <PackageTags>query-builder;sql;low-code;reporting;data-analytics;aspnetcore</PackageTags>

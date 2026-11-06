@@ -91,17 +91,45 @@ public static class VisualizationDataChecks
     }
 
     private static bool AnyNegative(List<Dictionary<string, object?>> rows, string column) =>
-        rows.Any(r => r[column] is { } value && TryToDecimal(value) is < 0);
+        rows.Any(r => r[column] is { } value && IsNegative(value));
 
-    private static decimal? TryToDecimal(object value)
+    private static bool IsNegative(object value)
     {
         try
         {
-            return Convert.ToDecimal(value, CultureInfo.InvariantCulture);
+            // Postgres numeric text can exceed decimal in either direction (huge, or tiny enough to round to zero),
+            // and decimal would lose the sign; the client's toNumber uses a double, so the server must too.
+            if (value is string text)
+            {
+                return double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var d) && d < 0;
+            }
+
+            // decimal would round a tiny negative double to zero.
+            if (value is double dv)
+            {
+                return dv < 0;
+            }
+            if (value is float fv)
+            {
+                return fv < 0;
+            }
+
+            return Convert.ToDecimal(value, CultureInfo.InvariantCulture) < 0;
         }
-        catch (Exception ex) when (ex is FormatException or InvalidCastException or OverflowException)
+        catch (OverflowException)
         {
-            return null;
+            try
+            {
+                return Convert.ToDouble(value, CultureInfo.InvariantCulture) < 0;
+            }
+            catch (Exception ex) when (ex is FormatException or InvalidCastException or OverflowException)
+            {
+                return false;
+            }
+        }
+        catch (Exception ex) when (ex is FormatException or InvalidCastException)
+        {
+            return false;
         }
     }
 }

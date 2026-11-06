@@ -1,3 +1,4 @@
+import { providerLabel } from '@/features/catalog/unavailable'
 import { Loader2 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { Badge } from '@/components/ui/badge'
@@ -44,7 +45,7 @@ export function AdminDataSourcesPage() {
             {(data ?? []).map((ds) => (
               <TableRow key={ds.id} className="cursor-pointer" onClick={() => navigate(`/admin/data-sources/${ds.id}`)}>
                 <TableCell className="font-medium">{ds.name}</TableCell>
-                <TableCell className="text-xs text-muted-foreground">{ds.provider}</TableCell>
+                <TableCell className="text-xs text-muted-foreground">{providerLabel(ds.provider)}</TableCell>
                 <TableCell>
                   <Badge variant={ds.isActive ? 'secondary' : 'outline'} className="text-xs font-normal">
                     {ds.isActive ? 'Active' : 'Inactive'}

@@ -12,7 +12,8 @@ public sealed record AdminDataSourceDetailDto(
     List<string> AllowedObjects,
     List<SchemaObjectMetadata> Objects,
     int? MaxRecords,
-    int? DefaultMaxRecords);
+    int? DefaultMaxRecords,
+    List<AdminUnavailableObject> Unavailable);
 
 public sealed record UpdateCatalogPolicyRequest(CatalogScope CatalogScope, List<string> AllowedObjects);
 
@@ -22,7 +23,8 @@ public sealed record UpdateRecordLimitRequest(int? MaxRecords);
 public sealed record AdminDataScopeDto(
     bool Enabled,
     List<string> DeclaredKeys,
-    List<AdminDataScopeObjectDto> Objects);
+    List<AdminDataScopeObjectDto> Objects,
+    List<AdminUnavailableObject> Unavailable);
 
 /// <param name="Mappings">Declared scope key → column name, only for <see cref="DataScopeState.Scoped"/>.</param>
 /// <param name="StaleKeys">Keys mapped in the database that the host no longer declares — the

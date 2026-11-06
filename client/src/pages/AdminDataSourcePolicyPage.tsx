@@ -1,5 +1,5 @@
-import { ArrowLeft, Loader2, Save, Search } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { AlertTriangle, ArrowLeft, Loader2, Save, Search } from 'lucide-react'
+import { useId, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -9,6 +9,8 @@ import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { DataScopeSection } from '@/features/admin/DataScopeSection'
 import { RecordLimitSection } from '@/features/admin/RecordLimitSection'
+import { initialAllowlist, pruneAllowlist } from '@/features/catalog/allowlist'
+import { adminUnavailableReason, objectRowKey, qualifiedName } from '@/features/catalog/unavailable'
 import { useAdminDataSourceDetail, useUpdateCatalogPolicy } from '@/hooks/useAdmin'
 import type { CatalogScope } from '@/types'
 
@@ -16,6 +18,7 @@ export function AdminDataSourcePolicyPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const { data, isLoading, isError } = useAdminDataSourceDetail(id)
+  const idPrefix = useId()
   const updatePolicy = useUpdateCatalogPolicy(id!)
 
   const [scope, setScope] = useState<CatalogScope | null>(null)
@@ -38,6 +41,11 @@ export function AdminDataSourcePolicyPage() {
     })
   }, [data, effectiveScope, search])
 
+  const unavailableObjects = (data?.unavailable ?? []).filter((o) => {
+    const term = search.trim().toLowerCase()
+    return !term || qualifiedName(o.schemaName, o.name).toLowerCase().includes(term)
+  })
+
   if (isError) {
     return (
       <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
@@ -56,13 +64,6 @@ export function AdminDataSourcePolicyPage() {
 
   const nothingAllowed = effectiveRestrict && effectiveSelected.size === 0
 
-  function inScope(kind: string | undefined, target: CatalogScope) {
-    if (!kind) return false
-    if (target === 'tables') return kind === 'table'
-    if (target === 'views') return kind === 'view'
-    return true
-  }
-
   // Switching scope must drop selections that are no longer valid for it — otherwise the
   // checklist shows one thing and the saved payload carries another (e.g. views saved under
   // a tables-only scope, which yields an empty business-facing catalog).
@@ -70,8 +71,11 @@ export function AdminDataSourcePolicyPage() {
     const next = value as CatalogScope
     setScope(next)
     if (!data) return
-    const kindByKey = new Map(data.objects.map((o) => [`${o.schemaName}.${o.name}`, o.kind as string]))
-    const pruned = new Set(Array.from(effectiveSelected).filter((key) => inScope(kindByKey.get(key), next)))
+    const kindByKey = new Map<string, string>(
+      data.objects.map((o) => [`${o.schemaName}.${o.name}`, o.kind as string]),
+    )
+    const unavailableKeys = new Set((data.unavailable ?? []).map((o) => `${o.schemaName}.${o.name}`))
+    const pruned = pruneAllowlist(effectiveSelected, kindByKey, unavailableKeys, next)
     if (pruned.size !== effectiveSelected.size) setSelected(pruned)
   }
 
@@ -80,7 +84,14 @@ export function AdminDataSourcePolicyPage() {
     // Turning the switch on with an empty selection would save as "allow nothing", which the
     // backend reads as "no restriction" — start from everything in scope instead.
     if (checked && selected === null) {
-      setSelected(new Set(visibleObjects.map((o) => `${o.schemaName}.${o.name}`)))
+      const unavailableKeys = new Set((data?.unavailable ?? []).map((o) => `${o.schemaName}.${o.name}`))
+      setSelected(
+        initialAllowlist(
+          visibleObjects.map((o) => `${o.schemaName}.${o.name}`),
+          data?.allowedObjects ?? [],
+          unavailableKeys,
+        ),
+      )
     }
   }
 
@@ -150,9 +161,38 @@ export function AdminDataSourcePolicyPage() {
                 </label>
               )
             })}
-            {visibleObjects.length === 0 && (
+            {visibleObjects.length === 0 && unavailableObjects.length === 0 && (
               <div className="px-3 py-6 text-center text-sm text-muted-foreground">No tables/views match the current scope.</div>
             )}
+          </div>
+        </div>
+      )}
+
+      {unavailableObjects.length > 0 && (
+        <div className="flex flex-col gap-2">
+          <h2 className="text-sm font-semibold">Unavailable objects</h2>
+          <div className="rounded-lg border border-border">
+            {unavailableObjects.map((o, i) => {
+              const key = `${o.schemaName}.${o.name}`
+              const reasonId = `${idPrefix}-unavailable-${i}`
+              return (
+                <div key={objectRowKey(o.schemaName, o.name)} className="flex items-start gap-2 border-b border-border px-3 py-2 text-sm text-muted-foreground last:border-b-0">
+                  <Checkbox checked={effectiveSelected.has(key)} disabled className="mt-0.5" aria-label={qualifiedName(o.schemaName, o.name)} aria-describedby={reasonId} />
+                  <div className="min-w-0 flex-1">
+                    <span className="flex items-center gap-1.5">
+                      <AlertTriangle className="size-3.5 shrink-0 text-warning" aria-hidden="true" />
+                      <span className="min-w-0 flex-1 truncate">{qualifiedName(o.schemaName, o.name)}</span>
+                    </span>
+                    <p id={reasonId} className="text-xs">
+                      {adminUnavailableReason(o.clashesWith)}
+                    </p>
+                  </div>
+                  <Badge variant="secondary" className="shrink-0 text-[10px] font-normal">
+                    {o.kind}
+                  </Badge>
+                </div>
+              )
+            })}
           </div>
         </div>
       )}

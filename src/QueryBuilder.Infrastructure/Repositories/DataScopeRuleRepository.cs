@@ -1,6 +1,8 @@
+using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using QueryBuilder.Application.Abstractions;
+using QueryBuilder.Application.Exceptions;
 using QueryBuilder.Domain.Entities;
 using QueryBuilder.Infrastructure.Persistence;
 
@@ -32,7 +34,18 @@ public sealed class DataScopeRuleRepository(AppDbContext db, IMemoryCache cache)
 
         await db.DataScopeRules.Where(x => x.DataSourceId == dataSourceId).ExecuteDeleteAsync(cancellationToken);
         await db.DataScopeRules.AddRangeAsync(rules, cancellationToken);
-        await db.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await db.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is SqlException { Number: 2601 or 2627 } sql)
+        {
+            // The metadata database is case-insensitive, so names a case-sensitive source tells apart (Postgres
+            // "Orders" vs "orders") collide on the unique index. The transaction rolls back on dispose.
+            var firstLine = sql.Message.Split('\n', 2)[0].TrimEnd('\r');
+            throw new CatalogValidationException(
+                $"Couldn't save: the metadata database treats two object names as the same. {firstLine}");
+        }
 
         await transaction.CommitAsync(cancellationToken);
         cache.Remove(CacheKey(dataSourceId));

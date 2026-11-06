@@ -381,6 +381,77 @@ public class RenderVisualizationCommandTests
         Assert.Contains("max 20", ex.Message);
     }
 
+    private const string HugeNegativeNumericText = "-1000000000000000000000000000000000000000";
+
+    [Fact]
+    public async Task Funnel_refuses_huge_negative_numeric_text()
+    {
+        var (f, viz) = Arrange(type: VisualizationType.Funnel);
+        var huge = Row("B", 1);
+        huge["Total"] = HugeNegativeNumericText;
+        f.Executor.Result = VizFixture.Result([Row("A", 5), huge]);
+
+        var ex = await Assert.ThrowsAsync<CatalogValidationException>(() => Render(f, viz));
+
+        Assert.Contains("cannot show negative values", ex.Message);
+    }
+
+    [Fact]
+    public async Task Funnel_refuses_tiny_negative_numeric_text()
+    {
+        var (f, viz) = Arrange(type: VisualizationType.Funnel);
+        var tiny = Row("B", 1);
+        tiny["Total"] = "-0.00000000000000000000000000000000001";
+        f.Executor.Result = VizFixture.Result([Row("A", 5), tiny]);
+
+        var ex = await Assert.ThrowsAsync<CatalogValidationException>(() => Render(f, viz));
+
+        Assert.Contains("cannot show negative values", ex.Message);
+    }
+
+    [Theory]
+    [InlineData(-1e-35)]
+    [InlineData(-1e-300)]
+    public async Task Funnel_refuses_a_tiny_negative_double(double tinyNegative)
+    {
+        var (f, viz) = Arrange(type: VisualizationType.Funnel);
+        var tiny = Row("B", 1);
+        tiny["Total"] = tinyNegative;
+        f.Executor.Result = VizFixture.Result([Row("A", 5), tiny]);
+
+        var ex = await Assert.ThrowsAsync<CatalogValidationException>(() => Render(f, viz));
+
+        Assert.Contains("cannot show negative values", ex.Message);
+    }
+
+    [Theory]
+    [InlineData("1000000000000000000000000000000000000000")]
+    [InlineData("0.00000000000000000000000000000000001")]
+    public async Task Funnel_accepts_huge_or_tiny_positive_numeric_text(string text)
+    {
+        var (f, viz) = Arrange(type: VisualizationType.Funnel);
+        var positive = Row("B", 1);
+        positive["Total"] = text;
+        f.Executor.Result = VizFixture.Result([Row("A", 5), positive]);
+
+        var data = await Render(f, viz);
+
+        Assert.Equal(2, data.RowCount);
+    }
+
+    [Fact]
+    public async Task Pie_refuses_huge_negative_numeric_text()
+    {
+        var (f, viz) = Arrange(type: VisualizationType.Pie);
+        var huge = Row("B", 1);
+        huge["Total"] = HugeNegativeNumericText;
+        f.Executor.Result = VizFixture.Result([Row("A", 5), huge]);
+
+        var ex = await Assert.ThrowsAsync<CatalogValidationException>(() => Render(f, viz));
+
+        Assert.Contains("cannot show negative values", ex.Message);
+    }
+
     [Fact]
     public async Task Funnel_with_a_negative_value_is_refused()
     {

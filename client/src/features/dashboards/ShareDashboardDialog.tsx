@@ -91,7 +91,10 @@ export function ShareDashboardDialog({
         {appUsers && !appUsers.available && (
           <div className="rounded-md border border-dashed border-border p-4 text-center text-xs text-muted-foreground">
             Sharing isn&apos;t set up for this data source yet. Ask your admin to add a{' '}
-            <code className="rounded bg-muted px-1 py-0.5">dbo.AppUsers</code> view there.
+            <code className="rounded bg-muted px-1 py-0.5">dbo.AppUsers</code> view (<code className="rounded bg-muted px-1 py-0.5">Id</code>,{' '}
+            <code className="rounded bg-muted px-1 py-0.5">DisplayName</code>, <code className="rounded bg-muted px-1 py-0.5">Email</code>) on SQL Server, or a{' '}
+            <code className="rounded bg-muted px-1 py-0.5">public.app_users</code> view (<code className="rounded bg-muted px-1 py-0.5">id</code>,{' '}
+            <code className="rounded bg-muted px-1 py-0.5">display_name</code>, <code className="rounded bg-muted px-1 py-0.5">email</code>) on PostgreSQL.
           </div>
         )}
 

@@ -47,8 +47,6 @@ export interface ColumnMetadata {
   isNullable: boolean
   isPrimaryKey: boolean
   isForeignKey: boolean
-  foreignKeyTable?: string | null
-  foreignKeyColumn?: string | null
   ordinalPosition: number
 }
 
@@ -64,9 +62,24 @@ export interface SchemaMetadata {
   objects: SchemaObjectMetadata[]
 }
 
+export interface UnavailableObject {
+  schemaName: string
+  name: string
+  kind: SchemaObjectKind
+  reason: 'nameClash'
+}
+
 export interface DataSourceCatalog {
   dataSourceId: string
+  provider: DataSourceProvider
   schemas: SchemaMetadata[]
+  /** Absent in responses cached before this field existed. */
+  unavailableObjects?: UnavailableObject[]
+}
+
+export interface AdminUnavailableObject extends UnavailableObject {
+  /** Already formatted for display (`public.orders`, or quoted when a dot is ambiguous). */
+  clashesWith: string[]
 }
 
 export interface DataSourceDto {
@@ -358,6 +371,7 @@ export interface AdminDataSourceDetailDto {
   maxRecords: number | null
   /** The host app's package-wide default; null = no limit when the data source has none either. */
   defaultMaxRecords: number | null
+  unavailable?: AdminUnavailableObject[]
 }
 
 export interface UpdateRecordLimitRequest {
@@ -386,6 +400,7 @@ export interface AdminDataScopeDto {
   enabled: boolean
   declaredKeys: string[]
   objects: AdminDataScopeObjectDto[]
+  unavailable?: AdminUnavailableObject[]
 }
 
 export interface DataScopeObjectRuleDto {
