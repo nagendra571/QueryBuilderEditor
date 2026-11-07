@@ -2,6 +2,7 @@ using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using QueryBuilder.Application.Abstractions;
 using QueryBuilder.Application.Common;
+using QueryBuilder.Application.DataSourceManagement;
 using QueryBuilder.Application.Exceptions;
 using QueryBuilder.Domain.Entities;
 using QueryBuilder.Domain.Enums;
@@ -36,7 +37,17 @@ public sealed class DataCatalogService(
 
     public async Task ValidateAsync(Guid dataSourceId, QueryDefinition definition, CancellationToken cancellationToken)
     {
+        // Read fresh, before anything can connect: the cached catalog may predate a turn-off, and another
+        // instance would keep serving it (and sending the password) until the cache expired.
+        var row = await dataSourceRepository.GetByIdAsync(dataSourceId, cancellationToken)
+            ?? throw new NotFoundException(nameof(DataSource), dataSourceId);
+        if (!row.IsActive)
+        {
+            throw new CatalogValidationException(DataSourceMessages.TurnedOff);
+        }
+
         var catalog = await GetCatalogAsync(dataSourceId, cancellationToken);
+
         var comparison = IdentifierMatching.Comparison(catalog.Provider);
         var comparer = IdentifierMatching.Comparer(catalog.Provider);
         // SQL Server keys keep their lower-casing; on Postgres 'Orders' and 'orders' are different objects.
@@ -188,7 +199,7 @@ public sealed class DataCatalogService(
         var (usable, unavailable) = await ReadPartitionedAsync(dataSource, cancellationToken);
         var objects = usable.Where(o => Passes(dataSource, o.SchemaName, o.Name, o.Kind)).ToList();
 
-        var columnsByObject = await reader.ReadColumnsAsync(connectionString, cancellationToken);
+        var columnsByObject = await GuardManaged(dataSource, () => reader.ReadColumnsAsync(connectionString, cancellationToken));
         foreach (var obj in objects)
         {
             if (columnsByObject.TryGetValue($"{obj.SchemaName}.{obj.Name}", out var cols))
@@ -221,7 +232,7 @@ public sealed class DataCatalogService(
         DataSource dataSource, CancellationToken cancellationToken)
     {
         var reader = ReaderFor(dataSource.Provider);
-        var objects = await reader.ReadObjectsAsync(connectionStringResolver.Resolve(dataSource), cancellationToken);
+        var objects = await GuardManaged(dataSource, () => reader.ReadObjectsAsync(connectionStringResolver.Resolve(dataSource), cancellationToken));
         if (dataSource.Provider != DataSourceProvider.PostgreSql)
         {
             return (objects, []);
@@ -241,6 +252,20 @@ public sealed class DataCatalogService(
         }
 
         return partitioned;
+    }
+
+    // A managed source's driver errors can name the login and server the admin typed; business users get the same
+    // short message the executors give. Sources from host configuration keep their existing behavior.
+    private static async Task<T> GuardManaged<T>(DataSource dataSource, Func<Task<T>> read)
+    {
+        try
+        {
+            return await read();
+        }
+        catch (Exception ex) when (dataSource.IsManaged && ex is System.Data.Common.DbException or ArgumentException)
+        {
+            throw new QueryExecutionException(ConnectionStringResolver.ConnectFailed, ex);
+        }
     }
 
     private ICatalogReader ReaderFor(DataSourceProvider provider) =>

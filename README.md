@@ -101,6 +101,8 @@ migrations, API/UI wiring, JSON options, and the authorization pipeline in one p
 - Admin UI (role-gated via `AdminAuthorization`, separate from the main `Authorization` gate): per
   data source, control whether the catalog shows views only / tables only / both, and allowlist
   specific tables/views — replaces the previous raw-SQL-only path for this one concern
+- Optional data source management in the admin UI (`options.DataSourceManagement`): add, edit, test and
+  turn off SQL Server and PostgreSQL data sources; the connection is stored encrypted with a host-provided key
 - Row-level data scoping: the host declares scope keys (`ProgramId`, `ModuleId`, ...) and a
   resolver returning each user's values or `DataScope.Unrestricted`; admins map each key to a view
   column (or mark a view "not scoped"). Enforced server-side in the generated SQL's `WHERE` on every
@@ -188,12 +190,70 @@ Limits to know about:
 
 The package README has the full guide.
 
+## Adding data sources in the admin UI
+
+Off by default. Turn it on and admins can add a SQL Server or PostgreSQL data source from `/admin` by typing its
+host, port, database, username and password, test the connection, edit it later, and turn it off. Nothing is ever
+hard-deleted. QueryBuilder stores the details as one encrypted value (AES-256-GCM, bound to that data source's row)
+using a key you provide.
+
+```csharp
+options.DataSourceManagement.EncryptionKey = builder.Configuration["QueryBuilder:EncryptionKey"];
+options.DataSourceManagement.Enabled = true;
+options.AdminAuthorization.Mode = QueryBuilderAuthorizationMode.Role;   // required, see below
+options.AdminAuthorization.RoleNames = ["QueryBuilderAdmin"];
+```
+
+Generate a key (base64 of exactly 32 random bytes) with either of:
+
+```bash
+openssl rand -base64 32
+```
+```powershell
+[Convert]::ToBase64String([Security.Cryptography.RandomNumberGenerator]::GetBytes(32))
+```
+
+- **Startup checks.** A key that is set must be valid, or the app refuses to start. `Enabled` needs a key. `Enabled`
+  with an `AdminAuthorization` of `Anonymous` is refused too, unless you set `AllowAnonymousAdmins = true` (local
+  development only).
+- **The key alone is enough to query.** Set `EncryptionKey` without `Enabled` and managed data sources that already
+  exist keep working; `Enabled` only governs adding, editing, testing and turning off.
+- **Keep the key out of source control** (user secrets, environment variable, key vault). Lose it, or change it, and
+  each managed data source's details can no longer be read: its admin page says so and the details are typed in
+  again. Other data sources are unaffected.
+- **Use HTTPS.** The password travels from the browser to your app once, when it is typed. The page warns when it
+  isn't on HTTPS. The password is never sent back to the browser; the edit form shows only whether one is saved.
+- **An admin can make the server connect to any host they type.** Restrict `AdminAuthorization` to the few people who
+  should be able to, and give each data source a read-only database login.
+- **Re-enter the password when changing the host, port, username or lowering encryption.** Leaving the password blank
+  keeps the saved one only while those are unchanged and encryption isn't weakened (Off < Required < Required and
+  verify certificate), so a saved password can't be sent to a different server or in the clear. If a managed data
+  source's details can't be read with the current key, a blank password is refused rather than replacing them.
+- **Hosts are limited to names, IP addresses (IPv6 in brackets) and, for SQL Server, `host\instance`.** Prefixes such
+  as `np:` and `tcp:`, paths, and `(localdb)` are refused: a named pipe could make this server start an outbound
+  login with its own identity. So **LocalDB can't be added through the form**; use the raw SQL route for local
+  development.
+- **SQL Server is always reached over TCP** (`tcp:host,port`), never shared memory or named pipes, so a named instance
+  needs its port (`host\\instance` plus the port); SQL Browser lookups are not used.
+- **Rows already turned off** (`IsActive = 0`) are now refused for queries, charts, the catalog and the user list
+  even when this feature is off. Turning them back on needs `Enabled`, or a SQL update.
+- Encryption choices are `Off`, `Required` (encrypted, certificate not checked) and
+  `Required and verify certificate`.
+- **A data source that is turned off** disappears from the data source list, and its saved queries, charts and
+  dropdowns report that it is turned off. Admin pages still open it. Rules, record limit and allowlist are kept.
+- A new data source starts as views only, and scoped users see nothing until data scope rules exist for it, so the
+  admin UI opens its policy page right after you create it.
+- The raw SQL route (`ConnectionStringName` resolved from configuration) still works. Those data sources can be
+  renamed and described in the UI but their connection stays in host configuration.
+- Adds one nullable column (`DataSources.EncryptedConnection`) through a migration, and the application reads it.
+  **DBA-managed hosts must run the new schema script before deploying this release, even with the feature off.**
+
 ## Roadmap
 
 Not yet built, tracked for a future version:
 
-- Admin UI for registering/editing data sources themselves (name, connection string, provider,
-  `AllowedSchemas`) — still raw-SQL-only; only the catalog scope/allowlist is admin-manageable so far
+- Admin UI editing of `AllowedSchemas` and other providers (data sources can now be added, edited, tested and
+  turned off in the admin UI for SQL Server and PostgreSQL; hard delete is deliberately not offered)
 - Manually-written SQL as an alternative to the visual builder
 
 ## Contributing

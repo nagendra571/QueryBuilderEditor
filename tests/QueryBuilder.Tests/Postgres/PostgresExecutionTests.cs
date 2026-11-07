@@ -791,6 +791,8 @@ public class PostgresExecutionTests(PostgresTestDatabase database, ITestOutputHe
         public Task<DataSource?> GetByIdAsync(Guid id, CancellationToken cancellationToken) => Task.FromResult<DataSource?>(dataSource);
         public Task<List<DataSource>> GetActiveAsync(CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<List<DataSource>> GetAllAsync(CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task AddAsync(DataSource dataSource, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public void UpdateOnly(DataSource dataSource, params string[] propertyNames) { }
         public void Update(DataSource ds) { }
         public Task<int> SaveChangesAsync(CancellationToken cancellationToken) => Task.FromResult(0);
     }

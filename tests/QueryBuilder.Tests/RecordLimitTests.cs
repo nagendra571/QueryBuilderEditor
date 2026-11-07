@@ -110,6 +110,8 @@ public class RecordLimitTests
             Task.FromResult<DataSource?>(new DataSource { Id = id, Name = "Test", MaxRecords = maxRecords });
         public Task<List<DataSource>> GetActiveAsync(CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<List<DataSource>> GetAllAsync(CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task AddAsync(DataSource dataSource, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public void UpdateOnly(DataSource dataSource, params string[] propertyNames) { }
         public void Update(DataSource dataSource) => throw new NotSupportedException();
         public Task<int> SaveChangesAsync(CancellationToken cancellationToken) => throw new NotSupportedException();
     }

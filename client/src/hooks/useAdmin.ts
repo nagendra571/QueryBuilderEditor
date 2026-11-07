@@ -2,7 +2,14 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { adminApi } from '@/lib/api'
 import { ApiError } from '@/lib/api-client'
-import type { UpdateCatalogPolicyRequest, UpdateDataScopeRequest, UpdateRecordLimitRequest } from '@/types'
+import type {
+  CreateDataSourceRequest,
+  TestConnectionRequest,
+  UpdateCatalogPolicyRequest,
+  UpdateDataScopeRequest,
+  UpdateDataSourceRequest,
+  UpdateRecordLimitRequest,
+} from '@/types'
 
 export const adminDataSourcesKey = ['admin-data-sources'] as const
 const adminDataSourceDetailKey = (id: string) => ['admin-data-source', id] as const
@@ -88,4 +95,68 @@ export function useUpdateRecordLimit(id: string) {
     },
     onError: (error) => toast.error(error instanceof ApiError ? error.message : 'Could not update the record limit.'),
   })
+}
+
+export function useDataSourceManagement() {
+  return useQuery({ queryKey: ['admin-data-source-management'], queryFn: adminApi.dataSourceManagement, retry: false })
+}
+
+// Everything that reads a data source's name, status or connection, so no screen keeps serving the old one
+// (the business-facing picker and catalog are cached client-side for minutes and would otherwise outlive a change).
+function invalidateDataSource(queryClient: ReturnType<typeof useQueryClient>, id: string) {
+  queryClient.invalidateQueries({ queryKey: adminDataSourcesKey })
+  queryClient.invalidateQueries({ queryKey: adminDataSourceDetailKey(id) })
+  queryClient.invalidateQueries({ queryKey: adminDataScopeKey(id) })
+  queryClient.invalidateQueries({ queryKey: ['data-source-catalog', id] })
+  queryClient.invalidateQueries({ queryKey: ['data-sources'] })
+  // Turning a source off or changing its connection changes what these show or can still load.
+  queryClient.invalidateQueries({ queryKey: ['app-users', id] })
+  queryClient.invalidateQueries({ queryKey: ['visualization-data'] })
+  queryClient.invalidateQueries({ queryKey: ['pickable-visualizations'] })
+  queryClient.invalidateQueries({ queryKey: ['parameter-options'] })
+}
+
+export function useCreateDataSource() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (request: CreateDataSourceRequest) => adminApi.createDataSource(request),
+    // The request holds the password; don't let the mutation cache keep it after the call settles.
+    gcTime: 0,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: adminDataSourcesKey })
+      queryClient.invalidateQueries({ queryKey: ['data-sources'] })
+    },
+  })
+}
+
+export function useUpdateDataSource(id: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (request: UpdateDataSourceRequest) => adminApi.updateDataSource(id, request),
+    gcTime: 0,
+    onSuccess: () => {
+      invalidateDataSource(queryClient, id)
+      toast.success('Data source saved.')
+    },
+  })
+}
+
+export function useSetDataSourceActive(id: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (isActive: boolean) => adminApi.setDataSourceActive(id, isActive),
+    onSuccess: (_data, isActive) => {
+      invalidateDataSource(queryClient, id)
+      toast.success(isActive ? 'Data source turned on.' : 'Data source turned off.')
+    },
+    onError: (error) => toast.error(error instanceof ApiError ? error.message : 'Could not change the data source.'),
+  })
+}
+
+export function useTestConnection() {
+  return useMutation({ mutationFn: (request: TestConnectionRequest) => adminApi.testConnection(request), gcTime: 0 })
+}
+
+export function useTestStoredConnection(id: string) {
+  return useMutation({ mutationFn: () => adminApi.testStoredConnection(id) })
 }

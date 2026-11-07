@@ -28,6 +28,12 @@ public sealed class AppUsersDirectory(
         var dataSource = await dataSourceRepository.GetByIdAsync(dataSourceId, cancellationToken)
             ?? throw new NotFoundException(nameof(DataSource), dataSourceId);
 
+        // Turned off means no connection at all, not even to list users.
+        if (!dataSource.IsActive)
+        {
+            return new AppUsersResult(Available: false, []);
+        }
+
         try
         {
             var connectionString = connectionStringResolver.Resolve(dataSource);

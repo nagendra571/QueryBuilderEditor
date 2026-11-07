@@ -16,12 +16,22 @@ public sealed class DataSource : AuditableEntity
     /// </summary>
     public const string DefaultConnectionStringSentinel = "__QueryBuilderDefault__";
 
+    /// <summary>Reserved <see cref="ConnectionStringName"/> value for a data source whose connection was
+    /// entered in the admin UI: the details live encrypted in <see cref="EncryptedConnection"/>.</summary>
+    public const string ManagedConnectionSentinel = "__QueryBuilderManaged__";
+
     public string Name { get; set; } = string.Empty;
     public string? Description { get; set; }
     public DataSourceProvider Provider { get; set; } = DataSourceProvider.SqlServer;
 
     /// <summary>Name of the connection string entry (in configuration / secret store) — never a raw secret.</summary>
     public string ConnectionStringName { get; set; } = string.Empty;
+
+    /// <summary>The connection details of a managed data source (see <see cref="ManagedConnectionSentinel"/>),
+    /// one encrypted blob bound to this row's Id. Null for every other data source.</summary>
+    public string? EncryptedConnection { get; set; }
+
+    public bool IsManaged => ConnectionStringName == ManagedConnectionSentinel;
 
     /// <summary>Restrict the catalog to these schemas only (empty = all non-system schemas).</summary>
     public List<string> AllowedSchemas { get; set; } = [];

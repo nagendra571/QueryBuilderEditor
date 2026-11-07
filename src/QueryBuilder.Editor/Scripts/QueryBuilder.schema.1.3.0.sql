@@ -536,3 +536,24 @@ END;
 COMMIT;
 GO
 
+BEGIN TRANSACTION;
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261106221018_AddDataSourceManagedConnection'
+)
+BEGIN
+    ALTER TABLE [DataSources] ADD [EncryptedConnection] nvarchar(max) NULL;
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261106221018_AddDataSourceManagedConnection'
+)
+BEGIN
+    INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
+    VALUES (N'20261106221018_AddDataSourceManagedConnection', N'10.0.14');
+END;
+
+COMMIT;
+GO
+

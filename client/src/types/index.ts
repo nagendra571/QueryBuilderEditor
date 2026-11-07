@@ -372,6 +372,66 @@ export interface AdminDataSourceDetailDto {
   /** The host app's package-wide default; null = no limit when the data source has none either. */
   defaultMaxRecords: number | null
   unavailable?: AdminUnavailableObject[]
+  description: string | null
+  isActive: boolean
+  /** True when the connection was entered in the admin UI and is stored encrypted. */
+  isManaged: boolean
+  provider: DataSourceProvider
+  /** Only for a managed source whose details can be read. Never carries the password. */
+  connection: ConnectionDetailsDto | null
+  /** A managed source whose saved details can't be decrypted with the current key. */
+  connectionUnreadable: boolean
+  /** Set only for a source whose connection comes from host configuration. */
+  connectionStringName: string | null
+  /** Why the object list is empty when the data source couldn't be reached. */
+  catalogError: string | null
+  /** True for the data source that uses QueryBuilder's own database. */
+  usesMetadataDatabase: boolean
+}
+
+export type ConnectionSslMode = 'disable' | 'require' | 'verifyFull'
+
+export interface ConnectionDetailsDto {
+  host: string
+  port: number
+  database: string
+  username: string
+  sslMode: ConnectionSslMode
+  hasPassword: boolean
+}
+
+export interface ConnectionInput {
+  host: string
+  port: number | null
+  database: string
+  username: string
+  /** Blank keeps the stored one, but only when host, port and username are unchanged. */
+  password: string
+  sslMode: ConnectionSslMode
+}
+
+export interface CreateDataSourceRequest {
+  name: string
+  description: string
+  provider: DataSourceProvider
+  connection: ConnectionInput
+}
+
+export interface UpdateDataSourceRequest {
+  name: string
+  description: string
+  connection?: ConnectionInput
+}
+
+export interface TestConnectionRequest {
+  provider: DataSourceProvider
+  connection: ConnectionInput
+  existingId?: string
+}
+
+export interface ConnectionTestResult {
+  ok: boolean
+  message: string
 }
 
 export interface UpdateRecordLimitRequest {

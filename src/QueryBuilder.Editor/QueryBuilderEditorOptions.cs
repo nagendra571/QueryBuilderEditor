@@ -68,4 +68,30 @@ public sealed class QueryBuilderEditorOptions
     /// with no per-data-source value) there is no limit: the grid is capped at 1,000 rows and exports
     /// at 100,000, both silently, as before this option existed.</summary>
     public int? DefaultMaxRecords { get; set; }
+
+    /// <summary>Lets admins add and edit data sources in the UI, with the connection details stored encrypted.
+    /// Off unless enabled — see <see cref="DataSourceManagementOptions"/>.</summary>
+    public DataSourceManagementOptions DataSourceManagement { get; } = new();
+}
+
+/// <summary>
+/// Managed data sources: admins type host, port, database, user and password into the admin UI, and QueryBuilder
+/// stores them encrypted (AES-256-GCM) with <see cref="EncryptionKey"/>. Data sources added by raw SQL with a
+/// <c>ConnectionStringName</c> keep working either way.
+/// </summary>
+public sealed class DataSourceManagementOptions
+{
+    /// <summary>Turns on the add, edit, test and turn-off endpoints and screens. Needs <see cref="EncryptionKey"/>,
+    /// and an <c>AdminAuthorization</c> that isn't Anonymous unless <see cref="AllowAnonymousAdmins"/> is set.
+    /// An admin can make this server connect to any host they type, so keep admin access narrow.</summary>
+    public bool Enabled { get; set; }
+
+    /// <summary>Base64 of exactly 32 bytes. Generate one with <c>openssl rand -base64 32</c>. Keep it out of source
+    /// control; losing it means re-entering each managed source's details. Setting it without <see cref="Enabled"/>
+    /// is enough to keep querying managed sources that already exist.</summary>
+    public string? EncryptionKey { get; set; }
+
+    /// <summary>Allows <see cref="Enabled"/> while <c>AdminAuthorization</c> is Anonymous, meaning anyone who can
+    /// reach the site could point it at any server. Meant for local development only.</summary>
+    public bool AllowAnonymousAdmins { get; set; }
 }

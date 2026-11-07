@@ -15,6 +15,7 @@ public sealed class DataSourceConfiguration : IEntityTypeConfiguration<DataSourc
         builder.Property(x => x.Name).HasMaxLength(200).IsRequired();
         builder.Property(x => x.Description).HasMaxLength(1000);
         builder.Property(x => x.ConnectionStringName).HasMaxLength(200).IsRequired();
+        builder.Property(x => x.EncryptedConnection).HasColumnType("nvarchar(max)");
         builder.Property(x => x.CreatedBy).HasMaxLength(450).IsRequired();
         builder.Property(x => x.UpdatedBy).HasMaxLength(450);
 

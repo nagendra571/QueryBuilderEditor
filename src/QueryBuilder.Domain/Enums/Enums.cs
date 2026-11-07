@@ -124,7 +124,19 @@ public enum AuditAction
     DashboardUpdated = 16,
     DashboardDeleted = 17,
     DashboardShared = 18,
-    DashboardUnshared = 19
+    DashboardUnshared = 19,
+    DataSourceCreated = 20,
+    DataSourceUpdated = 21,
+    DataSourceActivated = 22,
+    DataSourceDeactivated = 23
+}
+
+/// <summary>How a managed data source's connection is encrypted in transit.</summary>
+public enum ConnectionSslMode
+{
+    Disable = 0,
+    Require = 1,
+    VerifyFull = 2
 }
 
 public enum DashboardTileKind

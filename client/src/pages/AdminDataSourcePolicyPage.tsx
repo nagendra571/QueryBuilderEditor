@@ -7,8 +7,10 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { ConnectionSection } from '@/features/admin/ConnectionSection'
 import { DataScopeSection } from '@/features/admin/DataScopeSection'
 import { RecordLimitSection } from '@/features/admin/RecordLimitSection'
+import { catalogControlsLocked } from '@/features/admin/connection-form'
 import { initialAllowlist, pruneAllowlist } from '@/features/catalog/allowlist'
 import { adminUnavailableReason, objectRowKey, qualifiedName } from '@/features/catalog/unavailable'
 import { useAdminDataSourceDetail, useUpdateCatalogPolicy } from '@/hooks/useAdmin'
@@ -63,6 +65,9 @@ export function AdminDataSourcePolicyPage() {
   }
 
   const nothingAllowed = effectiveRestrict && effectiveSelected.size === 0
+  // With the data source unreachable its object list is empty, and a scope change would prune the allowlist to
+  // nothing; a later save would then lose it. Nothing here can be edited until the connection works.
+  const locked = catalogControlsLocked(data.catalogError)
 
   // Switching scope must drop selections that are no longer valid for it — otherwise the
   // checklist shows one thing and the saved payload carries another (e.g. views saved under
@@ -116,24 +121,37 @@ export function AdminDataSourcePolicyPage() {
           <ArrowLeft className="size-4" />
         </Button>
         <div>
-          <h1 className="text-[1.75rem] leading-tight font-bold tracking-tight">{data.name}</h1>
+          <h1 className="flex items-center gap-2 text-[1.75rem] leading-tight font-bold tracking-tight">
+            {data.name}
+            {!data.isActive && (
+              <Badge variant="outline" className="text-xs font-normal">
+                Inactive
+              </Badge>
+            )}
+          </h1>
           <p className="text-sm text-muted-foreground">Control which tables and views this data source exposes to the catalog.</p>
         </div>
       </div>
+
+      {/* Remounts whenever anything the section edits changes on the server, so its drafts (and the password) restart clean. */}
+      <ConnectionSection
+        key={`${data.id}|${data.name}|${data.description ?? ''}|${data.connectionUnreadable}|${JSON.stringify(data.connection)}`}
+        dataSource={data}
+      />
 
       <div className="flex flex-col gap-2">
         <h2 className="text-sm font-semibold">Catalog scope</h2>
         <Tabs value={effectiveScope} onValueChange={handleScopeChange}>
           <TabsList>
-            <TabsTrigger value="views">Views only</TabsTrigger>
-            <TabsTrigger value="tables">Tables only</TabsTrigger>
-            <TabsTrigger value="tablesAndViews">Tables + Views</TabsTrigger>
+            <TabsTrigger value="views" disabled={locked}>Views only</TabsTrigger>
+            <TabsTrigger value="tables" disabled={locked}>Tables only</TabsTrigger>
+            <TabsTrigger value="tablesAndViews" disabled={locked}>Tables + Views</TabsTrigger>
           </TabsList>
         </Tabs>
       </div>
 
       <div className="flex items-center gap-3">
-        <Switch checked={effectiveRestrict} onCheckedChange={handleRestrictChange} />
+        <Switch checked={effectiveRestrict} onCheckedChange={handleRestrictChange} disabled={locked} />
         <div>
           <p className="text-sm font-medium">Restrict to selected objects</p>
           <p className="text-xs text-muted-foreground">
@@ -198,10 +216,15 @@ export function AdminDataSourcePolicyPage() {
       )}
 
       <div className="flex items-center gap-3">
-        <Button onClick={handleSave} disabled={updatePolicy.isPending || nothingAllowed}>
+        <Button onClick={handleSave} disabled={updatePolicy.isPending || nothingAllowed || locked}>
           {updatePolicy.isPending ? <Loader2 className="size-3.5 animate-spin" /> : <Save className="size-3.5" />}
           Save
         </Button>
+        {locked && (
+          <p className="text-xs text-muted-foreground">
+            The catalog can't be edited while this data source can't be reached. Fix the connection above first.
+          </p>
+        )}
         {nothingAllowed && (
           <p className="text-xs text-destructive">
             Select at least one table or view, or turn off "Restrict to selected objects".

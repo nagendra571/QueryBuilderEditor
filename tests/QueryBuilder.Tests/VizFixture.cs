@@ -158,6 +158,8 @@ internal sealed class VizFixture
             Task.FromResult(id == dataSource.Id ? dataSource : null);
         public Task<List<DataSource>> GetActiveAsync(CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<List<DataSource>> GetAllAsync(CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task AddAsync(DataSource dataSource, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public void UpdateOnly(DataSource dataSource, params string[] propertyNames) { }
         public void Update(DataSource ds) => throw new NotSupportedException();
         public Task<int> SaveChangesAsync(CancellationToken cancellationToken) => Task.FromResult(0);
     }

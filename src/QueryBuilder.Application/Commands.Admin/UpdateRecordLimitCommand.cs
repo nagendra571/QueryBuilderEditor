@@ -29,7 +29,7 @@ public sealed class UpdateRecordLimitCommandHandler(
         dataSource.MaxRecords = request.MaxRecords;
         dataSource.UpdatedBy = currentUser.UserId;
         dataSource.UpdatedAtUtc = DateTimeOffset.UtcNow;
-        repository.Update(dataSource);
+        repository.UpdateOnly(dataSource, nameof(DataSource.MaxRecords));
         await repository.SaveChangesAsync(cancellationToken);
 
         await auditLogger.LogAsync(

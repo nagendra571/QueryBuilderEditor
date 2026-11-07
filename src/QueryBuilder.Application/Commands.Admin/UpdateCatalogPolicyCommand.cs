@@ -56,7 +56,7 @@ public sealed class UpdateCatalogPolicyCommandHandler(
         dataSource.AllowedObjects = request.AllowedObjects;
         dataSource.UpdatedBy = currentUser.UserId;
         dataSource.UpdatedAtUtc = DateTimeOffset.UtcNow;
-        repository.Update(dataSource);
+        repository.UpdateOnly(dataSource, nameof(DataSource.CatalogScope), nameof(DataSource.AllowedObjects));
         await repository.SaveChangesAsync(cancellationToken);
 
         catalogService.InvalidateCatalogCache(request.DataSourceId);

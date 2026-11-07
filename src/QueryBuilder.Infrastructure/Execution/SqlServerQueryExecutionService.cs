@@ -24,11 +24,13 @@ public sealed class SqlServerQueryExecutionService(IConnectionStringResolver con
         var sql = maxRows is > 0 ? Dialect.ApplyRowLimit(generatedQuery.Sql, maxRows.Value + 1) : generatedQuery.Sql;
 
         var stopwatch = Stopwatch.StartNew();
+        var opened = false;
 
         try
         {
             await using var connection = new SqlConnection(connectionString);
             await connection.OpenAsync(cancellationToken);
+            opened = true;
 
             await using var command = new SqlCommand(sql, connection) { CommandTimeout = 60 };
             foreach (var parameter in generatedQuery.Parameters)
@@ -72,6 +74,16 @@ public sealed class SqlServerQueryExecutionService(IConnectionStringResolver con
                 ExecutionTimeMs = stopwatch.ElapsedMilliseconds,
                 Truncated = truncated
             };
+        }
+        catch (ArgumentException ex) when (!opened && dataSource.IsManaged)
+        {
+            // A row saved some other way can hold a string the driver rejects; that is a failed connection, not a 500.
+            throw new QueryExecutionException(ConnectionStringResolver.ConnectFailed, ex);
+        }
+        catch (SqlException ex) when (!opened && dataSource.IsManaged)
+        {
+            // The login and server were typed by an admin; business users get the short message, not the driver's.
+            throw new QueryExecutionException(ConnectionStringResolver.ConnectFailed, ex);
         }
         catch (SqlException ex)
         {

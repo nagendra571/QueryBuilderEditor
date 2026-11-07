@@ -24,7 +24,7 @@ const STATE_LABELS: Record<DataScopeState, string> = {
 }
 
 export function DataScopeSection({ dataSourceId }: { dataSourceId: string }) {
-  const { data, isLoading } = useAdminDataScope(dataSourceId)
+  const { data, isLoading, isError } = useAdminDataScope(dataSourceId)
   const updateScope = useUpdateDataScope(dataSourceId)
 
   const [edits, setEdits] = useState<Record<string, ObjectEdit>>({})
@@ -49,6 +49,14 @@ export function DataScopeSection({ dataSourceId }: { dataSourceId: string }) {
       return true
     })
   }, [objects, search, undecidedOnly, edits])
+
+  if (isError) {
+    return (
+      <p role="alert" className="text-sm text-muted-foreground">
+        Couldn't load the data scope for this data source. If it can't be reached, fix the connection above and reload.
+      </p>
+    )
+  }
 
   if (isLoading || !data) {
     return (

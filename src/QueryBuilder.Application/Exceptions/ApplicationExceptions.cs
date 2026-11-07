@@ -2,8 +2,16 @@ namespace QueryBuilder.Application.Exceptions;
 
 public sealed class CatalogValidationException(string message) : Exception(message);
 
-public sealed class NotFoundException(string entityName, object key)
-    : Exception($"{entityName} with id '{key}' was not found.");
+public sealed class NotFoundException : Exception
+{
+    public NotFoundException(string entityName, object key) : base($"{entityName} with id '{key}' was not found.") { }
+
+    public NotFoundException(string message) : base(message) { }
+}
+
+/// <summary>Managed connection details couldn't be protected or read: no key, a different key, or a blob
+/// that was changed or belongs to another row. Messages never carry the key or any plaintext.</summary>
+public sealed class ConnectionSecretException(string message) : Exception(message);
 
 public sealed class ForbiddenException(string message) : Exception(message);
 

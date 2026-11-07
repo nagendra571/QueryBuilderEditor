@@ -7,6 +7,7 @@ using QueryBuilder.Infrastructure.Execution;
 using QueryBuilder.Infrastructure.Export;
 using QueryBuilder.Infrastructure.Persistence;
 using QueryBuilder.Infrastructure.Repositories;
+using QueryBuilder.Infrastructure.Security;
 using QueryBuilder.Infrastructure.Sql;
 
 namespace QueryBuilder.Infrastructure;
@@ -18,7 +19,7 @@ public static class DependencyInjection
     /// project has no knowledge of "the editor" concept. <see cref="QueryBuilder.Editor.ServiceCollectionExtensions.AddQueryBuilderEditor"/>
     /// is the composition root that translates the host-facing options into this call.
     /// </summary>
-    public static IServiceCollection AddInfrastructure(this IServiceCollection services, string connectionString, bool applyMigrations)
+    public static IServiceCollection AddInfrastructure(this IServiceCollection services, string connectionString, bool applyMigrations, byte[]? connectionSecretKey = null)
     {
         services.AddDbContext<AppDbContext>(db =>
             db.UseSqlServer(
@@ -49,7 +50,11 @@ public static class DependencyInjection
 
         // Resolves connection strings for the business data sources users query (by DataSource.ConnectionStringName)
         // via the host's own IConfiguration — already registered by the host, no wiring needed here.
+        services.AddSingleton(new ConnectionSecretKey(connectionSecretKey));
+        services.AddSingleton<IConnectionSecretProtector, AesGcmConnectionSecretProtector>();
         services.AddSingleton<IConnectionStringResolver, ConnectionStringResolver>();
+        services.AddSingleton<IConnectionTester, ConnectionTester>();
+        services.AddSingleton<IConnectionPoolCleaner, ConnectionPoolCleaner>();
         services.AddSingleton<ICatalogReader, SqlServerCatalogReader>();
         services.AddSingleton<ICatalogReader, PostgresCatalogReader>();
         services.AddScoped<IDataCatalogService, DataCatalogService>();

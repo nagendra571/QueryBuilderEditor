@@ -28,7 +28,7 @@ public class ParameterNameValidationTests
     {
         var cache = new MemoryCache(new MemoryCacheOptions());
         cache.Set($"catalog:{TestData.DataSourceId}", TestData.Catalog());
-        return new DataCatalogService(null!, null!, [], cache, NullLogger<DataCatalogService>.Instance);
+        return new DataCatalogService(new ActiveDataSources(), null!, [], cache, NullLogger<DataCatalogService>.Instance);
     }
 
     private static QueryDefinition ParameterizedDefinition(string parameterName)

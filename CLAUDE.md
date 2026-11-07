@@ -36,7 +36,10 @@ src/
                                  `SqlServerDialect`/`PostgresDialect` under one shared `SqlQueryBuilder`;
                                  `Catalog/ICatalogReader` (`SqlServerCatalogReader`, `PostgresCatalogReader`)
                                  behind the shared `DataCatalogService` (cache, `ValidateAsync`,
-                                 unavailable objects); `Execution/RoutingQueryExecutionService` picks
+                                 unavailable objects); `Security/AesGcmConnectionSecretProtector` (+
+                                 `ConnectionSecretKey`) and `Persistence/ManagedConnectionStringBuilder` /
+                                 `ConnectionTester` for admin-managed data sources (Application side:
+                                 `DataSourceManagement/`); `Execution/RoutingQueryExecutionService` picks
                                  `SqlServerQueryExecutionService` or `PostgresQueryExecutionService` (+
                                  `PostgresValueParser`) by provider; `Application/Common/IdentifierMatching`
                                  supplies the per-provider name comparer
@@ -344,6 +347,23 @@ unless asked): QueryBuilder wiring in `Program.cs`, `DevPersonas.cs`, a Personas
   DBA upgrade before the newer migrations. Wrap such SQL in `EXEC(N'…')`, as
   `AddCatalogScopeAndAllowedObjects` now does (1.0.13's script had this bug). Auto-migration never hit it.
 
+- **A blank password on edit or test keeps the stored one only if host, port and username are unchanged and
+  `SslMode` isn't lowered (Disable < Require < VerifyFull).** Otherwise `400 Re-enter the password when changing the
+  host, port, username or lowering encryption.` (`ManagedConnections.Resolve`); a missing `SslMode` keeps the stored
+  one. A managed row whose blob can't be read refuses a blank password outright, so a wrong key can't overwrite a
+  blob the right key opens. Without these an admin could make the server send a saved password to a server they
+  chose, or in the clear (a security review reproduced it with a fake server). Don't relax it, and keep the client's
+  `needsPasswordReentry`/`blankPasswordProblem` and the server rule in step. A blank Postgres password is built as a
+  per-process filler, because `Password=` parses back as null and Npgsql then sends the host's `PGPASSWORD`. Hosts are
+  an allowlist (names, IPs, SQL Server `host\instance`): `np:` pipes could start outbound SMB. Commands change only
+  their own columns (`IDataSourceRepository.UpdateOnly`), because a whole-row write of an untracked read undid a
+  concurrent turn-off. Turned-off is read from the row, fresh, before any connect (never from the cached catalog),
+  and the cached catalog has no flag. The password is never returned by any endpoint
+  (`ConnectionDto.hasPassword` only), never in audit details, and never in a log; connection strings come only from
+  `SqlConnectionStringBuilder`/`NpgsqlConnectionStringBuilder`, never concatenation. A managed row's blob is AES-GCM
+  with the row Id as associated data. The admin detail query must still open a source whose connection is broken
+  (`catalogError`, `connectionUnreadable`), because that page is where it gets fixed.
+
 ## Feature status
 
 **Shipped**: access control (Anonymous/Authenticated/Role/Custom), `ActorResolver` identity,
@@ -469,16 +489,29 @@ built-in runner, no dependency). Both READMEs document all of the above.
 - Impeccable finish-review leftovers: grey status pills on Queries/Admin lists, catalog 11px/9px labels,
   generic drag shadows, top bar mostly empty.
 - Release: 1.1.0 is published (bundle `index-KbAyoLt7.js`) and committed on `feature/rea1`. **1.2.0 (PostgreSQL data
-  sources, `Pkcs` fix, bundle `index-CXBS3rAW.js`) is packed at `nupkg/` and its code is committed on `feature/rea1`, not merged to `main`.
-  It wasn't on nuget.org when committed, so confirm that before calling it published.** Any further change after the
-  user pushes it needs a new version. NuGet push and commit/push only when asked.
+  sources, `Pkcs` fix, bundle `index-CXBS3rAW.js`) is published and committed on `feature/rea1`, not merged to `main`. **1.3.0 (data source
+  management, schema script `QueryBuilder.schema.1.3.0.sql`) is packed at `nupkg/` and committed on `feature/rea1`, not merged to `main`. It wasn't
+  on nuget.org when committed, so confirm that before calling it published.** Any further change after the user pushes
+  it needs a new version. NuGet push and commit/push only when asked.
 - `System.Security.Cryptography.Pkcs` advisories (GHSA-846f-f764-76mx high, GHSA-2fmv-rv2c-59x7 moderate): fixed for the
   next release by a direct pin in `Infrastructure` and `Editor` (8.0.2 on `net8.0`, 10.0.14 on `net10.0`), since
   `Microsoft.Data.SqlClient` through 7.1.1 still brings 8.0.1 and 9.0.18. Published 1.1.0 and earlier still carry them.
   Drop the pin once SqlClient moves past those versions.
 
-**Discussed, not built**: full data-source registration/editing in the admin UI (name, connection
-string, provider, `AllowedSchemas`) — still raw SQL insert only, see the package README; multi-table
+**Data source management — committed on branch `feature/rea1`, not merged to `main`, packed as 1.3.0 (the user
+chose to skip SPEC and PLAN).** `options.DataSourceManagement { Enabled, EncryptionKey (base64, 32 bytes),
+AllowAnonymousAdmins }`: admins add, edit, test and turn off SQL Server and PostgreSQL data sources in `/admin`.
+Details live as one AES-256-GCM blob in `DataSources.EncryptedConnection` (migration `AddDataSourceManagedConnection`,
+`ConnectionStringName` = `DataSource.ManagedConnectionSentinel`); the key alone, without `Enabled`, is enough to query.
+`DataSourceCatalog.IsActive` (`[JsonIgnore]`) is refused by `ValidateAsync` and `GetCatalogQuery`, not by
+`GetCatalogAsync`, so admin pages still open turned-off sources. No hard delete. Managed SQL Server sources always connect as `tcp:` so a hostile
+SQL Browser reply can't steer them to named pipes. Accepted from a packed test package on both targets against
+PostgreSQL 16 with SCRAM passwords and a self-signed certificate, including a browser walk-through. **Not verified:
+a real SQL Server SQL login (LocalDB can't be reached through the form), named instances, and VerifyFull with a
+trusted certificate.** Docs: both READMEs, "Adding data sources in the admin UI".
+
+**Discussed, not built**: editing `AllowedSchemas` in the admin UI, other providers, hard delete of data sources (deliberately
+not offered); multi-table
 joins (deliberately skipped — the user's take: "if there are joins, create a view instead, business
 users won't write joins"); manual-SQL mode; scheduled queries/alerts; dashboard-wide filters beyond
 parameters; public/anonymous dashboard links (deliberately not by default).

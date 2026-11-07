@@ -19,7 +19,10 @@ public interface IDataSourceRepository
     Task<DataSource?> GetByIdAsync(Guid id, CancellationToken cancellationToken);
     Task<List<DataSource>> GetActiveAsync(CancellationToken cancellationToken);
     Task<List<DataSource>> GetAllAsync(CancellationToken cancellationToken);
-    void Update(DataSource dataSource);
+    Task AddAsync(DataSource dataSource, CancellationToken cancellationToken);
+    /// <summary>Writes only the named columns (plus UpdatedBy and UpdatedAtUtc). The row was read untracked, possibly
+    /// long ago, so a whole-row write could restore a turn-off or an older password changed in between.</summary>
+    void UpdateOnly(DataSource dataSource, params string[] propertyNames);
     Task<int> SaveChangesAsync(CancellationToken cancellationToken);
 }
 

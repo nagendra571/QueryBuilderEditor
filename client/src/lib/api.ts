@@ -2,6 +2,10 @@ import { dropOrphanParameters } from '@/features/parameters/param-values'
 import { apiClient } from '@/lib/api-client'
 import type {
   AdminDataScopeDto,
+  ConnectionTestResult,
+  CreateDataSourceRequest,
+  TestConnectionRequest,
+  UpdateDataSourceRequest,
   AdminDataSourceDetailDto,
   AdminDataSourceSummaryDto,
   AppUsersResult,
@@ -99,6 +103,19 @@ export const adminApi = {
   updateRecordLimit: async (id: string, request: UpdateRecordLimitRequest): Promise<void> => {
     await apiClient.put(`/admin/data-sources/${id}/record-limit`, request)
   },
+  dataSourceManagement: async (): Promise<{ enabled: boolean }> => (await apiClient.get('/admin/data-source-management')).data,
+  createDataSource: async (request: CreateDataSourceRequest): Promise<AdminDataSourceSummaryDto> =>
+    (await apiClient.post('/admin/data-sources', request)).data,
+  updateDataSource: async (id: string, request: UpdateDataSourceRequest): Promise<void> => {
+    await apiClient.put(`/admin/data-sources/${id}`, request)
+  },
+  setDataSourceActive: async (id: string, isActive: boolean): Promise<void> => {
+    await apiClient.put(`/admin/data-sources/${id}/active`, { isActive })
+  },
+  testConnection: async (request: TestConnectionRequest): Promise<ConnectionTestResult> =>
+    (await apiClient.post('/admin/data-sources/test', request)).data,
+  testStoredConnection: async (id: string): Promise<ConnectionTestResult> =>
+    (await apiClient.post(`/admin/data-sources/${id}/test`)).data,
   getDataScope: async (id: string): Promise<AdminDataScopeDto> => (await apiClient.get(`/admin/data-sources/${id}/data-scope`)).data,
   updateDataScope: async (id: string, request: UpdateDataScopeRequest): Promise<void> => {
     await apiClient.put(`/admin/data-sources/${id}/data-scope`, request)
