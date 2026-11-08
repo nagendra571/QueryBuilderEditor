@@ -116,6 +116,27 @@ function invalidateDataSource(queryClient: ReturnType<typeof useQueryClient>, id
   queryClient.invalidateQueries({ queryKey: ['parameter-options'] })
 }
 
+export const encryptionKeyStatusKey = ['admin-encryption-key'] as const
+
+export function useEncryptionKeyStatus() {
+  return useQuery({ queryKey: encryptionKeyStatusKey, queryFn: adminApi.encryptionKeyStatus, retry: false })
+}
+
+export function useReencrypt() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: () => adminApi.reencrypt(),
+    onSuccess: () => {
+      // The counts and the list of sources on an old key change; so can what a source's own page says about its
+      // connection being readable.
+      queryClient.invalidateQueries({ queryKey: encryptionKeyStatusKey })
+      queryClient.invalidateQueries({ queryKey: adminDataSourcesKey })
+      queryClient.invalidateQueries({ queryKey: ['admin-data-source'] })
+    },
+    onError: (error) => toast.error(error instanceof ApiError ? error.message : 'Could not re-encrypt the data sources.'),
+  })
+}
+
 export function useCreateDataSource() {
   const queryClient = useQueryClient()
   return useMutation({

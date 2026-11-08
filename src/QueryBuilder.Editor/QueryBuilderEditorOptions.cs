@@ -91,6 +91,12 @@ public sealed class DataSourceManagementOptions
     /// is enough to keep querying managed sources that already exist.</summary>
     public string? EncryptionKey { get; set; }
 
+    /// <summary>Old keys that can still be read, newest first or in any order: each is base64 of 32 bytes. Saved
+    /// details are always written with <see cref="EncryptionKey"/>. To change the key, put the new one in
+    /// <see cref="EncryptionKey"/>, move the old one here, restart, then use "Re-encrypt with the current key" on the
+    /// admin page, and only afterwards remove the old key. Needs <see cref="EncryptionKey"/>.</summary>
+    public IList<string> PreviousEncryptionKeys { get; set; } = [];
+
     /// <summary>Allows <see cref="Enabled"/> while <c>AdminAuthorization</c> is Anonymous, meaning anyone who can
     /// reach the site could point it at any server. Meant for local development only.</summary>
     public bool AllowAnonymousAdmins { get; set; }

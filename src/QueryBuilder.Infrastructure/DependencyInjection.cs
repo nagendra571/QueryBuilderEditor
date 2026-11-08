@@ -19,7 +19,7 @@ public static class DependencyInjection
     /// project has no knowledge of "the editor" concept. <see cref="QueryBuilder.Editor.ServiceCollectionExtensions.AddQueryBuilderEditor"/>
     /// is the composition root that translates the host-facing options into this call.
     /// </summary>
-    public static IServiceCollection AddInfrastructure(this IServiceCollection services, string connectionString, bool applyMigrations, byte[]? connectionSecretKey = null)
+    public static IServiceCollection AddInfrastructure(this IServiceCollection services, string connectionString, bool applyMigrations, byte[]? connectionSecretKey = null, IReadOnlyList<byte[]>? previousConnectionSecretKeys = null)
     {
         services.AddDbContext<AppDbContext>(db =>
             db.UseSqlServer(
@@ -50,7 +50,7 @@ public static class DependencyInjection
 
         // Resolves connection strings for the business data sources users query (by DataSource.ConnectionStringName)
         // via the host's own IConfiguration — already registered by the host, no wiring needed here.
-        services.AddSingleton(new ConnectionSecretKey(connectionSecretKey));
+        services.AddSingleton(new ConnectionSecretKey(connectionSecretKey, previousConnectionSecretKeys));
         services.AddSingleton<IConnectionSecretProtector, AesGcmConnectionSecretProtector>();
         services.AddSingleton<IConnectionStringResolver, ConnectionStringResolver>();
         services.AddSingleton<IConnectionTester, ConnectionTester>();

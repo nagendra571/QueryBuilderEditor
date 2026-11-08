@@ -23,6 +23,9 @@ public interface IDataSourceRepository
     /// <summary>Writes only the named columns (plus UpdatedBy and UpdatedAtUtc). The row was read untracked, possibly
     /// long ago, so a whole-row write could restore a turn-off or an older password changed in between.</summary>
     void UpdateOnly(DataSource dataSource, params string[] propertyNames);
+    /// <summary>Replaces the encrypted connection only if it still equals <paramref name="expected"/>; false when it
+    /// changed (or the row is gone). Runs immediately, not on SaveChanges, and touches no other column.</summary>
+    Task<bool> TryReplaceEncryptedConnectionAsync(Guid id, string expected, string replacement, CancellationToken cancellationToken);
     Task<int> SaveChangesAsync(CancellationToken cancellationToken);
 }
 

@@ -5,11 +5,38 @@ using QueryBuilder.Application.Exceptions;
 namespace QueryBuilder.Infrastructure.Security;
 
 /// <summary>The host's encryption key, or none. Wrapped so the raw bytes aren't a loose service in the container.</summary>
-public sealed class ConnectionSecretKey(byte[]? key)
+public sealed class ConnectionSecretKey(byte[]? key, IReadOnlyList<byte[]>? previousKeys = null)
 {
     public const int KeyBytes = 32;
 
+    private const string FingerprintLabel = "QueryBuilder connection key fingerprint v1";
+
     public byte[]? Key { get; } = key;
+
+    /// <summary>Old keys still accepted for reading, never for writing. Only meaningful with a current key.</summary>
+    public IReadOnlyList<byte[]> PreviousKeys { get; } = previousKeys ?? [];
+
+    /// <summary>The first 8 lowercase hex characters of SHA-256 over a fixed label and the key. It lets an admin tell
+    /// keys apart without the key itself ever leaving the server.</summary>
+    public static string Fingerprint(byte[] key)
+    {
+        var label = System.Text.Encoding.ASCII.GetBytes(FingerprintLabel);
+        var input = new byte[label.Length + key.Length];
+        label.CopyTo(input, 0);
+        key.CopyTo(input, label.Length);
+        try
+        {
+            return Convert.ToHexString(SHA256.HashData(input))[..8].ToLowerInvariant();
+        }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(input);
+        }
+    }
+
+    public string? CurrentFingerprint => Key is null ? null : Fingerprint(Key);
+
+    public IReadOnlyList<string> PreviousFingerprints => PreviousKeys.Select(Fingerprint).ToList();
 
     /// <summary>Parses a base64 key of exactly 32 bytes. The error never repeats the value it was given.</summary>
     public static bool TryParse(string? base64, out byte[] key, out string? error)
@@ -72,7 +99,45 @@ public sealed class AesGcmConnectionSecretProtector(ConnectionSecretKey secretKe
 
     public string Unprotect(Guid dataSourceId, string ciphertext)
     {
-        var key = RequireKey();
+        var current = RequireKey();
+        var blob = ParseBlob(ciphertext) ?? throw Unreadable();
+
+        foreach (var key in Candidates(current))
+        {
+            if (TryDecrypt(key, dataSourceId, blob) is { } plain)
+            {
+                return plain;
+            }
+        }
+
+        throw Unreadable();
+    }
+
+    public SecretKeyMatch Identify(Guid dataSourceId, string ciphertext)
+    {
+        if (secretKey.Key is not { } current || ParseBlob(ciphertext) is not { } blob)
+        {
+            return SecretKeyMatch.Unreadable;
+        }
+
+        if (TryDecrypt(current, dataSourceId, blob) is not null)
+        {
+            return SecretKeyMatch.Current;
+        }
+
+        return secretKey.PreviousKeys.Any(key => TryDecrypt(key, dataSourceId, blob) is not null)
+            ? SecretKeyMatch.Previous
+            : SecretKeyMatch.Unreadable;
+    }
+
+    public string? CurrentFingerprint => secretKey.CurrentFingerprint;
+
+    public IReadOnlyList<string> PreviousFingerprints => secretKey.Key is null ? [] : secretKey.PreviousFingerprints;
+
+    private IEnumerable<byte[]> Candidates(byte[] current) => [current, .. secretKey.PreviousKeys];
+
+    private static byte[]? ParseBlob(string ciphertext)
+    {
         byte[] blob;
         try
         {
@@ -80,14 +145,14 @@ public sealed class AesGcmConnectionSecretProtector(ConnectionSecretKey secretKe
         }
         catch (FormatException)
         {
-            throw Unreadable();
+            return null;
         }
 
-        if (blob.Length < 1 + NonceBytes + TagBytes || blob[0] != Version)
-        {
-            throw Unreadable();
-        }
+        return blob.Length < 1 + NonceBytes + TagBytes || blob[0] != Version ? null : blob;
+    }
 
+    private static string? TryDecrypt(byte[] key, Guid dataSourceId, byte[] blob)
+    {
         var plain = new byte[blob.Length - 1 - NonceBytes - TagBytes];
         try
         {
@@ -102,7 +167,7 @@ public sealed class AesGcmConnectionSecretProtector(ConnectionSecretKey secretKe
         }
         catch (CryptographicException)
         {
-            throw Unreadable();
+            return null;
         }
         finally
         {

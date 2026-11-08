@@ -33,5 +33,10 @@ public sealed class DataSourceRepository(AppDbContext db) : IDataSourceRepositor
         }
     }
 
+    public async Task<bool> TryReplaceEncryptedConnectionAsync(Guid id, string expected, string replacement, CancellationToken cancellationToken) =>
+        await db.DataSources
+            .Where(d => d.Id == id && d.EncryptedConnection == expected)
+            .ExecuteUpdateAsync(s => s.SetProperty(d => d.EncryptedConnection, replacement), cancellationToken) == 1;
+
     public Task<int> SaveChangesAsync(CancellationToken cancellationToken) => db.SaveChangesAsync(cancellationToken);
 }

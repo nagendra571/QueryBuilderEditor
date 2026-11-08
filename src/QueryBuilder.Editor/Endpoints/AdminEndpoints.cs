@@ -64,6 +64,20 @@ public static class AdminEndpoints
             return Results.Json(await sender.Send(new TestStoredConnectionCommand(id), ct), QueryBuilderJson.Options);
         });
 
+        // Not gated on Enabled, unlike the routes above: a host may keep the add/edit form off and still rotate its key.
+        // Re-encrypting has its own gate (ReencryptAllowed), set at startup.
+        group.MapGet("/encryption-key", async (DataSourceManagementSettings settings, ISender sender, CancellationToken ct) =>
+        {
+            var status = await sender.Send(new GetEncryptionKeyStatusQuery(), ct);
+            return Results.Json(status with { CanReencrypt = settings.ReencryptAllowed }, QueryBuilderJson.Options);
+        });
+
+        group.MapPost("/encryption-key/reencrypt", async (DataSourceManagementSettings settings, ISender sender, CancellationToken ct) =>
+        {
+            if (!settings.ReencryptAllowed) return Results.NotFound();
+            return Results.Json(await sender.Send(new ReencryptDataSourcesCommand(), ct), QueryBuilderJson.Options);
+        });
+
         group.MapGet("/data-sources", async (ISender sender, CancellationToken ct) =>
             Results.Json(await sender.Send(new GetAdminDataSourcesQuery(), ct), QueryBuilderJson.Options));
 

@@ -354,6 +354,35 @@ export interface AuditLogEntryDto {
 
 // ---- Admin ----
 
+export type SecretKeyMatch = 'current' | 'previous' | 'unreadable'
+
+export interface EncryptionKeySourceDto {
+  id: string
+  name: string
+  isActive: boolean
+  state: SecretKeyMatch
+}
+
+/** Fingerprints and counts only; the server never sends a key, a blob or any connection detail. */
+export interface EncryptionKeyStatusDto {
+  keyConfigured: boolean
+  fingerprint: string | null
+  previousFingerprints: string[]
+  managedCount: number
+  onCurrentKey: number
+  onPreviousKey: number
+  unreadable: number
+  sources: EncryptionKeySourceDto[]
+  canReencrypt: boolean
+}
+
+export interface ReencryptResultDto {
+  reencrypted: number
+  alreadyCurrent: number
+  unreadable: number
+  skippedBecauseChanged: number
+}
+
 export interface AdminDataSourceSummaryDto {
   id: string
   name: string

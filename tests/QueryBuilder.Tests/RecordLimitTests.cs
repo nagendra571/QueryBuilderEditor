@@ -113,6 +113,7 @@ public class RecordLimitTests
         public Task AddAsync(DataSource dataSource, CancellationToken cancellationToken) => throw new NotSupportedException();
         public void UpdateOnly(DataSource dataSource, params string[] propertyNames) { }
         public void Update(DataSource dataSource) => throw new NotSupportedException();
+        public Task<bool> TryReplaceEncryptedConnectionAsync(Guid id, string expected, string replacement, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<int> SaveChangesAsync(CancellationToken cancellationToken) => throw new NotSupportedException();
     }
 

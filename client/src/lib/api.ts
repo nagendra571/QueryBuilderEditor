@@ -7,6 +7,8 @@ import type {
   TestConnectionRequest,
   UpdateDataSourceRequest,
   AdminDataSourceDetailDto,
+  EncryptionKeyStatusDto,
+  ReencryptResultDto,
   AdminDataSourceSummaryDto,
   AppUsersResult,
   AuditLogEntryDto,
@@ -103,6 +105,8 @@ export const adminApi = {
   updateRecordLimit: async (id: string, request: UpdateRecordLimitRequest): Promise<void> => {
     await apiClient.put(`/admin/data-sources/${id}/record-limit`, request)
   },
+  encryptionKeyStatus: async (): Promise<EncryptionKeyStatusDto> => (await apiClient.get('/admin/encryption-key')).data,
+  reencrypt: async (): Promise<ReencryptResultDto> => (await apiClient.post('/admin/encryption-key/reencrypt')).data,
   dataSourceManagement: async (): Promise<{ enabled: boolean }> => (await apiClient.get('/admin/data-source-management')).data,
   createDataSource: async (request: CreateDataSourceRequest): Promise<AdminDataSourceSummaryDto> =>
     (await apiClient.post('/admin/data-sources', request)).data,

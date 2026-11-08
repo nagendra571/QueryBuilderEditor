@@ -365,6 +365,13 @@ public class DataSourceManagementTests
         public Task<List<DataSource>> GetAllAsync(CancellationToken cancellationToken) => Task.FromResult(Items.ToList());
         public Task AddAsync(DataSource dataSource, CancellationToken cancellationToken) { Items.Add(dataSource); return Task.CompletedTask; }
         public void UpdateOnly(DataSource dataSource, params string[] propertyNames) { }
+        public Task<bool> TryReplaceEncryptedConnectionAsync(Guid id, string expected, string replacement, CancellationToken cancellationToken)
+        {
+            var row = Items.FirstOrDefault(x => x.Id == id);
+            if (row is null || row.EncryptedConnection != expected) return Task.FromResult(false);
+            row.EncryptedConnection = replacement;
+            return Task.FromResult(true);
+        }
         public Task<int> SaveChangesAsync(CancellationToken cancellationToken) { Saves++; return Task.FromResult(1); }
     }
 

@@ -249,9 +249,15 @@ Generate a key (base64 of exactly 32 random bytes) with either of:
 openssl rand -base64 32
 ```
 ```powershell
-[Convert]::ToBase64String([Security.Cryptography.RandomNumberGenerator]::GetBytes(32))
+$b = New-Object byte[] 32; [Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($b); [Convert]::ToBase64String($b)
 ```
 
+The PowerShell line works on Windows PowerShell 5.1 as well as PowerShell 7. Once the feature is running, the admin
+page's **Generate a new key** button makes one in the browser too (see "Changing the key").
+
+- **Without `app.UseExceptionHandler()` in Development, refusals show up as 500s.** The package turns a refusal (a
+  validation message, a turned-off source) into a 4xx response through that handler, so a host that never calls it
+  sees them as 500s.
 - **Startup checks.** A key that is set must be valid, or the app refuses to start. `Enabled` needs a key. `Enabled`
   with an `AdminAuthorization` of `Anonymous` is refused too, unless you set `AllowAnonymousAdmins = true` (local
   development only).
@@ -286,6 +292,48 @@ openssl rand -base64 32
   renamed and described in the UI but their connection stays in host configuration.
 - Adds one nullable column (`DataSources.EncryptedConnection`) through a migration, and the application reads it.
   **DBA-managed hosts must run the new schema script before deploying this release, even with the feature off.**
+
+### Changing the key
+
+For a plain-language walkthrough of the key (setup, where to keep it, rotation, losing it, troubleshooting), see
+`MANAGING-KEYS.md` at the root of this package (open the `.nupkg` as a zip, or find it under
+`~/.nuget/packages/querybuilder.editor/<version>/`).
+
+Rotating the key never means retyping every data source. The old key is kept for reading, and the admin page saves
+each source again under the new one.
+
+1. In `/admin`, choose **Generate a new key** (or make one with the commands above). It is made in the browser, never
+   sent to the server, and gone when you close the dialog. Store a copy in a password manager.
+2. Set it as `EncryptionKey` and move the key that was there into `PreviousEncryptionKeys`, then restart:
+
+   ```csharp
+   options.DataSourceManagement.EncryptionKey = builder.Configuration["QueryBuilder:EncryptionKey"];
+   options.DataSourceManagement.PreviousEncryptionKeys = [builder.Configuration["QueryBuilder:PreviousEncryptionKey"]!];
+   ```
+
+3. Open `/admin` again. The **Encryption key** section shows a short fingerprint of the current and previous keys and
+   how many managed sources are on each. Choose **Re-encrypt with the current key**.
+4. When every source is on the current key, remove the old key from `PreviousEncryptionKeys` and restart.
+
+- **Every app that shares the QueryBuilder database must have the new key (as `EncryptionKey`, or as a previous
+  key) before you re-encrypt.** Re-encrypted values can't be read with the old key alone, so an app still running
+  only the old key stops being able to connect to those sources until it is updated.
+- **`PreviousEncryptionKeys` are for reading only.** Anything saved is written with `EncryptionKey`. Each entry must be
+  base64 of 32 bytes, must differ from `EncryptionKey` and from the other entries, and needs `EncryptionKey` to be
+  set, or the app refuses to start. The error names the entry's position, never its value.
+- **Only fingerprints leave the server.** A fingerprint is the first 8 hex characters of a SHA-256 over a fixed label
+  and the key; the page, the API and the audit log show these and counts, never a key, a saved value or a host.
+- **Re-encrypting works with `Enabled` off.** A host can keep the add and edit form turned off and still rotate its
+  key: re-encrypting connects to no database, and running it again changes nothing once everything is current. It is
+  still limited to whoever passes `AdminAuthorization`, and it is recorded once in the audit log with the counts.
+  Like the form, it is refused while `AdminAuthorization` is Anonymous unless `AllowAnonymousAdmins` is set, because
+  running it before every app sharing the database has the new key leaves those apps unable to read the sources.
+  Such a host can still be rotated from another app that shares its database.
+- **A source edited during re-encryption is skipped, not overwritten.** Each source is replaced only if its saved
+  value is still the one that was read, so an admin saving a source at that moment keeps what they typed. The result
+  reports it as "skipped because it changed"; run it again.
+- **Sources no key can open** (listed as unreadable) are left as they are. Open each one and re-enter its password.
+  Turned-off sources are included in all of this, because they still hold a saved password.
 
 ## Row-level Data Scoping
 

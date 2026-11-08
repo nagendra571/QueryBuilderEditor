@@ -66,6 +66,43 @@ public static class ServiceCollectionExtensions
             secretKey = parsed;
         }
 
+        var previousKeys = new List<byte[]>();
+        var previousEntries = management.PreviousEncryptionKeys ?? [];
+        const string previousName = nameof(DataSourceManagementOptions.PreviousEncryptionKeys);
+        if (previousEntries.Count > 0 && secretKey is null)
+        {
+            throw new InvalidOperationException(
+                $"{nameof(QueryBuilderEditorOptions.DataSourceManagement)}.{previousName} needs " +
+                $"{nameof(DataSourceManagementOptions.EncryptionKey)}: previous keys are only for reading, so there has to be a current key to write with.");
+        }
+
+        for (var i = 0; i < previousEntries.Count; i++)
+        {
+            // Errors name the index only: the entry is a secret and must never reach a log.
+            if (!ConnectionSecretKey.TryParse(previousEntries[i], out var previous, out var previousError))
+            {
+                throw new InvalidOperationException(
+                    $"{nameof(QueryBuilderEditorOptions.DataSourceManagement)}.{previousName}[{i}] is invalid: {previousError} " +
+                    "Use base64 of exactly 32 bytes.");
+            }
+
+            if (previous.AsSpan().SequenceEqual(secretKey))
+            {
+                throw new InvalidOperationException(
+                    $"{nameof(QueryBuilderEditorOptions.DataSourceManagement)}.{previousName}[{i}] is the same as {nameof(DataSourceManagementOptions.EncryptionKey)}. " +
+                    "Remove it: the current key is always tried first.");
+            }
+
+            var duplicate = previousKeys.FindIndex(k => k.AsSpan().SequenceEqual(previous));
+            if (duplicate >= 0)
+            {
+                throw new InvalidOperationException(
+                    $"{nameof(QueryBuilderEditorOptions.DataSourceManagement)}.{previousName}[{i}] repeats entry {duplicate}. Remove one of them.");
+            }
+
+            previousKeys.Add(previous);
+        }
+
         if (management.Enabled)
         {
             if (secretKey is null)
@@ -92,10 +129,15 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ICurrentUserService, CurrentUserService>();
         services.AddScoped<ICurrentDataScope, CurrentDataScopeService>();
         services.AddSingleton(new RecordLimitSettings(options.DefaultMaxRecords));
-        services.AddSingleton(new DataSourceManagementSettings(management.Enabled));
+        // Re-encrypting connects nowhere, so it doesn't need Enabled, but it follows the same admin rule: with apps
+        // sharing one database mid-rotation, an early run makes sources unreadable to an app still on the old key.
+        var anonymousAdmins = options.AdminAuthorization.Mode == QueryBuilderAuthorizationMode.Anonymous
+            && string.IsNullOrWhiteSpace(options.AdminAuthorization.PolicyName);
+        var reencryptAllowed = secretKey is not null && (!anonymousAdmins || management.AllowAnonymousAdmins);
+        services.AddSingleton(new DataSourceManagementSettings(management.Enabled, reencryptAllowed));
 
         services.AddApplication();
-        services.AddInfrastructure(options.ConnectionString, options.ApplyMigrations, secretKey);
+        services.AddInfrastructure(options.ConnectionString, options.ApplyMigrations, secretKey, previousKeys);
 
         services.AddExceptionHandler<GlobalExceptionHandler>();
         services.AddProblemDetails();

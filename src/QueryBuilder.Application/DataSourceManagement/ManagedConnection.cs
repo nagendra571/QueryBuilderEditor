@@ -9,7 +9,7 @@ namespace QueryBuilder.Application.DataSourceManagement;
 
 /// <summary>Whether the admin UI may create and edit data sources. The key alone (without this) is enough
 /// to query managed sources that already exist.</summary>
-public sealed record DataSourceManagementSettings(bool Enabled);
+public sealed record DataSourceManagementSettings(bool Enabled, bool ReencryptAllowed = false);
 
 /// <summary>What the admin types. Everything nullable so a missing field becomes a validation message, not a crash.</summary>
 public sealed record ConnectionInput(

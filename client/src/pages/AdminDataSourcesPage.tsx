@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router-dom'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { AddDataSourceDialog } from '@/features/admin/AddDataSourceDialog'
+import { EncryptionKeySection } from '@/features/admin/EncryptionKeySection'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { useAdminDataSources, useDataSourceManagement } from '@/hooks/useAdmin'
 
@@ -77,6 +78,8 @@ export function AdminDataSourcesPage() {
           </TableBody>
         </Table>
       </div>
+
+      <EncryptionKeySection />
     </div>
   )
 }
