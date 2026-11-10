@@ -22,6 +22,11 @@ public static class EndpointRouteBuilderExtensions
     {
         var options = endpoints.ServiceProvider.GetRequiredService<QueryBuilderEditorOptions>();
 
+        if (options.Hub.Enabled)
+        {
+            endpoints.MapHubLaunchEndpoints();
+        }
+
         var group = endpoints.MapGroup(QueryBuilderRoutes.BasePath);
         ApplyAuthorization(group, options.Authorization);
 

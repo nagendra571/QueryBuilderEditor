@@ -190,6 +190,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<HubAppEnabledCache>();
         services.AddScoped<IAppSessionSource, HubAppSessionSource>();
         services.AddSingleton<IStartupFilter, HubSessionStartupFilter>();
+        services.AddSingleton<IStartupFilter, QueryBuilder.Editor.Middleware.HubRequestHeaderStartupFilter>();
 
         // A cookie scheme of our own, not the host's default: the host keeps whatever sign-in it already has.
         services.AddAuthentication().AddCookie(HubSession.Scheme, cookie => HubSessionCookie.Configure(cookie, hub));

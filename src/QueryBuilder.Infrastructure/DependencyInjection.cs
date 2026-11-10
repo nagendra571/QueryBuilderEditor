@@ -35,6 +35,7 @@ public static class DependencyInjection
             // Needs LaunchValidationSettings, which only hub mode registers; build-time validation would fail embedded hosts otherwise.
             services.AddSingleton<ILaunchTokenValidator, LaunchTokenValidator>();
             services.AddSingleton<LaunchReplayStore>();
+            services.AddScoped<QueryBuilder.Application.Hub.ILaunchRecorder, LaunchRecorder>();
         }
 
         services.AddDbContext<AppDbContext>(db =>

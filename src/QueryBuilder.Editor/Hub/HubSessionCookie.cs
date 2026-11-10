@@ -123,12 +123,34 @@ internal sealed class HubSessionStartupFilter : IStartupFilter
 {
     public const string PrincipalItemKey = "QueryBuilder.Hub.Principal";
 
+    // The SPA's files (hashed bundles, icons) never need a session; reading one would renew the cookie onto a response
+    // that is cached publicly.
+    private static readonly PathString AssetsPath = new(QueryBuilderRoutes.BasePath + "/assets");
+    private static readonly PathString ApiPath = new(QueryBuilderRoutes.BasePath + "/api");
+
+    private static bool IsStaticAsset(PathString path) =>
+        path.StartsWithSegments(AssetsPath)
+        || (!path.StartsWithSegments(ApiPath) && Path.HasExtension(path.Value));
+
     public Action<IApplicationBuilder> Configure(Action<IApplicationBuilder> next) => app =>
     {
         app.Use(async (context, nextMiddleware) =>
         {
-            if (context.Request.Path.StartsWithSegments(QueryBuilderRoutes.BasePath))
+            var path = context.Request.Path;
+            if (path.StartsWithSegments(QueryBuilderRoutes.BasePath) && !IsStaticAsset(path))
             {
+                // Registered before the cookie handler's own start-of-response work, so it runs after it: whatever
+                // that adds, a publicly cacheable response must never carry a session cookie to a shared cache.
+                context.Response.OnStarting(() =>
+                {
+                    if (context.Response.Headers.CacheControl.ToString().Contains("public", StringComparison.OrdinalIgnoreCase))
+                    {
+                        context.Response.Headers.Remove(Microsoft.Net.Http.Headers.HeaderNames.SetCookie);
+                    }
+
+                    return Task.CompletedTask;
+                });
+
                 try
                 {
                     var result = await context.AuthenticateAsync(HubSession.Scheme);
