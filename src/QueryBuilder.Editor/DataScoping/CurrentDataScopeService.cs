@@ -15,7 +15,8 @@ public sealed class CurrentDataScopeService(
     QueryBuilderEditorOptions editorOptions,
     ILogger<CurrentDataScopeService> logger,
     IAppSessionSource? hubSession = null,
-    IServiceProvider? services = null)
+    IServiceProvider? services = null,
+    IAppContext? appContext = null)
     : ICurrentDataScope
 {
     private ResolvedDataScope? _resolved;
@@ -35,10 +36,14 @@ public sealed class CurrentDataScopeService(
             return _appKeys;
         }
 
-        if (hubSession?.Current is not { AppId: { } appId } || services?.GetService(typeof(AppDbContext)) is not AppDbContext db)
+        // The frozen app of this scope, not the session's: an explicit UseApp scope has its own app's keys.
+        if (appContext is not { IsHubWide: false } || appContext.AppId == Guid.Empty
+            || services?.GetService(typeof(AppDbContext)) is not AppDbContext db)
         {
             return _appKeys = [];
         }
+
+        var appId = appContext.AppId;
 
         return _appKeys = db.Apps.AsNoTracking().Where(a => a.Id == appId).Select(a => a.ScopeKeys).FirstOrDefault() ?? [];
     }

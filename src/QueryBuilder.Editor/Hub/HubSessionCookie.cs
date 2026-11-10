@@ -70,7 +70,12 @@ internal static class HubSessionCookie
         {
             context.RejectPrincipal();
             await context.HttpContext.SignOutAsync(HubSession.Scheme);
+            return;
         }
+
+        // The handler's own sliding window only renews past half the timeout, which would make the idle limit
+        // anywhere from 30 to 60 minutes; renewing on every request makes it exactly IdleTimeout.
+        context.ShouldRenew = true;
     }
 }
 
@@ -124,10 +129,19 @@ internal sealed class HubSessionStartupFilter : IStartupFilter
         {
             if (context.Request.Path.StartsWithSegments(QueryBuilderRoutes.BasePath))
             {
-                var result = await context.AuthenticateAsync(HubSession.Scheme);
-                if (result.Succeeded)
+                try
                 {
-                    context.Items[PrincipalItemKey] = result.Principal;
+                    var result = await context.AuthenticateAsync(HubSession.Scheme);
+                    if (result.Succeeded)
+                    {
+                        context.Items[PrincipalItemKey] = result.Principal;
+                    }
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    // Data Protection or database trouble: no session (and so no app), never a 500 and never a guess.
+                    context.RequestServices.GetRequiredService<ILoggerFactory>().CreateLogger<HubSessionStartupFilter>()
+                        .LogWarning(ex, "The QueryBuilder hub session could not be read; treating the request as having no session.");
                 }
             }
 

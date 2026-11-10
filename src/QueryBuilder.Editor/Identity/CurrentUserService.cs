@@ -24,8 +24,10 @@ public sealed class CurrentUserService(
     // In hub mode the session is the only identity: the host's ActorResolver and claims never apply.
     private HubSessionInfo? HubSession => editorOptions.Hub.Enabled ? hubSession?.Current : null;
 
-    public string UserId => HubSession?.UserId ?? ResolveActor();
-    public string DisplayName => HubSession?.DisplayName ?? ResolveActor();
+    // Never ResolveActor() in hub mode: without a session the caller is anonymous, whatever the host's resolver or
+    // its own sign-in says (a resolver that throws must not fail a sessionless request either).
+    public string UserId => editorOptions.Hub.Enabled ? HubSession?.UserId ?? AnonymousActor : ResolveActor();
+    public string DisplayName => editorOptions.Hub.Enabled ? HubSession?.DisplayName ?? AnonymousActor : ResolveActor();
     public HubRole? Role => HubSession?.Role;
     public bool IsSuperAdmin => HubSession?.IsSuperAdmin ?? false;
     public string? Email => editorOptions.Hub.Enabled ? HubSession?.Email : httpContextAccessor.HttpContext?.User?.Identity?.IsAuthenticated == true

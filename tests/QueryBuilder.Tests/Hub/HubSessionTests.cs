@@ -45,7 +45,12 @@ public class HubSessionTests
             _client = host.GetTestClient();
         }
 
-        public static async Task<TestHub> StartAsync(string connectionString, FakeClock clock, bool hub = true)
+        public static readonly string KeyA = Convert.ToBase64String(Enumerable.Range(1, 32).Select(i => (byte)i).ToArray());
+        public static readonly string KeyB = Convert.ToBase64String(Enumerable.Range(101, 32).Select(i => (byte)i).ToArray());
+
+        public static async Task<TestHub> StartAsync(string connectionString, FakeClock clock, bool hub = true,
+            string? key = null, string[]? previousKeys = null, Action<QueryBuilderEditorOptions>? configure = null,
+            Action<IServiceCollection>? extra = null)
         {
             var host = await new HostBuilder().ConfigureWebHost(web =>
             {
@@ -59,11 +64,25 @@ public class HubSessionTests
                         o.ApplyMigrations = false;
                         o.Hub.Enabled = hub;
                         o.Hub.Audience = "https://hub.test";
+                        o.DataSourceManagement.EncryptionKey = key ?? KeyA;
+                        o.DataSourceManagement.PreviousEncryptionKeys = previousKeys?.ToList() ?? [];
+                        configure?.Invoke(o);
                     });
                     services.AddSingleton<TimeProvider>(clock);
+                    extra?.Invoke(services);
                 });
                 web.Configure(app =>
                 {
+                    app.Use((ctx, next) =>
+                    {
+                        if (ctx.Request.Headers.TryGetValue("X-Host-User", out var host))
+                        {
+                            ctx.User = new System.Security.Claims.ClaimsPrincipal(new System.Security.Claims.ClaimsIdentity(
+                                [new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.Name, host.ToString())], "host"));
+                        }
+
+                        return next();
+                    });
                     app.UseRouting();
                     app.UseEndpoints(MapTestEndpoints);
                 });
@@ -91,6 +110,17 @@ public class HubSessionTests
 
             e.MapGet("/querybuilder/test/ctx", async (HttpContext ctx, IAppContext app, ICurrentUserService user, ICurrentDataScope scope, AppDbContext db) =>
             {
+                // An explicit choice, as a super admin handler would make, before anything reads the app.
+                if (ctx.Request.Query["useApp"].FirstOrDefault() is { } useApp)
+                {
+                    ctx.RequestServices.GetRequiredService<IAppContextScope>().UseApp(Guid.Parse(useApp));
+                }
+
+                if (ctx.Request.Query.ContainsKey("hubWide"))
+                {
+                    ctx.RequestServices.GetRequiredService<IAppContextScope>().UseHubWide();
+                }
+
                 var first = app.AppId;
                 if (ctx.Request.Query["swap"].FirstOrDefault() is { } swap)
                 {
@@ -131,9 +161,9 @@ public class HubSessionTests
             return response;
         }
 
-        public async Task<JsonElement> CtxAsync(string query = "")
+        public async Task<JsonElement> CtxAsync(string query = "", string? hostUser = null)
         {
-            var response = await SendAsync(HttpMethod.Get, "/querybuilder/test/ctx" + (query.Length > 0 ? "?" + query : ""));
+            var response = await SendAsync(HttpMethod.Get, "/querybuilder/test/ctx" + (query.Length > 0 ? "?" + query : ""), hostUser);
             response.EnsureSuccessStatusCode();
             return JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement.Clone();
         }
@@ -144,9 +174,14 @@ public class HubSessionTests
 
         public string? CookieValue(string name) => _jar.GetValueOrDefault(name);
 
-        public async Task<HttpResponseMessage> SendAsync(HttpMethod method, string url)
+        public async Task<HttpResponseMessage> SendAsync(HttpMethod method, string url, string? hostUser = null)
         {
             var request = new HttpRequestMessage(method, url);
+            if (hostUser is not null)
+            {
+                request.Headers.Add("X-Host-User", hostUser);
+            }
+
             if (_jar.Count > 0)
             {
                 request.Headers.Add("Cookie", CookieHeader);
@@ -314,6 +349,127 @@ public class HubSessionTests
         clock.Now += TimeSpan.FromMinutes(61);
         Assert.Equal(Guid.Empty, (await hub.CtxAsync()).GetProperty("appId").GetGuid());
     });
+
+    [MetadataSqlFact]
+    public Task Idle_limit_is_exactly_1h_from_the_last_request() => RunAsync(async (cs, seeded) =>
+    {
+        foreach (var (idle, signedIn) in new[] { (59, true), (61, false) })
+        {
+            var clock = new FakeClock(T0);
+            await using var hub = await TestHub.StartAsync(cs, clock);
+            await hub.SignInAsync($"app={seeded.AppA}&user=mary");
+
+            clock.Now += TimeSpan.FromMinutes(29);
+            Assert.Equal(seeded.AppA, (await hub.CtxAsync()).GetProperty("appId").GetGuid());
+
+            clock.Now += TimeSpan.FromMinutes(idle);
+            var appId = (await hub.CtxAsync()).GetProperty("appId").GetGuid();
+            Assert.Equal(signedIn ? seeded.AppA : Guid.Empty, appId);
+        }
+    });
+
+    [MetadataSqlFact]
+    public Task Hub_mode_ignores_the_host_actor_resolver_and_sign_in() => RunAsync(async (cs, _) =>
+    {
+        await using var hub = await TestHub.StartAsync(cs, new FakeClock(T0), configure: o => o.ActorResolver = _ => "host-user");
+        var ctx = await hub.CtxAsync(hostUser: "host-identity");
+        Assert.Equal("anonymous", ctx.GetProperty("userId").GetString());
+        Assert.Equal("anonymous", ctx.GetProperty("displayName").GetString());
+
+        await using var throwing = await TestHub.StartAsync(cs, new FakeClock(T0),
+            configure: o => o.ActorResolver = _ => throw new InvalidOperationException("resolver"));
+        Assert.Equal("anonymous", (await throwing.CtxAsync()).GetProperty("userId").GetString());
+    });
+
+    [MetadataSqlFact]
+    public Task A_failure_while_reading_the_session_means_no_session_not_a_500() => RunAsync(async (cs, seeded) =>
+    {
+        await using var hub = await TestHub.StartAsync(cs, new FakeClock(T0), extra: services =>
+            services.PostConfigure<Microsoft.AspNetCore.Authentication.Cookies.CookieAuthenticationOptions>(HubSession.Scheme,
+                o => o.Events.OnValidatePrincipal = _ => throw new InvalidOperationException("boom")));
+        await hub.SignInAsync($"app={seeded.AppA}&user=mary");
+
+        var ctx = await hub.CtxAsync();
+        Assert.Equal(Guid.Empty, ctx.GetProperty("appId").GetGuid());
+        Assert.Equal(0, ctx.GetProperty("queries").GetInt32());
+    });
+
+    [MetadataSqlFact]
+    public Task Host_keys_follow_the_frozen_app_not_the_session() => RunAsync(async (cs, seeded) =>
+    {
+        await using var hub = await TestHub.StartAsync(cs, new FakeClock(T0));
+        Assert.Equal(["k"], (await hub.CtxAsync($"useApp={seeded.AppA}")).GetProperty("hostKeys").EnumerateArray().Select(v => v.GetString()));
+        Assert.Empty((await hub.CtxAsync($"useApp={seeded.AppB}")).GetProperty("hostKeys").EnumerateArray());
+        Assert.Empty((await hub.CtxAsync("hubWide=1")).GetProperty("hostKeys").EnumerateArray());
+        Assert.Empty((await hub.CtxAsync()).GetProperty("hostKeys").EnumerateArray());
+
+        await hub.SignInAsync($"app={seeded.AppA}&user=mary");
+        Assert.Equal(["k"], (await hub.CtxAsync()).GetProperty("hostKeys").EnumerateArray().Select(v => v.GetString()));
+    });
+
+    [MetadataSqlFact]
+    public Task The_key_ring_is_encrypted_at_rest_and_unreadable_with_another_key() => RunAsync(async (cs, seeded) =>
+    {
+        string cookie;
+        await using (var a = await TestHub.StartAsync(cs, new FakeClock(T0)))
+        {
+            await a.SignInAsync($"app={seeded.AppA}&user=mary");
+            cookie = a.CookieValue("__Host-qb-hub")!;
+        }
+
+        var options = new DbContextOptionsBuilder<AppDbContext>()
+            .UseSqlServer(cs, sql => sql.MigrationsAssembly(typeof(AppDbContext).Assembly.FullName)).Options;
+        await using (var db = new AppDbContext(options, new FixedAppContext(App.NoneId)))
+        {
+            var xml = await db.DataProtectionKeys.Select(k => k.Xml).ToListAsync();
+            Assert.NotEmpty(xml);
+            Assert.All(xml, x =>
+            {
+                Assert.DoesNotContain("<masterKey", x);
+                Assert.DoesNotContain("<value>", x);
+                Assert.Contains("encryptedHubKey", x);
+            });
+        }
+
+        await using var other = await TestHub.StartAsync(cs, new FakeClock(T0), key: TestHub.KeyB);
+        other.SetCookie("__Host-qb-hub", cookie);
+        Assert.Equal(Guid.Empty, (await other.CtxAsync()).GetProperty("appId").GetGuid());
+
+        await using var rotated = await TestHub.StartAsync(cs, new FakeClock(T0), key: TestHub.KeyB, previousKeys: [TestHub.KeyA]);
+        rotated.SetCookie("__Host-qb-hub", cookie);
+        Assert.Equal(seeded.AppA, (await rotated.CtxAsync()).GetProperty("appId").GetGuid());
+    });
+
+    [Fact]
+    public void Hub_mode_refuses_to_start_without_the_encryption_key()
+    {
+        var ex = Assert.Throws<InvalidOperationException>(() => new ServiceCollection().AddQueryBuilderEditor(o =>
+        {
+            o.ConnectionString = "Server=unused;Database=unused";
+            o.Hub.Enabled = true;
+            o.Hub.Audience = "a";
+        }));
+        Assert.Contains("EncryptionKey", ex.Message);
+    }
+
+    [Theory]
+    [InlineData(0, 8, "IdleTimeout")]
+    [InlineData(-1, 8, "IdleTimeout")]
+    [InlineData(1, 0, "AbsoluteLifetime")]
+    [InlineData(2, 1, "AbsoluteLifetime")]
+    public void Hub_mode_refuses_unusable_session_lifetimes(int idleHours, int absoluteHours, string setting)
+    {
+        var ex = Assert.Throws<InvalidOperationException>(() => new ServiceCollection().AddQueryBuilderEditor(o =>
+        {
+            o.ConnectionString = "Server=unused;Database=unused";
+            o.Hub.Enabled = true;
+            o.Hub.Audience = "a";
+            o.DataSourceManagement.EncryptionKey = TestHub.KeyA;
+            o.Hub.IdleTimeout = TimeSpan.FromHours(idleHours);
+            o.Hub.AbsoluteLifetime = TimeSpan.FromHours(absoluteHours);
+        }));
+        Assert.Contains(setting, ex.Message);
+    }
 
     [MetadataSqlFact]
     public Task Disabling_the_app_ends_its_sessions_within_30s() => RunAsync(async (cs, seeded) =>

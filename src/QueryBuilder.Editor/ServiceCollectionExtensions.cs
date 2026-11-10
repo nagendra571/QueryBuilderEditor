@@ -144,6 +144,29 @@ public static class ServiceCollectionExtensions
         if (options.Hub.Enabled)
         {
             services.AddSingleton(new QueryBuilder.Application.Hub.LaunchValidationSettings(options.Hub.Audience ?? string.Empty));
+            if (secretKey is null)
+            {
+                throw new InvalidOperationException(
+                    $"Hub mode needs {nameof(QueryBuilderEditorOptions.DataSourceManagement)}.{nameof(DataSourceManagementOptions.EncryptionKey)}: " +
+                    "it encrypts the session key ring stored in the database. Use base64 of 32 random bytes, for example `openssl rand -base64 32`.");
+            }
+
+            if (options.Hub.IdleTimeout <= TimeSpan.Zero)
+            {
+                throw new InvalidOperationException($"{nameof(HubOptions)}.{nameof(HubOptions.IdleTimeout)} must be greater than zero.");
+            }
+
+            if (options.Hub.AbsoluteLifetime <= TimeSpan.Zero)
+            {
+                throw new InvalidOperationException($"{nameof(HubOptions)}.{nameof(HubOptions.AbsoluteLifetime)} must be greater than zero.");
+            }
+
+            if (options.Hub.AbsoluteLifetime < options.Hub.IdleTimeout)
+            {
+                throw new InvalidOperationException(
+                    $"{nameof(HubOptions)}.{nameof(HubOptions.AbsoluteLifetime)} must not be shorter than {nameof(HubOptions.IdleTimeout)}.");
+            }
+
             AddHubSession(services, options.Hub);
         }
 
@@ -176,6 +199,10 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<MetadataXmlRepository>();
         services.AddDataProtection().SetApplicationName("QueryBuilder.Hub");
         services.AddOptions<KeyManagementOptions>()
-            .Configure<MetadataXmlRepository>((keys, repository) => keys.XmlRepository = repository);
+            .Configure<MetadataXmlRepository, ConnectionSecretKey>((keys, repository, secret) =>
+            {
+                keys.XmlRepository = repository;
+                keys.XmlEncryptor = new HubKeyEncryptor(secret);
+            });
     }
 }
