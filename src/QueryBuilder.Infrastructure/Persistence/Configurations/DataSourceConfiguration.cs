@@ -11,6 +11,9 @@ public sealed class DataSourceConfiguration : IEntityTypeConfiguration<DataSourc
     {
         builder.ToTable("DataSources");
         builder.HasKey(x => x.Id);
+        builder.Property(x => x.AppId).IsRequired();
+        builder.HasOne<App>().WithMany().HasForeignKey(x => x.AppId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasIndex(x => x.AppId);
 
         builder.Property(x => x.Name).HasMaxLength(200).IsRequired();
         builder.Property(x => x.Description).HasMaxLength(1000);

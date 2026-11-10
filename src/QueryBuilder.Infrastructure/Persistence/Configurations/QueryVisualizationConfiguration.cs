@@ -10,6 +10,8 @@ public sealed class QueryVisualizationConfiguration : IEntityTypeConfiguration<Q
     {
         builder.ToTable("QueryVisualizations");
         builder.HasKey(x => x.Id);
+        builder.Property(x => x.AppId).IsRequired();
+        builder.HasOne<App>().WithMany().HasForeignKey(x => x.AppId).OnDelete(DeleteBehavior.Restrict);
 
         builder.Property(x => x.Name).HasMaxLength(200).IsRequired();
         builder.Property(x => x.Type).HasConversion<string>().HasMaxLength(20).IsRequired();

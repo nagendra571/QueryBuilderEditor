@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using QueryBuilder.Application.Abstractions;
 using QueryBuilder.Infrastructure.Audit;
 using QueryBuilder.Infrastructure.Catalog;
@@ -19,8 +20,13 @@ public static class DependencyInjection
     /// project has no knowledge of "the editor" concept. <see cref="QueryBuilder.Editor.ServiceCollectionExtensions.AddQueryBuilderEditor"/>
     /// is the composition root that translates the host-facing options into this call.
     /// </summary>
-    public static IServiceCollection AddInfrastructure(this IServiceCollection services, string connectionString, bool applyMigrations, byte[]? connectionSecretKey = null, IReadOnlyList<byte[]>? previousConnectionSecretKeys = null)
+    public static IServiceCollection AddInfrastructure(this IServiceCollection services, string connectionString, bool applyMigrations, byte[]? connectionSecretKey = null, IReadOnlyList<byte[]>? previousConnectionSecretKeys = null, bool hubMode = false)
     {
+        services.AddSingleton(new MetadataMode(hubMode));
+        services.AddScoped<AppContextAccessor>();
+        services.AddScoped<IAppContext>(sp => sp.GetRequiredService<AppContextAccessor>());
+        services.AddScoped<IAppContextScope>(sp => sp.GetRequiredService<AppContextAccessor>());
+
         services.AddDbContext<AppDbContext>(db =>
             db.UseSqlServer(
                 connectionString,
@@ -36,7 +42,8 @@ public static class DependencyInjection
         }
 
         // Registered after the migration hosted service (registration order = startup order) so
-        // that when migrations are enabled, the schema is guaranteed to exist by the time this runs.
+        // that when migrations are enabled, the schema is guaranteed to exist by the time these run.
+        services.AddHostedService<MetadataModeGuard>();
         services.AddHostedService<DefaultDataSourceSeeder>();
 
         services.AddScoped<ISavedQueryRepository, SavedQueryRepository>();

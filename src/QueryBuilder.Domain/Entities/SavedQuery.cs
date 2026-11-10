@@ -1,7 +1,9 @@
 namespace QueryBuilder.Domain.Entities;
 
-public sealed class SavedQuery : AuditableEntity
+public sealed class SavedQuery : AuditableEntity, IAppOwned
 {
+    public Guid AppId { get; set; }
+
     public string Name { get; set; } = string.Empty;
     public string? Description { get; set; }
     public Guid DataSourceId { get; set; }

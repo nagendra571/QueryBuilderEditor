@@ -72,6 +72,9 @@ public sealed class QueryBuilderEditorOptions
     /// <summary>Lets admins add and edit data sources in the UI, with the connection details stored encrypted.
     /// Off unless enabled — see <see cref="DataSourceManagementOptions"/>.</summary>
     public DataSourceManagementOptions DataSourceManagement { get; } = new();
+
+    /// <summary>Hub mode (several apps, one metadata database). Off by default: embedded behaviour is unchanged.</summary>
+    public HubOptions Hub { get; } = new();
 }
 
 /// <summary>

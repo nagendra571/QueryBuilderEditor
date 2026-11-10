@@ -7,8 +7,10 @@ namespace QueryBuilder.Domain.Entities;
 /// viewer's own query access and row scope decide what a chart tile shows. <see cref="Version"/> is
 /// an optimistic-concurrency token bumped on every rename or tile save.
 /// </summary>
-public sealed class Dashboard : AuditableEntity
+public sealed class Dashboard : AuditableEntity, IAppOwned
 {
+    public Guid AppId { get; set; }
+
     public string Name { get; set; } = string.Empty;
     public string? Description { get; set; }
     public string OwnerId { get; set; } = string.Empty;
@@ -26,8 +28,10 @@ public sealed class Dashboard : AuditableEntity
     public List<DashboardShare> Shares { get; set; } = [];
 }
 
-public sealed class DashboardTile : AuditableEntity
+public sealed class DashboardTile : AuditableEntity, IAppOwned
 {
+    public Guid AppId { get; set; }
+
     public Guid DashboardId { get; set; }
     public Dashboard? Dashboard { get; set; }
     public DashboardTileKind Kind { get; set; }
@@ -56,8 +60,10 @@ public sealed class DashboardTile : AuditableEntity
 
 /// <summary>Grants another user access to a dashboard. Only Viewer and Editor are valid; ownership
 /// lives on <see cref="Dashboard.OwnerId"/>. Never grants access to the charts' underlying queries.</summary>
-public sealed class DashboardShare : AuditableEntity
+public sealed class DashboardShare : AuditableEntity, IAppOwned
 {
+    public Guid AppId { get; set; }
+
     public Guid DashboardId { get; set; }
     public Dashboard? Dashboard { get; set; }
     public string SharedWithUserId { get; set; } = string.Empty;

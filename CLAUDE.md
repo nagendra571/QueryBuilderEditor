@@ -26,9 +26,41 @@ integration ergonomics (single-call registration, embedded SPA, DBA-friendly mig
 
 ## Where we left off (update this at the end of each session)
 
-As of 2026-11-08: branch `feature/rea1`, last feature commit `d86b56b` (**1.4.0, encryption key rotation — published to
-NuGet by the user, committed and pushed**), **not merged to `main`**. 1.2.0 (PostgreSQL), 1.3.0 (admin-managed data
-sources) and 1.4.0 are all on NuGet. Any further change needs 1.4.1+. Docs for PostgreSQL:
+**As of 2026-11-10: multi-app hub ("QueryBuilder Hub") — Part 1 of 4 done, UNCOMMITTED on local branch `feature/hub`**
+(from `feature/rea1` `de592e8`). Spec (approved): `docs/superpowers/specs/2026-11-10-multi-app-hub-design.md` — one
+central QueryBuilder; apps (tenants) hand users over with a signed JWT launch token (form POST); roles Admin/Author/Viewer
+from the token, super admins via Entra ID + allowlist; app admins see everything in their app; Viewers see dashboards
+published to the app; hub-mode is opt-in, embedded mode unchanged; release 2.0.0 only after all 4 parts. Plan for Part 1:
+`docs/superpowers/plans/2026-11-10-hub-part1-apps-and-isolation.md`. Parts still to plan: 2 launch + sessions + super admin
+sign-in, 3 roles/publishing/sharing/data-source lock/super admin console, 4 `src/QueryBuilder.Hub` host (not packed) +
+`QueryBuilder.Launch` (netstandard2.0) package.
+Part 1 built: `App` (Default `…000d`, None = `Guid.Empty`), `IAppOwned` on 8 entities (+ nullable `AuditLogEntry.AppId`),
+`AppDbContext` filter over every `IAppOwned` type + save guard (stamps AppId; refuses other-app/None writes; only hub-wide
+writes `Apps`), `CrossAppWriteException` → 404, `IAppContext`/`IAppContextScope` + `AppContextAccessor`/`MetadataMode` in
+Infrastructure (embedded → Default, hub without a choice → None; explicit choice set-once), `Hub.Enabled` option,
+`MetadataModeGuard` (records `MetadataSettings.Mode`; other mode → refuse; hub refuses a populated DB with no Mode;
+embedded only warns on a missing schema or an unwritable row), catalog and `datascope:{id}` caches gated by a filtered
+lookup, hub mode never seeds the metadata DB as a data source, migration `20261110171537_AddApps` (existing rows →
+Default; **named raw-SQL defaults `DF_<Table>_AppId` = Default kept on purpose** so embedded raw `INSERT INTO DataSources`,
+rollback to 1.5.0 and mixed versions keep working). Verified: 1070/1070 on net8.0 and net10.0 with both DB variables,
+0 skipped; client 175; idempotent script twice fresh and twice from 1.5.0 with rows; embedded sample app on a copy of
+`QueryBuilderAppDb` (16 API checks, every row in Default); hub mode refused that DB.
+**At release (2.0.0):** regenerate the DBA script; document in both READMEs + `Scripts/README.md`: Apps/AppId/MetadataSettings,
+mode marker + refusal (hub needs its own empty DB), the AuditLogEntries backfill rewrites the whole table (time/log growth),
+INSERT grant on `MetadataSettings` (or DBA inserts `('Mode','Embedded')`), raw-SQL registration still works.
+**Notes for Part 2's plan (from the final review):** app from session via an Application-level abstraction, frozen per
+scope, missing/invalid/disabled session → None (never Default); hub-wide never from session data — only super-admin
+console handlers, don't let request code flip a scope; launch writes (replay store, `LaunchRefused` audit, `SeenUsers`)
+need their own scopes (a None scope throws on audit → 404 hides the refusal); `SeenUsers` is `IAppOwned`; `AppSigningKeys`/
+`AppReturnUrls`/`AppScopeKeys` need a hub-wide-only marker + guard branch (today non-owned tables are writable by any real
+app); super-admin audit inside an app needs an explicit AppId; key rotation/status must run hub-wide in hub mode; add the
+spec §7 endpoint cross-app matrix test (App B vs App A ids → 404, nothing changed) before hub endpoints ship; log cross-app
+refusals at Warning; consider composite FKs `(AppId, ParentId)`; watch plan sniffing on `@IsHubWide = 1 OR AppId = @id`.
+
+As of 2026-11-09: branch `feature/rea1`, last feature commit `de592e8` (**1.5.0: admin-added scope keys per data source +
+5,000-character PostgreSQL passwords — published to NuGet by the user, committed and pushed**), **not merged to `main`**.
+1.2.0 (PostgreSQL), 1.3.0 (admin-managed data sources), 1.4.0 (key rotation) and 1.5.0 are all on NuGet; 1.4.1 was packed but
+never pushed. Any further change needs **1.5.1+**. Schema script: `QueryBuilder.schema.1.5.0.sql`. Docs for PostgreSQL:
 `docs/redash-parity/features/postgresql/`. Data source management and key rotation have no SPEC or PLAN, at the user's
 request; their rules are here, under "Known sharp edges" and in `MANAGING-KEYS.md` (root; plain-language key guide,
 also packed into the nupkg root and linked from both READMEs). Its "our setup" part lives in `MANAGING-KEYS.local.md`,
@@ -91,20 +123,40 @@ after removal, super always sees all, 5 invalid inputs → 400, audit rows) and 
 Sample's own keys left empty. **Next feature: how each user's values are supplied** (recommended earlier: an admin-chosen
 access table/view in the data source, looked up as the actor, failing closed; unrestricted stays in host code).
 
-Waiting on the user (the user was about to `/clear` and restart the machine, so nothing is running):
+**Discussed 2026-11-09, not built, awaiting the user's answer — "Embed a chart or dashboard in host pages"** (item 4 of
+`reports/Embedded query builder competitive analysis.md`, untracked). Explained: same-origin, so the host's sign-in cookie
+works and no guest tokens are needed; every embedded render goes through the existing
+`POST /api/queries/{id}/visualizations/{vid}/data` (access mode, CanView, disabled, record limits, scope, parameter binder).
+Options offered: (1) chrome-less iframe routes for dashboards (loads the whole ~1.5 MB bundle), (2) a separate small web
+component bundle `<qb-chart query chart p-…>` served as `/querybuilder/embed.js`, (3) a Razor tag helper on top of (2).
+Recommended 2+3 for single charts, 1 for whole dashboards at first. Review findings: (a) **sharing is the real decision** —
+an embedded chart shows "no access" to anyone it isn't shared with; options from "just share it" to a new "embeddable for all
+signed-in users" switch (scope still applies) — a security-model change, the user's call; (b) **no `X-Frame-Options` /
+`frame-ancestors` header anywhere today**, so `/querybuilder` can be framed by any site (clickjacking) — worth fixing
+regardless (allow `'self'` only); (c) bundle size; (d) theming tokens needed to look native; (e) cross-site reads stay
+blocked (no CORS for the API). Last question asked: which `TemplateBuilderClient` page first, a single chart or a whole
+dashboard? Also pending: **how each user's scope values are supplied** (see the scope-keys paragraph above).
+
+Unrelated: the user once pasted an EF "could not be translated" error from another app, `B23Rain.Analytics`
+(`SqlLoginStore.GetSessionStateAsync` calls a custom `RolesOf(db, u.Id).Any(...)` inside an EF query, in cookie
+revalidation, so it likely breaks every signed-in request). Its source isn't on this machine; asked for the path, no answer.
+
+Waiting on the user (the user is about to `/clear`, so nothing is running):
+0. `TemplateBuilderClient` is still on QueryBuilder 1.3.0; moving it to 1.5.0 is the natural next step (the items below
+   written for 1.4.0 apply to 1.5.0 the same way; 1.5.0 adds the `ScopeKeys` column, auto-migrated on first start).
 1. Move `TemplateBuilderClient` to 1.4.0 and add to its `Program.cs`
    `options.DataSourceManagement.PreviousEncryptionKeys = builder.Configuration.GetSection("QueryBuilder:PreviousDataSourceKeys").Get<string[]>() ?? [];`
    (offer to do this; it isn't done). Run `dotnet user-secrets set "QueryBuilder:DataSourceFormEnabled" "true"` there to
    keep the form locally (unknown whether done). Then report how the local form test went.
 2. Redeploy `TemplateBuilderClient`; then place `appsettings.Server.json` (`{ "QueryBuilder": { "DataSourceKey": "…" } }`,
-   same key as local) next to `TemplateBuilderClient.dll` on the server and check it survives the next publish. Neither
-   1.2.0, 1.3.0 nor 1.4.0 has run on the hosted site. Add HTTPS there before entering real passwords.
+   same key as local) next to `TemplateBuilderClient.dll` on the server and check it survives the next publish. None of
+   1.2.0–1.5.0 has run on the hosted site. Add HTTPS there before entering real passwords.
 3. Approve a real SQL Server login test. `mcr.microsoft.com/mssql/server` is on this machine, but running it means
    accepting Microsoft's license (`ACCEPT_EULA=Y`), so ask first. Named instances and "Required and verify certificate"
    succeeding are also unverified.
 4. Decide whether a new data source should start turned on (current behavior, like Redash) or off.
 5. Decide whether to merge `feature/rea1` to `main`, and what to do with the untracked design files.
-6. Decide whether to drop `net8.0`: .NET 8's end of support is 2026-11-10.
+6. Decide whether to drop `net8.0`: .NET 8's end of support is 2026-11-10 (i.e. now).
 7. Untracked files of unknown purpose at the root: `Notes.txt`, `reports/`, `research_notes/`. Never commit them without
    asking.
 
@@ -287,6 +339,10 @@ version was hit once already).
   auth and TLS with `POSTGRES_PASSWORD`, then a self-signed key in `PGDATA` and `ALTER SYSTEM SET ssl=on`: starting with
   `-c ssl=on` and the snakeoil files makes the container exit, and `POSTGRES_HOST_AUTH_METHOD=trust` can't fail a wrong
   password.
+- **Git Bash rewrites container paths** in `docker exec <id> sed … /var/lib/...` into `C:/Program Files/Git/var/...`; set
+  `MSYS_NO_PATHCONV=1` first. Run `pg_ctl reload` as `docker exec -u postgres <id> pg_ctl reload -D /var/lib/postgresql/data`.
+  Don't combine `docker exec … sh -c "…"` and `docker rm` in one command: a safety check blocks it. Start containers with
+  `--rm` and clean up with `docker stop <id>`. Other containers run on this machine (not ours); never stop those.
 - **`dotnet list package --vulnerable` is partial here** because `nuget.telerik.com` is unreachable. Check with a config
   holding only nuget.org. After `dotnet list --config`, run `dotnet restore --force`, or the next `dotnet clean` fails with
   NETSDK1005. Check each step's exit code before trusting a pack.
@@ -345,6 +401,11 @@ unless asked): QueryBuilder wiring in `Program.cs`, `DevPersonas.cs`, a Personas
   per-data-source override; unset = legacy behavior.
 
 ## Known sharp edges (already hit once — don't reintroduce)
+
+- **`AppId` database defaults live outside the EF model** (`DF_<Table>_AppId`, added by raw SQL in `AddApps`). A future
+  migration that `AlterColumn`s an `AppId` makes EF drop that default without re-adding it — re-add it by hand in the same
+  migration. Every app-owned entity must implement `IAppOwned` (`AppModelTests` reads the EF model and fails otherwise), and
+  anything cached by an id must be gated by a filtered lookup first (the catalog and data-scope caches were cross-app holes).
 
 - **PostgreSQL reads are text-mode on purpose.** `PostgresQueryExecutionService` sets
   `AllResultTypesAreUnknown = true` and parses each cell by its reported type in `PostgresValueParser`, because

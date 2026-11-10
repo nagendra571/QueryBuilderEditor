@@ -22,6 +22,36 @@ namespace QueryBuilder.Infrastructure.Persistence.Migrations
 
             SqlServerModelBuilderExtensions.UseIdentityColumns(modelBuilder);
 
+            modelBuilder.Entity("QueryBuilder.Domain.Entities.App", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<bool>("IsEnabled")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Key")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Key")
+                        .IsUnique();
+
+                    b.ToTable("Apps", (string)null);
+                });
+
             modelBuilder.Entity("QueryBuilder.Domain.Entities.AuditLogEntry", b =>
                 {
                     b.Property<Guid>("Id")
@@ -35,6 +65,9 @@ namespace QueryBuilder.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasMaxLength(450)
                         .HasColumnType("nvarchar(450)");
+
+                    b.Property<Guid?>("AppId")
+                        .HasColumnType("uniqueidentifier");
 
                     b.Property<Guid?>("DataSourceId")
                         .HasColumnType("uniqueidentifier");
@@ -72,6 +105,8 @@ namespace QueryBuilder.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("TimestampUtc");
 
+                    b.HasIndex("AppId", "TimestampUtc");
+
                     b.HasIndex("EntityType", "EntityId");
 
                     b.ToTable("AuditLogEntries", (string)null);
@@ -81,6 +116,9 @@ namespace QueryBuilder.Infrastructure.Persistence.Migrations
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("AppId")
                         .HasColumnType("uniqueidentifier");
 
                     b.Property<DateTimeOffset>("CreatedAtUtc")
@@ -133,6 +171,8 @@ namespace QueryBuilder.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("OwnerId");
 
+                    b.HasIndex("AppId", "OwnerId");
+
                     b.ToTable("Dashboards", (string)null);
                 });
 
@@ -144,6 +184,9 @@ namespace QueryBuilder.Infrastructure.Persistence.Migrations
 
                     b.Property<int>("AccessLevel")
                         .HasColumnType("int");
+
+                    b.Property<Guid>("AppId")
+                        .HasColumnType("uniqueidentifier");
 
                     b.Property<DateTimeOffset>("CreatedAtUtc")
                         .HasColumnType("datetimeoffset");
@@ -175,6 +218,8 @@ namespace QueryBuilder.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("AppId");
+
                     b.HasIndex("DashboardId", "SharedWithUserId")
                         .IsUnique();
 
@@ -185,6 +230,9 @@ namespace QueryBuilder.Infrastructure.Persistence.Migrations
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("AppId")
                         .HasColumnType("uniqueidentifier");
 
                     b.Property<bool>("AutoHeight")
@@ -250,6 +298,8 @@ namespace QueryBuilder.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("AppId");
+
                     b.HasIndex("DashboardId");
 
                     b.HasIndex("VisualizationId");
@@ -261,6 +311,9 @@ namespace QueryBuilder.Infrastructure.Persistence.Migrations
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("AppId")
                         .HasColumnType("uniqueidentifier");
 
                     b.Property<string>("ColumnName")
@@ -296,6 +349,8 @@ namespace QueryBuilder.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("AppId");
+
                     b.HasIndex("DataSourceId", "ObjectName", "ScopeKey")
                         .IsUnique()
                         .HasFilter("[ScopeKey] IS NOT NULL");
@@ -316,6 +371,9 @@ namespace QueryBuilder.Infrastructure.Persistence.Migrations
                     b.Property<string>("AllowedSchemas")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
+
+                    b.Property<Guid>("AppId")
+                        .HasColumnType("uniqueidentifier");
 
                     b.Property<int>("CatalogScope")
                         .HasColumnType("int");
@@ -369,7 +427,25 @@ namespace QueryBuilder.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("AppId");
+
                     b.ToTable("DataSources", (string)null);
+                });
+
+            modelBuilder.Entity("QueryBuilder.Domain.Entities.MetadataSetting", b =>
+                {
+                    b.Property<string>("Key")
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<string>("Value")
+                        .IsRequired()
+                        .HasMaxLength(400)
+                        .HasColumnType("nvarchar(400)");
+
+                    b.HasKey("Key");
+
+                    b.ToTable("MetadataSettings", (string)null);
                 });
 
             modelBuilder.Entity("QueryBuilder.Domain.Entities.QueryShare", b =>
@@ -380,6 +456,9 @@ namespace QueryBuilder.Infrastructure.Persistence.Migrations
 
                     b.Property<int>("AccessLevel")
                         .HasColumnType("int");
+
+                    b.Property<Guid>("AppId")
+                        .HasColumnType("uniqueidentifier");
 
                     b.Property<DateTimeOffset>("CreatedAtUtc")
                         .HasColumnType("datetimeoffset");
@@ -411,6 +490,8 @@ namespace QueryBuilder.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("AppId");
+
                     b.HasIndex("SavedQueryId", "SharedWithUserId")
                         .IsUnique();
 
@@ -421,6 +502,9 @@ namespace QueryBuilder.Infrastructure.Persistence.Migrations
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("AppId")
                         .HasColumnType("uniqueidentifier");
 
                     b.Property<DateTimeOffset>("CreatedAtUtc")
@@ -460,6 +544,8 @@ namespace QueryBuilder.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("AppId");
+
                     b.HasIndex("SavedQueryId");
 
                     b.ToTable("QueryVisualizations", (string)null);
@@ -469,6 +555,9 @@ namespace QueryBuilder.Infrastructure.Persistence.Migrations
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("AppId")
                         .HasColumnType("uniqueidentifier");
 
                     b.Property<DateTimeOffset>("CreatedAtUtc")
@@ -524,13 +613,38 @@ namespace QueryBuilder.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("OwnerId");
 
+                    b.HasIndex("AppId", "OwnerId");
+
                     b.HasIndex("OwnerId", "Name");
 
                     b.ToTable("SavedQueries", (string)null);
                 });
 
+            modelBuilder.Entity("QueryBuilder.Domain.Entities.AuditLogEntry", b =>
+                {
+                    b.HasOne("QueryBuilder.Domain.Entities.App", null)
+                        .WithMany()
+                        .HasForeignKey("AppId")
+                        .OnDelete(DeleteBehavior.Restrict);
+                });
+
+            modelBuilder.Entity("QueryBuilder.Domain.Entities.Dashboard", b =>
+                {
+                    b.HasOne("QueryBuilder.Domain.Entities.App", null)
+                        .WithMany()
+                        .HasForeignKey("AppId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("QueryBuilder.Domain.Entities.DashboardShare", b =>
                 {
+                    b.HasOne("QueryBuilder.Domain.Entities.App", null)
+                        .WithMany()
+                        .HasForeignKey("AppId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
                     b.HasOne("QueryBuilder.Domain.Entities.Dashboard", "Dashboard")
                         .WithMany("Shares")
                         .HasForeignKey("DashboardId")
@@ -542,6 +656,12 @@ namespace QueryBuilder.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("QueryBuilder.Domain.Entities.DashboardTile", b =>
                 {
+                    b.HasOne("QueryBuilder.Domain.Entities.App", null)
+                        .WithMany()
+                        .HasForeignKey("AppId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
                     b.HasOne("QueryBuilder.Domain.Entities.Dashboard", "Dashboard")
                         .WithMany("Tiles")
                         .HasForeignKey("DashboardId")
@@ -560,6 +680,12 @@ namespace QueryBuilder.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("QueryBuilder.Domain.Entities.DataScopeRule", b =>
                 {
+                    b.HasOne("QueryBuilder.Domain.Entities.App", null)
+                        .WithMany()
+                        .HasForeignKey("AppId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
                     b.HasOne("QueryBuilder.Domain.Entities.DataSource", null)
                         .WithMany()
                         .HasForeignKey("DataSourceId")
@@ -567,8 +693,23 @@ namespace QueryBuilder.Infrastructure.Persistence.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("QueryBuilder.Domain.Entities.DataSource", b =>
+                {
+                    b.HasOne("QueryBuilder.Domain.Entities.App", null)
+                        .WithMany()
+                        .HasForeignKey("AppId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("QueryBuilder.Domain.Entities.QueryShare", b =>
                 {
+                    b.HasOne("QueryBuilder.Domain.Entities.App", null)
+                        .WithMany()
+                        .HasForeignKey("AppId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
                     b.HasOne("QueryBuilder.Domain.Entities.SavedQuery", "SavedQuery")
                         .WithMany("Shares")
                         .HasForeignKey("SavedQueryId")
@@ -580,6 +721,12 @@ namespace QueryBuilder.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("QueryBuilder.Domain.Entities.QueryVisualization", b =>
                 {
+                    b.HasOne("QueryBuilder.Domain.Entities.App", null)
+                        .WithMany()
+                        .HasForeignKey("AppId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
                     b.HasOne("QueryBuilder.Domain.Entities.SavedQuery", "SavedQuery")
                         .WithMany()
                         .HasForeignKey("SavedQueryId")
@@ -591,6 +738,12 @@ namespace QueryBuilder.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("QueryBuilder.Domain.Entities.SavedQuery", b =>
                 {
+                    b.HasOne("QueryBuilder.Domain.Entities.App", null)
+                        .WithMany()
+                        .HasForeignKey("AppId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
                     b.HasOne("QueryBuilder.Domain.Entities.DataSource", "DataSource")
                         .WithMany()
                         .HasForeignKey("DataSourceId")

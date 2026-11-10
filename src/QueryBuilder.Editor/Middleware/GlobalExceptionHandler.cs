@@ -24,7 +24,9 @@ public sealed class GlobalExceptionHandler(ILogger<GlobalExceptionHandler> logge
         {
             Status = statusCode,
             Title = title,
-            Detail = statusCode == StatusCodes.Status500InternalServerError ? "An unexpected error occurred." : exception.Message,
+            Detail = statusCode == StatusCodes.Status500InternalServerError
+                ? "An unexpected error occurred."
+                : exception is CrossAppWriteException ? "The requested item was not found." : exception.Message,
             Instance = httpContext.Request.Path
         };
 
@@ -41,6 +43,8 @@ public sealed class GlobalExceptionHandler(ILogger<GlobalExceptionHandler> logge
     private static (int StatusCode, string Title, object? Errors) Map(Exception exception) => exception switch
     {
         NotFoundException => (StatusCodes.Status404NotFound, "Not found", null),
+        // Another app's row is indistinguishable from a missing one; the message names why, so it stays out of the body.
+        CrossAppWriteException => (StatusCodes.Status404NotFound, "Not found", null),
         ForbiddenException => (StatusCodes.Status403Forbidden, "Forbidden", null),
         CatalogValidationException => (StatusCodes.Status400BadRequest, "Invalid query definition", null),
         QueryExecutionException => (StatusCodes.Status400BadRequest, "Query failed", null),

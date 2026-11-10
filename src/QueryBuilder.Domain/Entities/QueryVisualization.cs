@@ -8,8 +8,10 @@ namespace QueryBuilder.Domain.Entities;
 /// viewer's own row-level scope always applies. <see cref="OptionsJson"/> is a serialized
 /// <see cref="Model.VisualizationOptions"/>.
 /// </summary>
-public sealed class QueryVisualization : AuditableEntity
+public sealed class QueryVisualization : AuditableEntity, IAppOwned
 {
+    public Guid AppId { get; set; }
+
     public Guid SavedQueryId { get; set; }
     public SavedQuery? SavedQuery { get; set; }
     public string Name { get; set; } = string.Empty;

@@ -20,14 +20,16 @@ public sealed class DataCatalogService(
 {
     public async Task<DataSourceCatalog> GetCatalogAsync(Guid dataSourceId, CancellationToken cancellationToken)
     {
+        // The cache is keyed by id alone and shared by every app, so the app-filtered read must come first: a hit
+        // would otherwise serve one app's catalog to another.
+        var dataSource = await dataSourceRepository.GetByIdAsync(dataSourceId, cancellationToken)
+            ?? throw new NotFoundException(nameof(DataSource), dataSourceId);
+
         var cacheKey = $"catalog:{dataSourceId}";
         if (cache.TryGetValue(cacheKey, out DataSourceCatalog? cached) && cached is not null)
         {
             return cached;
         }
-
-        var dataSource = await dataSourceRepository.GetByIdAsync(dataSourceId, cancellationToken)
-            ?? throw new NotFoundException(nameof(DataSource), dataSourceId);
 
         var catalog = await BuildCatalogAsync(dataSource, cancellationToken);
 

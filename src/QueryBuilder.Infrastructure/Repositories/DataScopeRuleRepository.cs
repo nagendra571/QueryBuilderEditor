@@ -12,6 +12,13 @@ public sealed class DataScopeRuleRepository(AppDbContext db, IMemoryCache cache)
 {
     public async Task<IReadOnlyList<DataScopeRule>> GetForDataSourceAsync(Guid dataSourceId, CancellationToken cancellationToken)
     {
+        // The cache is keyed by id alone and shared by every app: check visibility first, and never read or fill the
+        // cache for an id this app can't see (a miss would otherwise cache an empty list for the owning app).
+        if (!await db.DataSources.AnyAsync(d => d.Id == dataSourceId, cancellationToken))
+        {
+            return [];
+        }
+
         var cacheKey = CacheKey(dataSourceId);
         if (cache.TryGetValue(cacheKey, out IReadOnlyList<DataScopeRule>? cached) && cached is not null)
         {

@@ -9,8 +9,10 @@ namespace QueryBuilder.Domain.Entities;
 /// Only <see cref="QueryAccessLevel.Viewer"/> and <see cref="QueryAccessLevel.Editor"/> are valid
 /// here; true ownership lives on <see cref="SavedQuery.OwnerId"/> instead.
 /// </summary>
-public sealed class QueryShare : AuditableEntity
+public sealed class QueryShare : AuditableEntity, IAppOwned
 {
+    public Guid AppId { get; set; }
+
     public Guid SavedQueryId { get; set; }
     public SavedQuery? SavedQuery { get; set; }
     public string SharedWithUserId { get; set; } = string.Empty;

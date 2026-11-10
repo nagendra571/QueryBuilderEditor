@@ -25,3 +25,6 @@ public sealed class RecordLimitExceededException(string message) : Exception(mes
 
 /// <summary>An optimistic-concurrency check failed: someone else changed the object since it was loaded.</summary>
 public sealed class ConcurrencyConflictException(string message) : Exception(message);
+
+/// <summary>A write named a row of another app, or no app at all. Callers treat it as not found.</summary>
+public sealed class CrossAppWriteException(string message) : Exception(message);

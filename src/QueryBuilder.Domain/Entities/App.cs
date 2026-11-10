@@ -1,0 +1,21 @@
+namespace QueryBuilder.Domain.Entities;
+
+/// <summary>One tenant of the hub. Embedded (single-app) mode has exactly one, <see cref="DefaultId"/>.</summary>
+public sealed class App
+{
+    public const string DefaultKey = "default";
+
+    public static readonly Guid DefaultId = new("00000000-0000-0000-0000-00000000000d");
+
+    /// <summary>Never a row: what a hub request without an app resolves to, so it sees nothing.</summary>
+    public static readonly Guid NoneId = Guid.Empty;
+
+    public Guid Id { get; set; } = Guid.NewGuid();
+
+    /// <summary>Lowercase letters, digits and hyphens, up to 64 characters.</summary>
+    public string Key { get; set; } = string.Empty;
+
+    public string Name { get; set; } = string.Empty;
+    public bool IsEnabled { get; set; } = true;
+    public DateTimeOffset CreatedAtUtc { get; set; } = DateTimeOffset.UtcNow;
+}

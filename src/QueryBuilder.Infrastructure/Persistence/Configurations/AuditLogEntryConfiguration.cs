@@ -10,6 +10,8 @@ public sealed class AuditLogEntryConfiguration : IEntityTypeConfiguration<AuditL
     {
         builder.ToTable("AuditLogEntries");
         builder.HasKey(x => x.Id);
+        builder.HasOne<App>().WithMany().HasForeignKey(x => x.AppId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasIndex(x => new { x.AppId, x.TimestampUtc });
 
         builder.Property(x => x.Actor).HasMaxLength(450).IsRequired();
         builder.Property(x => x.EntityType).HasMaxLength(100).IsRequired();

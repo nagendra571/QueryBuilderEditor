@@ -10,6 +10,9 @@ public sealed class DashboardConfiguration : IEntityTypeConfiguration<Dashboard>
     {
         builder.ToTable("Dashboards");
         builder.HasKey(x => x.Id);
+        builder.Property(x => x.AppId).IsRequired();
+        builder.HasOne<App>().WithMany().HasForeignKey(x => x.AppId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasIndex(x => new { x.AppId, x.OwnerId });
 
         builder.Property(x => x.Name).HasMaxLength(200).IsRequired();
         builder.Property(x => x.Description).HasMaxLength(1000);
@@ -35,6 +38,8 @@ public sealed class DashboardTileConfiguration : IEntityTypeConfiguration<Dashbo
     {
         builder.ToTable("DashboardTiles");
         builder.HasKey(x => x.Id);
+        builder.Property(x => x.AppId).IsRequired();
+        builder.HasOne<App>().WithMany().HasForeignKey(x => x.AppId).OnDelete(DeleteBehavior.Restrict);
 
         builder.Property(x => x.Kind).HasConversion<string>().HasMaxLength(10).IsRequired();
         builder.Property(x => x.X).HasDefaultValue(0);
@@ -62,6 +67,8 @@ public sealed class DashboardShareConfiguration : IEntityTypeConfiguration<Dashb
     {
         builder.ToTable("DashboardShares");
         builder.HasKey(x => x.Id);
+        builder.Property(x => x.AppId).IsRequired();
+        builder.HasOne<App>().WithMany().HasForeignKey(x => x.AppId).OnDelete(DeleteBehavior.Restrict);
 
         builder.Property(x => x.SharedWithUserId).HasMaxLength(450).IsRequired();
         builder.Property(x => x.SharedWithUserEmail).HasMaxLength(256).IsRequired();

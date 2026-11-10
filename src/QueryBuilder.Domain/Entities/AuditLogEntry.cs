@@ -25,6 +25,9 @@ public sealed class AuditLogEntry
 
     public Guid? DataSourceId { get; set; }
 
+    /// <summary>The app the entry belongs to; null for a hub-level entry that belongs to no app.</summary>
+    public Guid? AppId { get; set; }
+
     /// <summary>Short, human-readable line for display, e.g. "Ran query, returned 42 rows in 118ms".</summary>
     public string Summary { get; set; } = string.Empty;
 

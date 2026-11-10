@@ -6,8 +6,10 @@ namespace QueryBuilder.Domain.Entities;
 /// A registered connection to a business database whose views/tables can be
 /// exposed to business users through the query builder catalog.
 /// </summary>
-public sealed class DataSource : AuditableEntity
+public sealed class DataSource : AuditableEntity, IAppOwned
 {
+    public Guid AppId { get; set; }
+
     /// <summary>
     /// Reserved <see cref="ConnectionStringName"/> value meaning "use QueryBuilder's own metadata
     /// connection string" instead of looking one up by name in configuration. Set on the data

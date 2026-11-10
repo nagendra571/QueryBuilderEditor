@@ -137,7 +137,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton(new DataSourceManagementSettings(management.Enabled, reencryptAllowed));
 
         services.AddApplication();
-        services.AddInfrastructure(options.ConnectionString, options.ApplyMigrations, secretKey, previousKeys);
+        services.AddInfrastructure(options.ConnectionString, options.ApplyMigrations, secretKey, previousKeys, options.Hub.Enabled);
 
         services.AddExceptionHandler<GlobalExceptionHandler>();
         services.AddProblemDetails();
