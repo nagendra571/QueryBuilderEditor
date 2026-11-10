@@ -136,6 +136,11 @@ public static class ServiceCollectionExtensions
         var reencryptAllowed = secretKey is not null && (!anonymousAdmins || management.AllowAnonymousAdmins);
         services.AddSingleton(new DataSourceManagementSettings(management.Enabled, reencryptAllowed));
 
+        if (options.Hub.Enabled)
+        {
+            services.AddSingleton(new QueryBuilder.Application.Hub.LaunchValidationSettings(options.Hub.Audience ?? string.Empty));
+        }
+
         services.AddApplication();
         services.AddInfrastructure(options.ConnectionString, options.ApplyMigrations, secretKey, previousKeys, options.Hub.Enabled);
 

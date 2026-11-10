@@ -32,6 +32,9 @@ public sealed class AppContextAccessor(MetadataMode mode) : IAppContext, IAppCon
         _appId = appId;
     }
 
+    // Task 6 will make this the only caller in hub mode; the public UseHubWide stays until then.
+    internal void UseHubWideForFactory() => UseHubWide();
+
     public void UseHubWide()
     {
         if (_appId is not null && !_hubWide)

@@ -214,3 +214,11 @@ public enum ParameterMappingSource
     /// <summary>A value the editor set; viewers see no control.</summary>
     Fixed = 3
 }
+
+/// <summary>What a hub user may do inside one app, as stated by that app's launch token.</summary>
+public enum HubRole
+{
+    Viewer = 0,
+    Author = 1,
+    Admin = 2
+}

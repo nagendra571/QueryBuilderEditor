@@ -5,6 +5,8 @@ using QueryBuilder.Application.Abstractions;
 using QueryBuilder.Infrastructure.Audit;
 using QueryBuilder.Infrastructure.Catalog;
 using QueryBuilder.Infrastructure.Execution;
+using QueryBuilder.Infrastructure.Hub;
+using QueryBuilder.Application.Hub;
 using QueryBuilder.Infrastructure.Export;
 using QueryBuilder.Infrastructure.Persistence;
 using QueryBuilder.Infrastructure.Repositories;
@@ -26,6 +28,14 @@ public static class DependencyInjection
         services.AddScoped<AppContextAccessor>();
         services.AddScoped<IAppContext>(sp => sp.GetRequiredService<AppContextAccessor>());
         services.AddScoped<IAppContextScope>(sp => sp.GetRequiredService<AppContextAccessor>());
+
+        services.AddSingleton<IHubWideScopeFactory, HubWideScopeFactory>();
+        if (hubMode)
+        {
+            // Needs LaunchValidationSettings, which only hub mode registers; build-time validation would fail embedded hosts otherwise.
+            services.AddSingleton<ILaunchTokenValidator, LaunchTokenValidator>();
+            services.AddSingleton<LaunchReplayStore>();
+        }
 
         services.AddDbContext<AppDbContext>(db =>
             db.UseSqlServer(
