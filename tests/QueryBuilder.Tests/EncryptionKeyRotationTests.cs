@@ -15,6 +15,7 @@ using static QueryBuilder.Tests.DataSourceManagementTests;
 
 namespace QueryBuilder.Tests;
 
+[Collection(QueryBuilder.Tests.Hub.MetadataDatabaseCollection.Name)]
 public class EncryptionKeyRotationTests
 {
     private const byte Old = 7;

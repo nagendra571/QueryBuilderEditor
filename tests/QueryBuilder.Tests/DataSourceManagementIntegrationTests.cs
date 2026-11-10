@@ -190,6 +190,7 @@ public class DataSourceManagementPostgresTests(PostgresTestDatabase database) : 
     }
 }
 
+[Collection(QueryBuilder.Tests.Hub.MetadataDatabaseCollection.Name)]
 public class DataSourceManagementMetadataTests
 {
     private static Task WithDatabaseAsync(Func<DbContextOptions<AppDbContext>, string, Task> body) =>

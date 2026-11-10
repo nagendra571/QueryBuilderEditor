@@ -1,4 +1,9 @@
+using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.DataProtection.KeyManagement;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using QueryBuilder.Editor.Hub;
 using Microsoft.Extensions.DependencyInjection;
 using QueryBuilder.Application;
 using QueryBuilder.Application.Abstractions;
@@ -139,6 +144,7 @@ public static class ServiceCollectionExtensions
         if (options.Hub.Enabled)
         {
             services.AddSingleton(new QueryBuilder.Application.Hub.LaunchValidationSettings(options.Hub.Audience ?? string.Empty));
+            AddHubSession(services, options.Hub);
         }
 
         services.AddApplication();
@@ -153,5 +159,23 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IStartupFilter, SetupDiagnosticsStartupFilter>();
 
         return services;
+    }
+
+    private static void AddHubSession(IServiceCollection services, HubOptions hub)
+    {
+        services.TryAddSingleton(TimeProvider.System);
+        services.AddSingleton<HubAppEnabledCache>();
+        services.AddScoped<IAppSessionSource, HubAppSessionSource>();
+        services.AddSingleton<IStartupFilter, HubSessionStartupFilter>();
+
+        // A cookie scheme of our own, not the host's default: the host keeps whatever sign-in it already has.
+        services.AddAuthentication().AddCookie(HubSession.Scheme, cookie => HubSessionCookie.Configure(cookie, hub));
+        services.AddOptions<CookieAuthenticationOptions>(HubSession.Scheme)
+            .Configure<TimeProvider>((cookie, clock) => cookie.TimeProvider = clock);
+
+        services.AddSingleton<MetadataXmlRepository>();
+        services.AddDataProtection().SetApplicationName("QueryBuilder.Hub");
+        services.AddOptions<KeyManagementOptions>()
+            .Configure<MetadataXmlRepository>((keys, repository) => keys.XmlRepository = repository);
     }
 }

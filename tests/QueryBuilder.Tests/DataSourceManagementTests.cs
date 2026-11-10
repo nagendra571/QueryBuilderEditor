@@ -386,6 +386,8 @@ public class DataSourceManagementTests
         public string UserId => "admin@example.com";
         public string DisplayName => "Admin";
         public string? Email => null;
+        public QueryBuilder.Domain.Enums.HubRole? Role => null;
+        public bool IsSuperAdmin => false;
     }
 
     internal sealed class CatalogStub : IDataCatalogService

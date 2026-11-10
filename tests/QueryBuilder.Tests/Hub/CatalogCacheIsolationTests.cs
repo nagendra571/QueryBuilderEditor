@@ -10,6 +10,7 @@ using Xunit;
 
 namespace QueryBuilder.Tests.Hub;
 
+[Collection(MetadataDatabaseCollection.Name)]
 public class CatalogCacheIsolationTests
 {
     private static DataCatalogService Service(AppDbContext db, IMemoryCache cache) =>

@@ -24,6 +24,7 @@ using static QueryBuilder.Tests.DataSourceManagementTests;
 
 namespace QueryBuilder.Tests;
 
+[Collection(QueryBuilder.Tests.Hub.MetadataDatabaseCollection.Name)]
 public class DataSourceManagementFixTests
 {
     private static ManagedConnectionDetails Stored(ConnectionSslMode ssl) =>

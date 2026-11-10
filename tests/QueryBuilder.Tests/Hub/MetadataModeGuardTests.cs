@@ -14,6 +14,7 @@ using Xunit;
 
 namespace QueryBuilder.Tests.Hub;
 
+[Collection(MetadataDatabaseCollection.Name)]
 public class MetadataModeGuardTests
 {
     private static ServiceProvider Build(string connectionString, bool hub)

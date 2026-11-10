@@ -8,6 +8,7 @@ using Xunit;
 
 namespace QueryBuilder.Tests.Hub;
 
+[Collection(MetadataDatabaseCollection.Name)]
 public class AddAppsMigrationTests
 {
     private const string PreviousMigration = "20261110023605_AddDataSourceScopeKeys";

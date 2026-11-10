@@ -12,6 +12,7 @@ using Xunit;
 
 namespace QueryBuilder.Tests.Hub;
 
+[Collection(MetadataDatabaseCollection.Name)]
 public class LaunchTokenValidatorTests
 {
     private const string Audience = "https://hub.example";

@@ -38,3 +38,10 @@ internal static class MetadataDb
         }
     }
 }
+
+/// <summary>Every class that creates or drops throwaway metadata databases shares this collection, so they run one at a time: in parallel they exhausted LocalDB's connections and failed intermittently.</summary>
+[CollectionDefinition(Name, DisableParallelization = true)]
+public sealed class MetadataDatabaseCollection
+{
+    public const string Name = "MetadataDatabase";
+}

@@ -10,6 +10,7 @@ using Xunit;
 
 namespace QueryBuilder.Tests.Hub;
 
+[Collection(MetadataDatabaseCollection.Name)]
 public class HubRegistryModelTests
 {
     private sealed class StopBeforeDatabase : SaveChangesInterceptor

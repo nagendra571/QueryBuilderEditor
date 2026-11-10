@@ -1,4 +1,6 @@
+using Microsoft.EntityFrameworkCore;
 using QueryBuilder.Application.Abstractions;
+using QueryBuilder.Infrastructure.Persistence;
 
 namespace QueryBuilder.Editor.DataScoping;
 
@@ -11,14 +13,35 @@ namespace QueryBuilder.Editor.DataScoping;
 public sealed class CurrentDataScopeService(
     IHttpContextAccessor httpContextAccessor,
     QueryBuilderEditorOptions editorOptions,
-    ILogger<CurrentDataScopeService> logger)
+    ILogger<CurrentDataScopeService> logger,
+    IAppSessionSource? hubSession = null,
+    IServiceProvider? services = null)
     : ICurrentDataScope
 {
     private ResolvedDataScope? _resolved;
 
-    public bool IsEnabled => editorOptions.DataScope.IsEnabled;
+    private IReadOnlyList<string>? _appKeys;
 
-    public IReadOnlyList<string> HostKeys => editorOptions.DataScope.Keys.ToList();
+    public bool IsEnabled => editorOptions.Hub.Enabled || editorOptions.DataScope.IsEnabled;
+
+    // Hub mode has no host options: the keys are the app's own, read once per request (a sync read, because the
+    // interface is a property; one tiny indexed row).
+    public IReadOnlyList<string> HostKeys => editorOptions.Hub.Enabled ? AppKeys() : editorOptions.DataScope.Keys.ToList();
+
+    private IReadOnlyList<string> AppKeys()
+    {
+        if (_appKeys is not null)
+        {
+            return _appKeys;
+        }
+
+        if (hubSession?.Current is not { AppId: { } appId } || services?.GetService(typeof(AppDbContext)) is not AppDbContext db)
+        {
+            return _appKeys = [];
+        }
+
+        return _appKeys = db.Apps.AsNoTracking().Where(a => a.Id == appId).Select(a => a.ScopeKeys).FirstOrDefault() ?? [];
+    }
 
     public async Task<ResolvedDataScope> GetAsync(CancellationToken cancellationToken)
     {
@@ -27,6 +50,12 @@ public sealed class CurrentDataScopeService(
 
     private async Task<ResolvedDataScope> ResolveAsync()
     {
+        if (editorOptions.Hub.Enabled)
+        {
+            // No session, or a session without a scope: denied, never unrestricted.
+            return hubSession?.Current?.Scope ?? ResolvedDataScope.Denied;
+        }
+
         var options = editorOptions.DataScope;
         if (!options.IsEnabled)
         {

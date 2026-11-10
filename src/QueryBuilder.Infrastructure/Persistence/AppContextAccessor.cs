@@ -13,12 +13,27 @@ public sealed record MetadataMode(bool Hub)
 /// Resolves the app a scope runs as. Without an explicit choice: embedded is the Default app; hub is
 /// <see cref="App.NoneId"/> (sees nothing) so a missing app can never fall through to another app's data.
 /// </summary>
-public sealed class AppContextAccessor(MetadataMode mode) : IAppContext, IAppContextScope
+public sealed class AppContextAccessor(MetadataMode mode, IAppSessionSource? session = null) : IAppContext, IAppContextScope
 {
     private Guid? _appId;
     private bool _hubWide;
 
-    public Guid AppId => _appId ?? (mode.Hub ? App.NoneId : App.DefaultId);
+    public Guid AppId
+    {
+        get
+        {
+            if (_appId is null && mode.Hub && session is not null)
+            {
+                // Read the session once and keep the answer: the rest of the scope must not see a different app
+                // if the cookie changes mid-request, and a later explicit choice of another app is refused.
+                var current = session.Current;
+                _appId = current is { AppId: { } id } ? id : App.NoneId;
+            }
+
+            return _appId ?? (mode.Hub ? App.NoneId : App.DefaultId);
+        }
+    }
+
     public bool IsHubWide => _hubWide;
 
     // Set once per scope: switching apps mid-scope could let a context already in use read another app's rows.

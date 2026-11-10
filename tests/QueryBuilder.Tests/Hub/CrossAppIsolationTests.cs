@@ -14,6 +14,7 @@ using Xunit;
 
 namespace QueryBuilder.Tests.Hub;
 
+[Collection(MetadataDatabaseCollection.Name)]
 public class CrossAppIsolationTests
 {
     private const string User = "u";
@@ -146,6 +147,8 @@ public class CrossAppIsolationTests
         public string UserId => User;
         public string DisplayName => "U";
         public string? Email => null;
+        public QueryBuilder.Domain.Enums.HubRole? Role => null;
+        public bool IsSuperAdmin => false;
     }
 
     private sealed class NoAudit : IAuditLogger

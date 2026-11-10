@@ -23,6 +23,7 @@ public sealed class MetadataSqlFactAttribute : FactAttribute
     }
 }
 
+[Collection(QueryBuilder.Tests.Hub.MetadataDatabaseCollection.Name)]
 public class MetadataCollationTests
 {
     private static async Task WithDatabaseAsync(Func<AppDbContext, IMemoryCache, Guid, Task> body)

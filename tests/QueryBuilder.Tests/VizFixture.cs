@@ -102,6 +102,8 @@ internal sealed class VizFixture
         public string UserId { get; set; } = string.Empty;
         public string DisplayName => UserId;
         public string? Email => null;
+        public QueryBuilder.Domain.Enums.HubRole? Role => null;
+        public bool IsSuperAdmin => false;
     }
 
     public sealed class FakeAudit : IAuditLogger
