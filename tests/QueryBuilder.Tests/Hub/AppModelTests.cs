@@ -18,7 +18,7 @@ public class AppModelTests
             .Where(t => !typeof(IAppOwned).IsAssignableFrom(t))
             .Select(t => t.Name).OrderBy(n => n).ToList();
 
-        Assert.Equal(["App", "AuditLogEntry", "MetadataSetting"], notOwned);
+        Assert.Equal(["App", "AppReturnUrl", "AppSigningKey", "AuditLogEntry", "DataProtectionKeyRecord", "LaunchReplay", "MetadataSetting"], notOwned);
     }
 
     [Fact]

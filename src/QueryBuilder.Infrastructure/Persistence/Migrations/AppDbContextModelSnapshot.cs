@@ -44,12 +44,76 @@ namespace QueryBuilder.Infrastructure.Persistence.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("nvarchar(200)");
 
+                    b.Property<string>("ScopeKeys")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
                     b.HasKey("Id");
 
                     b.HasIndex("Key")
                         .IsUnique();
 
                     b.ToTable("Apps", (string)null);
+                });
+
+            modelBuilder.Entity("QueryBuilder.Domain.Entities.AppReturnUrl", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("AppId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Url")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AppId", "Url")
+                        .IsUnique();
+
+                    b.ToTable("AppReturnUrls", (string)null);
+                });
+
+            modelBuilder.Entity("QueryBuilder.Domain.Entities.AppSigningKey", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Algorithm")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("nvarchar(10)");
+
+                    b.Property<Guid>("AppId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("Kid")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<string>("PublicKeyPem")
+                        .IsRequired()
+                        .HasMaxLength(4000)
+                        .HasColumnType("nvarchar(4000)");
+
+                    b.Property<DateTimeOffset?>("RevokedAtUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AppId", "Kid")
+                        .IsUnique();
+
+                    b.ToTable("AppSigningKeys", (string)null);
                 });
 
             modelBuilder.Entity("QueryBuilder.Domain.Entities.AuditLogEntry", b =>
@@ -307,6 +371,28 @@ namespace QueryBuilder.Infrastructure.Persistence.Migrations
                     b.ToTable("DashboardTiles", (string)null);
                 });
 
+            modelBuilder.Entity("QueryBuilder.Domain.Entities.DataProtectionKeyRecord", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("FriendlyName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("Xml")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("DataProtectionKeys", (string)null);
+                });
+
             modelBuilder.Entity("QueryBuilder.Domain.Entities.DataScopeRule", b =>
                 {
                     b.Property<Guid>("Id")
@@ -430,6 +516,25 @@ namespace QueryBuilder.Infrastructure.Persistence.Migrations
                     b.HasIndex("AppId");
 
                     b.ToTable("DataSources", (string)null);
+                });
+
+            modelBuilder.Entity("QueryBuilder.Domain.Entities.LaunchReplay", b =>
+                {
+                    b.Property<string>("Jti")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<Guid>("AppId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset>("ExpiresUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.HasKey("Jti");
+
+                    b.HasIndex("ExpiresUtc");
+
+                    b.ToTable("LaunchReplays", (string)null);
                 });
 
             modelBuilder.Entity("QueryBuilder.Domain.Entities.MetadataSetting", b =>
@@ -620,6 +725,57 @@ namespace QueryBuilder.Infrastructure.Persistence.Migrations
                     b.ToTable("SavedQueries", (string)null);
                 });
 
+            modelBuilder.Entity("QueryBuilder.Domain.Entities.SeenUser", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("AppId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Email")
+                        .HasMaxLength(320)
+                        .HasColumnType("nvarchar(320)");
+
+                    b.Property<DateTimeOffset>("LastLaunchUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("Name")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AppId", "UserId")
+                        .IsUnique();
+
+                    b.ToTable("SeenUsers", (string)null);
+                });
+
+            modelBuilder.Entity("QueryBuilder.Domain.Entities.AppReturnUrl", b =>
+                {
+                    b.HasOne("QueryBuilder.Domain.Entities.App", null)
+                        .WithMany()
+                        .HasForeignKey("AppId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("QueryBuilder.Domain.Entities.AppSigningKey", b =>
+                {
+                    b.HasOne("QueryBuilder.Domain.Entities.App", null)
+                        .WithMany()
+                        .HasForeignKey("AppId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("QueryBuilder.Domain.Entities.AuditLogEntry", b =>
                 {
                     b.HasOne("QueryBuilder.Domain.Entities.App", null)
@@ -751,6 +907,15 @@ namespace QueryBuilder.Infrastructure.Persistence.Migrations
                         .IsRequired();
 
                     b.Navigation("DataSource");
+                });
+
+            modelBuilder.Entity("QueryBuilder.Domain.Entities.SeenUser", b =>
+                {
+                    b.HasOne("QueryBuilder.Domain.Entities.App", null)
+                        .WithMany()
+                        .HasForeignKey("AppId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("QueryBuilder.Domain.Entities.Dashboard", b =>

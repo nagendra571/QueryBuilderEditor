@@ -1,7 +1,7 @@
 namespace QueryBuilder.Domain.Entities;
 
 /// <summary>One tenant of the hub. Embedded (single-app) mode has exactly one, <see cref="DefaultId"/>.</summary>
-public sealed class App
+public sealed class App : IHubRegistryRecord
 {
     public const string DefaultKey = "default";
 
@@ -18,4 +18,7 @@ public sealed class App
     public string Name { get; set; } = string.Empty;
     public bool IsEnabled { get; set; } = true;
     public DateTimeOffset CreatedAtUtc { get; set; } = DateTimeOffset.UtcNow;
+
+    /// <summary>Scope keys the app declares itself (hub mode has no host options); a data source may add its own.</summary>
+    public List<string> ScopeKeys { get; set; } = [];
 }

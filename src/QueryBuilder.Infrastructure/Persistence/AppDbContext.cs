@@ -40,6 +40,11 @@ public sealed class AppDbContext : DbContext
     public DbSet<Dashboard> Dashboards => Set<Dashboard>();
     public DbSet<DashboardTile> DashboardTiles => Set<DashboardTile>();
     public DbSet<DashboardShare> DashboardShares => Set<DashboardShare>();
+    public DbSet<AppSigningKey> AppSigningKeys => Set<AppSigningKey>();
+    public DbSet<AppReturnUrl> AppReturnUrls => Set<AppReturnUrl>();
+    public DbSet<SeenUser> SeenUsers => Set<SeenUser>();
+    public DbSet<LaunchReplay> LaunchReplays => Set<LaunchReplay>();
+    public DbSet<DataProtectionKeyRecord> DataProtectionKeys => Set<DataProtectionKeyRecord>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -107,12 +112,16 @@ public sealed class AppDbContext : DbContext
                     throw new CrossAppWriteException("That row belongs to another app.");
                 }
             }
-            else if (entry.Entity is App)
+            else if (entry.Entity is IHubRegistryRecord)
             {
                 if (!IsHubWide)
                 {
                     throw new CrossAppWriteException("Only a hub-wide context may change apps.");
                 }
+            }
+            else if (entry.Entity is IHubSystemRecord)
+            {
+                // Plumbing, never tenant data: even a request with no app (a launch) must be able to write it.
             }
             else if (entry.Entity is not AuditLogEntry && !IsHubWide)
             {

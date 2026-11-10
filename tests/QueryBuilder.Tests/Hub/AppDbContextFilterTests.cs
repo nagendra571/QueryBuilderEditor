@@ -48,7 +48,7 @@ one;Database=never_opened;Integrated Security=true")
             .Where(t => typeof(IAppOwned).IsAssignableFrom(t.ClrType) || t.ClrType == typeof(AuditLogEntry))
             .ToList();
 
-        Assert.Equal(9, types.Count);
+        Assert.Equal(10, types.Count);
 #pragma warning disable CS0618 // GetDeclaredQueryFilters exists only on EF 10; this runs on both targets
         foreach (var t in types)
         {
