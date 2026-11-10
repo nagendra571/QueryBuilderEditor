@@ -9,6 +9,10 @@ namespace QueryBuilder.Infrastructure.Hub;
 public sealed class LaunchReplayStore
 {
     private static readonly TimeSpan CleanupEvery = TimeSpan.FromMinutes(1);
+
+    /// <summary>Rows are kept this long past their expiry. The validator compares whole seconds and instances' clocks drift,
+    /// so deleting at the exact expiry would let a used token pass the time check after its row is gone.</summary>
+    public static readonly TimeSpan RetentionMargin = TimeSpan.FromMinutes(5);
     private long _lastCleanupTicks;
 
     /// <summary>True when the id was new. A duplicate (app, jti) means the token was already used.</summary>
@@ -42,7 +46,8 @@ public sealed class LaunchReplayStore
 
         try
         {
-            await db.LaunchReplays.Where(r => r.ExpiresUtc < now).ExecuteDeleteAsync(ct);
+            var cutoff = now - RetentionMargin;
+            await db.LaunchReplays.Where(r => r.ExpiresUtc < cutoff).ExecuteDeleteAsync(ct);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {

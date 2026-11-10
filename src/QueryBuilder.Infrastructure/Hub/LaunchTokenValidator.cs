@@ -27,8 +27,13 @@ public sealed class LaunchTokenValidator : ILaunchTokenValidator
     public const int MaxValueLength = 200;
     private const int MaxIdentityLength = 256;
     private const int MaxJtiLength = 200;
+    private const int MaxNameLength = 200;
+    private const int MaxEmailLength = 320;
 
-    private static readonly JsonWebTokenHandler Handler = new();
+    // The handler's own size limit (250 KB by default) must equal ours, or an oversized token would surface as BadSignature.
+    private static readonly JsonWebTokenHandler Handler = new() { MaximumTokenSizeInBytes = MaxTokenLength };
+
+    private const string P256Oid = "1.2.840.10045.3.1.7";
 
     private readonly IHubWideScopeFactory _hubWide;
     private readonly LaunchReplayStore _replays;
@@ -184,6 +189,11 @@ public sealed class LaunchTokenValidator : ILaunchTokenValidator
             return Refuse(LaunchRefusalReason.UnknownRole);
         }
 
+        if (IsTooLong(p, "name", MaxNameLength) || IsTooLong(p, "email", MaxEmailLength))
+        {
+            return Refuse(LaunchRefusalReason.Malformed);
+        }
+
         var dataSourceKeys = await db.DataSources.AsNoTracking()
             .Where(d => d.AppId == app.Id)
             .Select(d => d.ScopeKeys)
@@ -294,7 +304,8 @@ public sealed class LaunchTokenValidator : ILaunchTokenValidator
             {
                 ecdsa = ECDsa.Create();
                 ecdsa.ImportFromPem(pem);
-                if (ecdsa.KeySize != 256)
+                // KeySize alone also admits secp256k1 and brainpoolP256r1, which ES256 does not allow.
+                if (ecdsa.ExportParameters(false).Curve.Oid?.Value != P256Oid)
                 {
                     return false;
                 }
@@ -488,6 +499,9 @@ public sealed class LaunchTokenValidator : ILaunchTokenValidator
 
         return false;
     }
+
+    private static bool IsTooLong(JsonElement element, string name, int max) =>
+        TryString(element, name, out var value) && value.Length > max;
 
     private static string? OptionalString(JsonElement element, string name) =>
         TryString(element, name, out var value) && value.Length > 0 ? value : null;

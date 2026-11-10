@@ -6,6 +6,7 @@ using QueryBuilder.Application.Hub;
 using QueryBuilder.Domain.Entities;
 using QueryBuilder.Domain.Enums;
 using QueryBuilder.Infrastructure;
+using QueryBuilder.Infrastructure.Hub;
 using QueryBuilder.Infrastructure.Persistence;
 using Xunit;
 
@@ -225,13 +226,100 @@ public class LaunchTokenValidatorTests
         Assert.Null((await env.Validate(env.Token(c => { c["iat"] = iat; c["exp"] = iat + 120; }))).Refusal);
     });
 
+    private sealed class FakeClock(DateTimeOffset start) : TimeProvider
+    {
+        public DateTimeOffset Now { get; set; } = start;
+        public override DateTimeOffset GetUtcNow() => Now;
+    }
+
+    private static LaunchTokenValidator ValidatorAt(Env env, FakeClock clock, LaunchReplayStore? store = null) =>
+        new(env.Services.GetRequiredService<IHubWideScopeFactory>(), store ?? new LaunchReplayStore(), new LaunchValidationSettings(Audience), clock);
+
+    private static Dictionary<string, object?> ClaimsAt(Env env, long iat, long exp, Action<Dictionary<string, object?>>? change = null) =>
+        env.Claims(c => { c["iat"] = iat; c["exp"] = exp; change?.Invoke(c); });
+
     [MetadataSqlFact]
     public Task Clock_skew_of_30s_is_tolerated_31s_is_not() => RunAsync(async env =>
     {
-        Assert.Null((await env.Validate(env.Token(c => { c["iat"] = Env.Now - 80; c["exp"] = Env.Now - 25; }))).Refusal);
-        await ExpectAsync(env, env.Token(c => { c["iat"] = Env.Now - 100; c["exp"] = Env.Now - 36; }), LaunchRefusalReason.Expired);
-        Assert.Null((await env.Validate(env.Token(c => { c["iat"] = Env.Now + 25; c["exp"] = Env.Now + 80; }))).Refusal);
-        await ExpectAsync(env, env.Token(c => { c["iat"] = Env.Now + 36; c["exp"] = Env.Now + 90; }), LaunchRefusalReason.NotYetValid);
+        var t0 = DateTimeOffset.FromUnixTimeSeconds(Env.Now);
+        var clock = new FakeClock(t0);
+        var validator = ValidatorAt(env, clock);
+        var iat = t0.ToUnixTimeSeconds();
+        var exp = iat + 60;
+
+        clock.Now = DateTimeOffset.FromUnixTimeSeconds(exp + 30);
+        Assert.Null((await validator.ValidateAsync(TestTokens.Rs256(env.RsaA, ClaimsAt(env, iat, exp)), default)).Refusal);
+        clock.Now = DateTimeOffset.FromUnixTimeSeconds(exp + 31);
+        Assert.Equal(LaunchRefusalReason.Expired, (await validator.ValidateAsync(TestTokens.Rs256(env.RsaA, ClaimsAt(env, iat, exp)), default)).Refusal);
+
+        clock.Now = DateTimeOffset.FromUnixTimeSeconds(iat - 30);
+        Assert.Null((await validator.ValidateAsync(TestTokens.Rs256(env.RsaA, ClaimsAt(env, iat, exp)), default)).Refusal);
+        clock.Now = DateTimeOffset.FromUnixTimeSeconds(iat - 31);
+        Assert.Equal(LaunchRefusalReason.NotYetValid, (await validator.ValidateAsync(TestTokens.Rs256(env.RsaA, ClaimsAt(env, iat, exp)), default)).Refusal);
+    });
+
+    [MetadataSqlFact]
+    public Task A_used_token_stays_replayed_at_the_expiry_boundary_even_when_cleanup_is_due() => RunAsync(async env =>
+    {
+        var t0 = DateTimeOffset.FromUnixTimeSeconds(Env.Now);
+        var clock = new FakeClock(t0);
+        var validator = ValidatorAt(env, clock);
+        var iat = t0.ToUnixTimeSeconds();
+        var exp = iat + 60;
+        var token = TestTokens.Rs256(env.RsaA, ClaimsAt(env, iat, exp));
+
+        Assert.Null((await validator.ValidateAsync(token, default)).Refusal);
+
+        // Whole seconds say "not expired yet" (exp + 30), while a full-precision cleanup would already have dropped the row.
+        clock.Now = DateTimeOffset.FromUnixTimeSeconds(exp + 30).AddMilliseconds(500);
+        var again = await validator.ValidateAsync(token, default);
+        Assert.NotNull(again.Refusal);
+        Assert.Equal(LaunchRefusalReason.Replayed, again.Refusal);
+
+        // Cleanup still removes rows once well past expiry.
+        clock.Now = DateTimeOffset.FromUnixTimeSeconds(exp + 30 + 600);
+        await validator.ValidateAsync(TestTokens.Rs256(env.RsaA, ClaimsAt(env, clock.Now.ToUnixTimeSeconds(), clock.Now.ToUnixTimeSeconds() + 60)), default);
+        await using var db = new AppDbContext(env.Options, new FixedAppContext(App.NoneId, hubWide: true));
+        Assert.Single(await db.LaunchReplays.ToListAsync());
+    });
+
+    [MetadataSqlFact]
+    public Task Oversized_tokens_are_malformed_not_bad_signature() => RunAsync(async env =>
+    {
+        // Above the handler's 250 KB default but within our cap: must verify normally.
+        Assert.Null((await env.Validate(env.Token(c => c["pad"] = new string('x', 300 * 1024)))).Refusal);
+        await ExpectAsync(env, env.Token(c => c["pad"] = new string('x', 520 * 1024)), LaunchRefusalReason.Malformed);
+    });
+
+    [MetadataSqlFact]
+    public Task Es256_keys_must_be_p256() => RunAsync(async env =>
+    {
+        using var other = ECDsa.Create(ECCurve.NamedCurves.brainpoolP256r1);
+        await using (var db = new AppDbContext(env.Options, new FixedAppContext(App.NoneId, hubWide: true)))
+        {
+            db.AppSigningKeys.Add(new AppSigningKey { AppId = env.AppA, Kid = "ec-brainpool", Algorithm = "ES256", PublicKeyPem = TestTokens.Pem(other) });
+            await db.SaveChangesAsync();
+        }
+
+        // Same 256-bit size, wrong curve: refused even though the signature itself is genuine.
+        await ExpectAsync(env, TestTokens.Es256(other, env.Claims(), "ec-brainpool"), LaunchRefusalReason.BadSignature, env.AppA);
+        Assert.Null((await env.Validate(TestTokens.Es256(env.EcA, env.Claims()))).Refusal);
+    });
+
+    [MetadataSqlFact]
+    public Task Name_and_email_have_length_caps() => RunAsync(async env =>
+    {
+        Assert.Null((await env.Validate(env.Token(c => { c["name"] = new string('n', 200); c["email"] = new string('e', 320); }))).Refusal);
+        await ExpectAsync(env, env.Token(c => c["name"] = new string('n', 201)), LaunchRefusalReason.Malformed, env.AppA);
+        await ExpectAsync(env, env.Token(c => c["email"] = new string('e', 321)), LaunchRefusalReason.Malformed, env.AppA);
+    });
+
+    [MetadataSqlFact]
+    public Task An_embedded_jwk_in_the_header_is_never_trusted() => RunAsync(async env =>
+    {
+        using var attacker = RSA.Create(2048);
+        var token = TestTokens.Rs256(attacker, env.Claims(), "rsa-a", new() { ["jwk"] = TestTokens.Jwk(attacker) });
+        await ExpectAsync(env, token, LaunchRefusalReason.BadSignature, env.AppA);
     });
 
     [MetadataSqlFact]
