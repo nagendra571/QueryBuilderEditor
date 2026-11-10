@@ -5,7 +5,6 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Net.Http.Headers;
 using QueryBuilder.Application.Abstractions;
-using QueryBuilder.Application.Common;
 using QueryBuilder.Application.Hub;
 using QueryBuilder.Editor.Hub;
 using QueryBuilder.Infrastructure.Hub;
@@ -61,13 +60,15 @@ internal static class HubLaunchEndpoints
 
         if (result.Claims is not { } claims)
         {
-            // Hub-wide because an unidentified app has no app of its own to write the entry under.
+            // Signed out first: if the audit write fails, the old session must not survive a refused launch.
+            await context.SignOutAsync(HubSession.Scheme);
+
+            // Hub-wide because a refusal is a hub-level entry; the recorder names an app only once its signature is proven.
             await using (var scope = services.GetRequiredService<IHubWideScopeFactory>().Create())
             {
-                await scope.ServiceProvider.GetRequiredService<ISender>().Send(new RecordLaunchCommand(result), ct);
+                await scope.ServiceProvider.GetRequiredService<ILaunchRecorder>().RecordRefusalAsync(result.Refusal ?? LaunchRefusalReason.Malformed, result.AppId, ct);
             }
 
-            await context.SignOutAsync(HubSession.Scheme);
             context.Response.Headers.CacheControl = "no-store";
             return Results.Content(RefusalPage, "text/html; charset=utf-8", statusCode: StatusCodes.Status400BadRequest);
         }
@@ -77,7 +78,7 @@ internal static class HubLaunchEndpoints
         await using (var scope = services.GetRequiredService<IServiceScopeFactory>().CreateAsyncScope())
         {
             scope.ServiceProvider.GetRequiredService<IAppContextScope>().UseApp(claims.AppId);
-            await scope.ServiceProvider.GetRequiredService<ISender>().Send(new RecordLaunchCommand(result), ct);
+            await scope.ServiceProvider.GetRequiredService<ILaunchRecorder>().RecordSuccessAsync(claims, ct);
         }
 
         var principal = HubSession.ForApp(claims.AppId, claims.UserId, claims.Name, claims.Email, claims.Role, claims.Scope,
@@ -130,7 +131,9 @@ internal static class HubLaunchEndpoints
         // Only a URL the app still has registered: the session's copy is a snapshot and may be stale or removed.
         if (session is { IsSuperAdmin: false, ReturnUrl: { } returnUrl, AppId: { } appId })
         {
-            await using var scope = context.RequestServices.GetRequiredService<IHubWideScopeFactory>().Create();
+            // App-scoped, never hub-wide: the app comes from session data, which must not be able to widen a scope.
+            await using var scope = context.RequestServices.GetRequiredService<IServiceScopeFactory>().CreateAsyncScope();
+            scope.ServiceProvider.GetRequiredService<IAppContextScope>().UseApp(appId);
             var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
             var registered = await db.AppReturnUrls.AsNoTracking()
                 .Where(u => u.AppId == appId && u.Url == returnUrl)

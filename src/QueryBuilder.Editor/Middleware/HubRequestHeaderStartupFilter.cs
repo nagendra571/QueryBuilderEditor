@@ -27,7 +27,7 @@ internal sealed class HubRequestHeaderStartupFilter : IStartupFilter
                     Title = "Invalid request",
                     Detail = $"The {HeaderName} header is required.",
                     Instance = context.Request.Path,
-                }, context.RequestAborted);
+                }, QueryBuilderJson.Options, "application/problem+json", context.RequestAborted);
                 return;
             }
 

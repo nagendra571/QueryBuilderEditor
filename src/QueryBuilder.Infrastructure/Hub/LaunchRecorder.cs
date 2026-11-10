@@ -53,10 +53,17 @@ public sealed class LaunchRecorder(AppDbContext db, IHttpContextAccessor httpCon
         await db.SaveChangesAsync(ct);
     }
 
-    public async Task RecordRefusalAsync(LaunchRefusalReason reason, Guid? appId, CancellationToken ct)
+    public async Task RecordRefusalAsync(LaunchRefusalReason reason, Guid? claimedAppId, CancellationToken ct)
     {
-        // A refusal before the signature check says nothing proven about who asked or which app, so it is marked as such.
-        var authenticated = appId is not null && !BeforeSignature.Contains(reason);
+        // Before the signature is proven the app is only what the sender claimed: such an entry stays hub-level
+        // (AppId null) so an unauthenticated caller cannot write into an app's audit log.
+        var authenticated = claimedAppId is not null && !BeforeSignature.Contains(reason);
+        var appId = authenticated ? claimedAppId : null;
+        string? claimedApp = null;
+        if (!authenticated && claimedAppId is { } claimed)
+        {
+            claimedApp = await db.Apps.AsNoTracking().Where(a => a.Id == claimed).Select(a => a.Key).FirstOrDefaultAsync(ct);
+        }
 
         db.AuditLogEntries.Add(new AuditLogEntry
         {
@@ -68,7 +75,7 @@ public sealed class LaunchRecorder(AppDbContext db, IHttpContextAccessor httpCon
             Summary = authenticated
                 ? $"Launch refused: {reason}"
                 : $"Launch refused (unauthenticated, signature not verified): {reason}",
-            DetailsJson = JsonSerializer.Serialize(new { reason = reason.ToString(), authenticated }, QueryDefinitionSerializer.Options),
+            DetailsJson = JsonSerializer.Serialize(new { reason = reason.ToString(), authenticated, claimedApp }, QueryDefinitionSerializer.Options),
             IpAddress = httpContextAccessor.HttpContext?.Connection.RemoteIpAddress?.ToString(),
             TimestampUtc = clock.GetUtcNow(),
         });

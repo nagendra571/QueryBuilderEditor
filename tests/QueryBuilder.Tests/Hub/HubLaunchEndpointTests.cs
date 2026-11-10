@@ -278,7 +278,9 @@ public class HubLaunchEndpointTests
         Assert.Equal(3, rows.Count);
         Assert.All(rows, r => Assert.Equal("anonymous", r.Actor));
 
-        Assert.Equal(env.AppA, rows[0].AppId);
+        // Unproven app: hub-level entry, the claimed key only inside the details.
+        Assert.Null(rows[0].AppId);
+        Assert.Contains("\"claimedApp\":\"app-a\"", rows[0].DetailsJson);
         Assert.Contains("BadSignature", rows[0].DetailsJson);
         Assert.Contains("\"authenticated\":false", rows[0].DetailsJson);
         Assert.Contains("unauthenticated", rows[0].Summary);
@@ -404,6 +406,7 @@ public class HubLaunchEndpointTests
             Assert.Equal(HttpStatusCode.BadRequest, refused.StatusCode);
             using var problem = JsonDocument.Parse(await refused.Content.ReadAsStringAsync());
             Assert.Contains("X-QueryBuilder-Request", problem.RootElement.GetProperty("detail").GetString());
+            Assert.Equal("application/problem+json", refused.Content.Headers.ContentType!.MediaType);
 
             var wrongValue = new HttpRequestMessage(method, "/querybuilder/api/nothing-here");
             wrongValue.Headers.Add("X-QueryBuilder-Request", "0");
@@ -449,4 +452,55 @@ public class HubLaunchEndpointTests
         Assert.Equal(HttpStatusCode.OK, shared.StatusCode);
         Assert.False(shared.Headers.Contains("Set-Cookie") && shared.Headers.CacheControl?.Public == true);
     });
+
+    [MetadataSqlFact]
+    public Task A_refusal_while_signed_in_is_never_written_under_the_sessions_app() => RunAsync(async env =>
+    {
+        await env.LaunchAsync(env.TokenA());
+        Assert.Equal("user-1", await env.MeUserAsync());
+
+        // Pre-signature (signed by the wrong key, claiming app B): hub-level, not app A and not even app B.
+        var forged = TestTokens.Rs256(env.Stranger, env.Claims("app-b", "x"), "rsa-b");
+        Assert.Equal(HttpStatusCode.BadRequest, (await env.LaunchAsync(forged)).StatusCode);
+        Assert.Equal("anonymous", await env.MeUserAsync());
+
+        // Post-signature (valid but expired): the token's verified app, still not the session's.
+        await env.LaunchAsync(env.TokenA());
+        var expired = TestTokens.Rs256(env.RsaB, env.Claims("app-b", "y", c => { c["iat"] = Env.Now - 200; c["exp"] = Env.Now - 100; }), "rsa-b");
+        Assert.Equal(HttpStatusCode.BadRequest, (await env.LaunchAsync(expired)).StatusCode);
+        Assert.Equal("anonymous", await env.MeUserAsync());
+
+        await using var db = env.Db();
+        var rows = await db.AuditLogEntries.IgnoreQueryFilters().Where(a => a.Action == AuditAction.LaunchRefused).OrderBy(a => a.TimestampUtc).ToListAsync();
+        Assert.Equal(2, rows.Count);
+        Assert.Null(rows[0].AppId);
+        Assert.Contains("\"claimedApp\":\"app-b\"", rows[0].DetailsJson);
+        Assert.Equal(env.AppB, rows[1].AppId);
+        Assert.Contains("Expired", rows[1].DetailsJson);
+        Assert.DoesNotContain(rows, r => r.AppId == env.AppA);
+    });
+
+    private static ServiceProvider BuildProvider(bool hub)
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddRouting();
+        // A real host always has these; the package expects them.
+        services.AddSingleton<Microsoft.Extensions.Configuration.IConfiguration>(new Microsoft.Extensions.Configuration.ConfigurationBuilder().Build());
+        services.AddQueryBuilderEditor(o =>
+        {
+            o.ConnectionString = @"Server=(localdb)\MSSQLLocalDB;Database=unused;Integrated Security=true";
+            o.ApplyMigrations = false;
+            o.Hub.Enabled = hub;
+            o.Hub.Audience = Audience;
+            o.DataSourceManagement.EncryptionKey = Key;
+        });
+        return services.BuildServiceProvider(new ServiceProviderOptions { ValidateOnBuild = true, ValidateScopes = true });
+    }
+
+    [Fact]
+    public void Embedded_service_provider_validates_on_build() => BuildProvider(hub: false).Dispose();
+
+    [Fact]
+    public void Hub_service_provider_validates_on_build() => BuildProvider(hub: true).Dispose();
 }
