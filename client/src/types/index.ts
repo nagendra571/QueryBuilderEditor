@@ -481,15 +481,24 @@ export interface AdminDataScopeObjectDto {
   state: DataScopeState
   /** Declared scope key → column name, only for `scoped`. */
   mappings: Record<string, string>
-  /** Keys mapped in the database that the host no longer declares. */
+  /** Keys mapped in the database that are no longer a scope key of this data source. */
   staleKeys: string[]
 }
 
 export interface AdminDataScopeDto {
   enabled: boolean
+  /** Host keys plus this data source's own: what a view column can be mapped to. */
   declaredKeys: string[]
+  /** Keys set in the app's code; locked here. */
+  hostKeys: string[]
+  /** Keys an admin added to this data source. */
+  dataSourceKeys: string[]
   objects: AdminDataScopeObjectDto[]
   unavailable?: AdminUnavailableObject[]
+}
+
+export interface UpdateScopeKeysRequest {
+  keys: string[]
 }
 
 export interface DataScopeObjectRuleDto {

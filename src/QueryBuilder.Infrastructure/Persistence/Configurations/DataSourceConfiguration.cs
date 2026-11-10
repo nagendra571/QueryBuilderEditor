@@ -36,5 +36,15 @@ public sealed class DataSourceConfiguration : IEntityTypeConfiguration<DataSourc
                 (a, b) => (a ?? new()).SequenceEqual(b ?? new()),
                 v => v.Aggregate(0, (hash, s) => HashCode.Combine(hash, s.GetHashCode())),
                 v => v.ToList()));
+
+        builder.Property(x => x.ScopeKeys)
+            .HasDefaultValueSql("''")
+            .HasConversion(
+                v => string.Join(',', v),
+                v => v.Length == 0 ? new List<string>() : v.Split(',', StringSplitOptions.RemoveEmptyEntries).ToList())
+            .Metadata.SetValueComparer(new ValueComparer<List<string>>(
+                (a, b) => (a ?? new()).SequenceEqual(b ?? new()),
+                v => v.Aggregate(0, (hash, s) => HashCode.Combine(hash, s.GetHashCode())),
+                v => v.ToList()));
     }
 }

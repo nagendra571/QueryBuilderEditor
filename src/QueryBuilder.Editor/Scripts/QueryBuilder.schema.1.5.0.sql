@@ -557,3 +557,24 @@ END;
 COMMIT;
 GO
 
+BEGIN TRANSACTION;
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261110023605_AddDataSourceScopeKeys'
+)
+BEGIN
+    ALTER TABLE [DataSources] ADD [ScopeKeys] nvarchar(max) NOT NULL DEFAULT ('');
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261110023605_AddDataSourceScopeKeys'
+)
+BEGIN
+    INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
+    VALUES (N'20261110023605_AddDataSourceScopeKeys', N'10.0.14');
+END;
+
+COMMIT;
+GO
+

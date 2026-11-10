@@ -395,7 +395,7 @@ public class PostgresExecutionTests(PostgresTestDatabase database, ITestOutputHe
     private sealed class FakeScope(ResolvedDataScope scope) : ICurrentDataScope
     {
         public bool IsEnabled => true;
-        public IReadOnlyList<string> DeclaredKeys => ["Tenant"];
+        public IReadOnlyList<string> HostKeys => ["Tenant"];
         public Task<ResolvedDataScope> GetAsync(CancellationToken cancellationToken) => Task.FromResult(scope);
     }
 
@@ -415,6 +415,7 @@ public class PostgresExecutionTests(PostgresTestDatabase database, ITestOutputHe
 
         return new DataScopeGuard(
             new FakeScope(TestData.Scoped(("Tenant", [value]))),
+            new Repo(Source()),
             new FakeRules([TestData.Rule("ex.ops", "Tenant", tenantColumn)]),
             catalog);
     }

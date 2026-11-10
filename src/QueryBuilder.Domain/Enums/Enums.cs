@@ -129,7 +129,8 @@ public enum AuditAction
     DataSourceUpdated = 21,
     DataSourceActivated = 22,
     DataSourceDeactivated = 23,
-    EncryptionKeyRotated = 24
+    EncryptionKeyRotated = 24,
+    DataSourceScopeKeysUpdated = 25
 }
 
 /// <summary>How a managed data source's connection is encrypted in transit.</summary>

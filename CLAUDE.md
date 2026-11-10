@@ -67,6 +67,30 @@ to it protects nothing); same key on both apps while they share `TemplateDb`; ke
 ask for the key's value. Not yet confirmed: the local form test (button at `/dev` → Super admin → Admin, a real SQL
 login over TCP).
 
+**Shipped in 1.5.0 (packed as 1.4.1 first, never pushed):** PostgreSQL data source passwords may be up to 5,000
+characters (was 1,024; `ConnectionInputValidator` + client `connection-form.ts`, bundle `index-4LHM1iNl.js`). SQL Server
+stays at 128 because SqlClient itself throws `The value's length for key 'Password' exceeds its limit of '128'` (checked).
+New integration test `A_managed_source_with_a_5000_character_password_connects_and_queries`; 1000/1000 on net8.0 and
+net10.0 with both database variables, 0 skipped; 167 client. No migration, schema script still 1.3.0. Not run in a browser.
+**Admin-added scope keys — 1.5.0 published to NuGet by the user (includes 1.4.1's password change; 1.4.1 itself was
+never pushed), committed and pushed on `feature/rea1`, not merged to `main`. Any further change needs 1.5.1+. Schema script
+now `QueryBuilder.schema.1.5.0.sql`, checked as an upgrade from 1.3.0 and fresh, twice each (approved in chat, no SPEC/PLAN):** `DataSource.ScopeKeys`
+(migration `20261110023605_AddDataSourceScopeKeys`, non-null `nvarchar(max)` default `''`). Effective keys per data source =
+host `Keys` ∪ its own (`Application/DataScoping/DataScopeKeys.Effective`, host casing wins); `ICurrentDataScope.DeclaredKeys`
+was renamed `HostKeys` so nothing uses host keys alone by accident. `DataScopeGuard` reads the row fresh on every call
+(missing row → NotFound). `PUT /api/admin/data-sources/{id}/scope-keys {keys}` → `UpdateScopeKeysCommand` (regex as host keys,
+≤20, no dupes ignoring case, no host keys, refused when no resolver; audit `DataSourceScopeKeysUpdated = 25` with before/after;
+never touches `DataScopeRules`, so a removed key's rules go stale = hidden from scoped users and come back when re-added, unless
+the mappings are saved in between). `GetDataScopeQuery` returns `hostKeys`, `dataSourceKeys` (minus any key the host now declares,
+or the client would resend it and be refused) and `declaredKeys` (effective). `DataScopeOptions.Validate` now allows a resolver
+with empty `Keys`. Client: "Scope keys" box atop `DataScopeSection.tsx` (pure rules in `features/admin/scope-keys.ts`), confirm
+dialog when removing a key views use. Verified: 1026/1026 on net8.0 and net10.0 with both DB variables, 175 client, idempotent
+script applied twice to a throwaway LocalDB, API script (personas, Keys = []: stale before add, p10 sees 20 rows after, refused
+after removal, super always sees all, 5 invalid inputs → 400, audit rows) and a Playwright pass (invalid name, add, remove with
+"3 views use ProgramId" confirm, host chip + overlap). Bundle `index-DhlRxwHz.js`. Local `QueryBuilderAppDb` is migrated; Sales
+Sample's own keys left empty. **Next feature: how each user's values are supplied** (recommended earlier: an admin-chosen
+access table/view in the data source, looked up as the actor, failing closed; unrestricted stays in host code).
+
 Waiting on the user (the user was about to `/clear` and restart the machine, so nothing is running):
 1. Move `TemplateBuilderClient` to 1.4.0 and add to its `Program.cs`
    `options.DataSourceManagement.PreviousEncryptionKeys = builder.Configuration.GetSection("QueryBuilder:PreviousDataSourceKeys").Get<string[]>() ?? [];`
@@ -178,7 +202,10 @@ version was hit once already).
   `net8.0` and `net10.0`. Two groups of tests **skip themselves** unless an environment variable is set, and a
   skip is not a pass:
   - `QB_TEST_POSTGRES`: a superuser connection string to a throwaway PostgreSQL server. The fixture creates a
-    throwaway database and a role `qb_it_reader`, and needs trust authentication for that role.
+    throwaway database and a role `qb_it_reader`, and needs trust authentication for that role **only**: since 1.4.1 a
+    test asserts a wrong password is refused, so a server started with `POSTGRES_HOST_AUTH_METHOD=trust` fails it.
+    Start with `-e POSTGRES_PASSWORD=<random>`, then in the container insert `host all qb_it_reader all trust` above
+    `host all all all scram-sha-256` in `pg_hba.conf` and `pg_ctl reload`.
   - `QB_TEST_METADATA_SQLSERVER`: a SQL Server connection string with **no** database (LocalDB is fine). The
     fixture creates and drops `qb_meta_it_<guid>`. The sample app is `net10.0` only, so a real run never exercises EF 9: to check `net8.0`,
   pack to a scratch folder and run a throwaway multi-target host from that package against a throwaway database.

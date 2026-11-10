@@ -820,8 +820,8 @@ public class DataSourceManagementTests
         Assert.NotEmpty(await Problems(new Rig(), Create(connection: Input(database: new string('d', 129)))));
         Assert.NotEmpty(await Problems(new Rig(), Create(connection: Input(username: ""))));
         Assert.NotEmpty(await Problems(new Rig(), Create(connection: Input(username: new string('u', 129)))));
-        Assert.Empty(await Problems(new Rig(), Create(connection: Input(password: new string('p', 1024)))));
-        Assert.NotEmpty(await Problems(new Rig(), Create(connection: Input(password: new string('p', 1025)))));
+        Assert.Empty(await Problems(new Rig(), Create(connection: Input(password: new string('p', 5000)))));
+        Assert.NotEmpty(await Problems(new Rig(), Create(connection: Input(password: new string('p', 5001)))));
     }
 
     [Fact]

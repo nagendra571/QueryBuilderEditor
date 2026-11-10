@@ -352,6 +352,14 @@ options.DataScope.Resolver = ctx =>
 // Need a DB/API lookup? Use options.DataScope.ResolverAsync instead (set one or the other).
 ```
 
+`Keys` can also be left empty: admins can add keys per data source in the admin UI (**Row-level data
+scope** > **Scope keys**), next to the ones set in code, which show there as locked. Keys only name
+what a view can be mapped to; **the values for every key always come from your resolver**, so a view
+mapped to a key the resolver doesn't supply is hidden from scoped users. A key added to one data source
+doesn't apply to another. Removing a key hides the views mapped to it from scoped users until the key is
+added back (the mappings are kept) or the views are mapped again. The admin page needs a resolver in
+code; without one it only says data scoping is turned off.
+
 Then, in the admin UI (**Row-level data scope** on a data source's page), mark each view as:
 
 | Admin decision | Scoped user | Unrestricted user |
@@ -365,8 +373,8 @@ Fail-closed by design:
 - A view nobody has decided on is hidden from scoped users, so a newly created view can't leak.
 - A resolver that returns `null` or throws means **denied** (only "not scoped" views are visible),
   never unrestricted. Return `DataScope.Unrestricted` explicitly for users who see everything.
-- A mapping to a key your app no longer declares, or to a column the view no longer has, hides the
-  view until an admin fixes it.
+- A mapping to a key that is no longer a scope key (removed in code or in the admin page), or to a column the view
+  no longer has, hides the view until an admin fixes it.
 
 The filter is added server-side to the generated SQL's `WHERE` (before grouping, so totals only
 count in-scope rows) as bound parameters, on every path: catalog, run, export, SQL preview, and

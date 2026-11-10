@@ -103,8 +103,11 @@ migrations, API/UI wiring, JSON options, and the authorization pipeline in one p
   specific tables/views — replaces the previous raw-SQL-only path for this one concern
 - Optional data source management in the admin UI (`options.DataSourceManagement`): add, edit, test and
   turn off SQL Server and PostgreSQL data sources; the connection is stored encrypted with a host-provided key
-- Row-level data scoping: the host declares scope keys (`ProgramId`, `ModuleId`, ...) and a
-  resolver returning each user's values or `DataScope.Unrestricted`; admins map each key to a view
+- Row-level data scoping: the host declares scope keys (`ProgramId`, `ModuleId`, ...; admins can add
+  more per data source in the admin UI, and `Keys` may be empty when a resolver is set) and a
+  resolver returning each user's values or `DataScope.Unrestricted` (values for every key always come
+  from the resolver; removing a key hides the views mapped to it from scoped users until it is
+  added back); admins map each key to a view
   column (or mark a view "not scoped"). Enforced server-side in the generated SQL's `WHERE` on every
   path (catalog, run, export, preview, save); undecided views and failing resolvers fail closed.
   See the package README's "Row-level Data Scoping" section

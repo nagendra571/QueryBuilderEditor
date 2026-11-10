@@ -8,6 +8,7 @@ import type {
   UpdateCatalogPolicyRequest,
   UpdateDataScopeRequest,
   UpdateDataSourceRequest,
+  UpdateScopeKeysRequest,
   UpdateRecordLimitRequest,
 } from '@/types'
 
@@ -82,6 +83,22 @@ export function useUpdateDataScope(id: string) {
       toast.success('Data scope updated.')
     },
     onError: (error) => toast.error(error instanceof ApiError ? error.message : 'Could not update the data scope.'),
+  })
+}
+
+// Errors are shown inline by the section, so there is no toast here.
+export function useUpdateScopeKeys(id: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (request: UpdateScopeKeysRequest) => adminApi.updateScopeKeys(id, request),
+    onSuccess: (data) => {
+      queryClient.setQueryData(adminDataScopeKey(id), data)
+      // Keys decide which views a scoped user sees, so the business-facing catalog changes with them;
+      // its client-side staleTime would otherwise keep serving the old one on in-SPA navigation.
+      queryClient.invalidateQueries({ queryKey: adminDataScopeKey(id) })
+      queryClient.invalidateQueries({ queryKey: ['data-source-catalog', id] })
+      queryClient.invalidateQueries({ queryKey: ['data-sources'] })
+    },
   })
 }
 

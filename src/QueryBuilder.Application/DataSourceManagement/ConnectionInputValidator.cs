@@ -25,7 +25,7 @@ public sealed class ConnectionInputValidator : AbstractValidator<ConnectionInput
             .WithMessage("The database name can't contain control characters.");
         RuleFor(x => x.Username).NotEmpty().MaximumLength(128).Must(NoControlCharacters)
             .WithMessage("The username can't contain control characters.");
-        RuleFor(x => x.Password).MaximumLength(1024).Must(NoControlCharacters)
+        RuleFor(x => x.Password).MaximumLength(5000).Must(NoControlCharacters)
             .WithMessage("The password can't contain control characters.");
         RuleFor(x => x.SslMode).Must(mode => mode is null || Enum.IsDefined(mode.Value))
             .WithMessage("Choose a supported encryption setting.");

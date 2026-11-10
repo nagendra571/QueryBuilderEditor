@@ -354,6 +354,12 @@ namespace QueryBuilder.Infrastructure.Persistence.Migrations
                     b.Property<int>("Provider")
                         .HasColumnType("int");
 
+                    b.Property<string>("ScopeKeys")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("nvarchar(max)")
+                        .HasDefaultValueSql("''");
+
                     b.Property<DateTimeOffset?>("UpdatedAtUtc")
                         .HasColumnType("datetimeoffset");
 

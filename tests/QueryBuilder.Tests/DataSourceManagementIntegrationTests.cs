@@ -95,11 +95,13 @@ public class DataSourceManagementPostgresTests(PostgresTestDatabase database) : 
     {
         var tester = new ConnectionTester(Resolver(DataSourceManagementTests.Protector()), NullLogger<ConnectionTester>.Instance);
 
-        var result = await tester.TestAsync(DataSourceProvider.PostgreSql, Details("qb_no_such_db_" + Guid.NewGuid().ToString("N"), Password), default);
+        // The real password, so a server that checks passwords reaches the missing-database error.
+        var details = Details("qb_no_such_db_" + Guid.NewGuid().ToString("N"));
+        var result = await tester.TestAsync(DataSourceProvider.PostgreSql, details, default);
 
         Assert.False(result.Ok);
         Assert.Contains("does not exist", result.Message);
-        Assert.DoesNotContain(Password, result.Message);
+        Assert.DoesNotContain(details.Password, result.Message);
     }
 
     [PostgresFact]
@@ -124,6 +126,50 @@ public class DataSourceManagementPostgresTests(PostgresTestDatabase database) : 
 
         var tester = new ConnectionTester(resolver, NullLogger<ConnectionTester>.Instance);
         Assert.True((await tester.TestStoredAsync(source, default)).Ok);
+    }
+
+    [PostgresFact]
+    public async Task A_managed_source_with_a_5000_character_password_connects_and_queries()
+    {
+        var role = "qb_long_pw_" + Guid.NewGuid().ToString("N")[..8];
+        var password = string.Concat(Enumerable.Range(0, 5000).Select(i => "aB3$xé!q'"[i % 9]));
+        await using (var admin = new NpgsqlConnection(database.AdminConnectionString))
+        {
+            await admin.OpenAsync();
+            await using var create = new NpgsqlCommand($"CREATE ROLE {role} LOGIN PASSWORD '{password.Replace("'", "''")}'", admin);
+            await create.ExecuteNonQueryAsync();
+        }
+
+        try
+        {
+            var protector = DataSourceManagementTests.Protector();
+            var source = new DataSource
+            {
+                Name = "long pw", Provider = DataSourceProvider.PostgreSql, ConnectionStringName = DataSource.ManagedConnectionSentinel
+            };
+            source.EncryptedConnection = protector.Protect(source.Id, ManagedConnections.Serialize(Details() with { Username = role, Password = password }));
+            var resolver = Resolver(protector);
+
+            var rows = await new PostgresQueryExecutionService(resolver, NullLogger<PostgresQueryExecutionService>.Instance).ExecuteAsync(
+                source, new GeneratedQuery("SELECT current_user AS who", []), new Dictionary<string, string?>(), null, default);
+
+            Assert.Equal(role, rows.Rows.Single()["who"]?.ToString());
+            Assert.True((await new ConnectionTester(resolver, NullLogger<ConnectionTester>.Instance).TestStoredAsync(source, default)).Ok);
+
+            var wrong = await new ConnectionTester(resolver, NullLogger<ConnectionTester>.Instance).TestAsync(
+                DataSourceProvider.PostgreSql, Details() with { Username = role, Password = password[..4999] + "Z" }, default);
+            // Under trust authentication any password works, so the test would prove nothing.
+            Assert.False(wrong.Ok, "The test server accepted a wrong password: trust only qb_it_reader in pg_hba.conf, not every role.");
+            Assert.DoesNotContain(password[..64], wrong.Message);
+        }
+        finally
+        {
+            NpgsqlConnection.ClearAllPools();
+            await using var admin = new NpgsqlConnection(database.AdminConnectionString);
+            await admin.OpenAsync();
+            await using var drop = new NpgsqlCommand($"DROP ROLE IF EXISTS {role}", admin);
+            await drop.ExecuteNonQueryAsync();
+        }
     }
 
     [PostgresFact]

@@ -27,8 +27,9 @@ public interface ICurrentDataScope
     /// <summary>False when the host configured no scope resolver — everyone is unrestricted.</summary>
     bool IsEnabled { get; }
 
-    /// <summary>The scope keys the host declared (what admins can map columns to).</summary>
-    IReadOnlyList<string> DeclaredKeys { get; }
+    /// <summary>The scope keys the host declared in code. A data source can have more, added by admins
+    /// (see <see cref="DataScoping.DataScopeKeys.Effective"/>), so this alone is never the set to enforce.</summary>
+    IReadOnlyList<string> HostKeys { get; }
 
     /// <summary>Resolved once per request and cached.</summary>
     Task<ResolvedDataScope> GetAsync(CancellationToken cancellationToken);

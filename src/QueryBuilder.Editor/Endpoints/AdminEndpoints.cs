@@ -103,6 +103,14 @@ public static class AdminEndpoints
             return Results.NoContent();
         });
 
+        group.MapPut("/data-sources/{id:guid}/scope-keys", async (Guid id, HttpContext http, ISender sender, CancellationToken ct) =>
+        {
+            var request = await http.Request.ReadFromJsonAsync<UpdateScopeKeysRequest>(QueryBuilderJson.Options, ct)
+                ?? throw new BadHttpRequestException("Request body is required.");
+            await sender.Send(new UpdateScopeKeysCommand(id, request.Keys), ct);
+            return Results.Json(await sender.Send(new GetDataScopeQuery(id), ct), QueryBuilderJson.Options);
+        });
+
         group.MapPut("/data-sources/{id:guid}/record-limit", async (Guid id, HttpContext http, ISender sender, CancellationToken ct) =>
         {
             var request = await http.Request.ReadFromJsonAsync<UpdateRecordLimitRequest>(QueryBuilderJson.Options, ct)

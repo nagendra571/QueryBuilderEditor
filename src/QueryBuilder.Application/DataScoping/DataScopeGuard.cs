@@ -1,12 +1,14 @@
 using QueryBuilder.Application.Abstractions;
 using QueryBuilder.Application.Common;
 using QueryBuilder.Application.Exceptions;
+using QueryBuilder.Domain.Entities;
 using QueryBuilder.Domain.Model;
 
 namespace QueryBuilder.Application.DataScoping;
 
 public sealed class DataScopeGuard(
     ICurrentDataScope currentScope,
+    IDataSourceRepository dataSourceRepository,
     IDataScopeRuleRepository ruleRepository,
     IDataCatalogService catalogService)
     : IDataScopeGuard
@@ -19,6 +21,7 @@ public sealed class DataScopeGuard(
             return catalog;
         }
 
+        var keys = await EffectiveKeysAsync(catalog.DataSourceId, cancellationToken);
         var rules = await ruleRepository.GetForDataSourceAsync(catalog.DataSourceId, cancellationToken);
 
         var comparison = IdentifierMatching.Comparison(catalog.Provider);
@@ -34,7 +37,7 @@ public sealed class DataScopeGuard(
                 {
                     Name = s.Name,
                     Objects = s.Objects
-                        .Where(o => IsUsable(o, DataScopeEvaluator.Evaluate(Key(o), rules, scope, currentScope.DeclaredKeys, comparison), comparison))
+                        .Where(o => IsUsable(o, DataScopeEvaluator.Evaluate(Key(o), rules, scope, keys, comparison), comparison))
                         .ToList()
                 })
                 .Where(s => s.Objects.Count > 0)
@@ -51,6 +54,7 @@ public sealed class DataScopeGuard(
             return [];
         }
 
+        var keys = await EffectiveKeysAsync(dataSourceId, cancellationToken);
         var rules = await ruleRepository.GetForDataSourceAsync(dataSourceId, cancellationToken);
         var catalog = await catalogService.GetCatalogAsync(dataSourceId, cancellationToken);
         var comparison = IdentifierMatching.Comparison(catalog.Provider);
@@ -68,7 +72,7 @@ public sealed class DataScopeGuard(
         foreach (var (alias, schemaName, objectName) in references)
         {
             var key = $"{schemaName}.{objectName}";
-            var access = DataScopeEvaluator.Evaluate(key, rules, scope, currentScope.DeclaredKeys, comparison);
+            var access = DataScopeEvaluator.Evaluate(key, rules, scope, keys, comparison);
             if (!objectsByKey.TryGetValue(key, out var metadata) || !IsUsable(metadata, access, comparison))
             {
                 throw new ForbiddenException($"You don't have access to '{key}'.");
@@ -82,6 +86,15 @@ public sealed class DataScopeGuard(
         }
 
         return predicates;
+    }
+
+    // Read from the row on every call, never from the cached catalog, so an admin's key change applies at once.
+    // A missing row throws: guessing "host keys only" would be a decision about a data source we can't see.
+    private async Task<IReadOnlyList<string>> EffectiveKeysAsync(Guid dataSourceId, CancellationToken cancellationToken)
+    {
+        var dataSource = await dataSourceRepository.GetByIdAsync(dataSourceId, cancellationToken)
+            ?? throw new NotFoundException(nameof(DataSource), dataSourceId);
+        return DataScopeKeys.Effective(currentScope.HostKeys, dataSource);
     }
 
     // A mapped column that no longer exists on the object (view redefined since the admin mapped

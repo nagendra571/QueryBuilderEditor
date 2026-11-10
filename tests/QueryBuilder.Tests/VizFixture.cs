@@ -194,7 +194,7 @@ internal sealed class VizFixture
     public sealed class FakeScope : ICurrentDataScope
     {
         public bool IsEnabled => true;
-        public IReadOnlyList<string> DeclaredKeys => ["ProgramId"];
+        public IReadOnlyList<string> HostKeys => ["ProgramId"];
         public Task<ResolvedDataScope> GetAsync(CancellationToken cancellationToken) => Task.FromResult(ResolvedDataScope.Unrestricted);
     }
 

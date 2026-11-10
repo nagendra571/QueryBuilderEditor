@@ -114,7 +114,8 @@ export function validateConnection(form: ConnectionForm, provider: DataSourcePro
   else if (form.username.length > 128) errors.username = 'The username can be at most 128 characters.'
   else if (CONTROL.test(form.username)) errors.username = "The username can't contain control characters."
 
-  const passwordLimit = provider === 'sqlServer' ? 128 : 1024
+  // SqlClient itself refuses a SQL Server password over 128 characters.
+  const passwordLimit = provider === 'sqlServer' ? 128 : 5000
   if (form.password.length > passwordLimit) errors.password = `The password can be at most ${passwordLimit.toLocaleString('en-US')} characters.`
   else if (CONTROL.test(form.password)) errors.password = "The password can't contain control characters."
   return errors

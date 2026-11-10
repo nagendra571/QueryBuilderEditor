@@ -38,6 +38,7 @@ import type {
   QuerySqlPreviewDto,
   UpdateCatalogPolicyRequest,
   UpdateDataScopeRequest,
+  UpdateScopeKeysRequest,
   UpdateRecordLimitRequest,
 } from '@/types'
 
@@ -124,6 +125,8 @@ export const adminApi = {
   updateDataScope: async (id: string, request: UpdateDataScopeRequest): Promise<void> => {
     await apiClient.put(`/admin/data-sources/${id}/data-scope`, request)
   },
+  updateScopeKeys: async (id: string, request: UpdateScopeKeysRequest): Promise<AdminDataScopeDto> =>
+    (await apiClient.put(`/admin/data-sources/${id}/scope-keys`, request)).data,
 }
 
 export const visualizationsApi = {

@@ -68,7 +68,7 @@ public class IdentifierMatchingTests
     }
 
     private static DataScopeGuard Guard(DataSourceCatalog catalog, ResolvedDataScope scope, params DataScopeRule[] rules) =>
-        new(new FakeScope(scope), new FakeRules(rules), new FakeCatalog(catalog));
+        new(new FakeScope(scope), new ActiveDataSources(), new FakeRules(rules), new FakeCatalog(catalog));
 
     private static QueryDefinition PublicDefinition(string objectName) => new()
     {
@@ -432,7 +432,7 @@ public class IdentifierMatchingTests
     private sealed class FakeScope(ResolvedDataScope scope) : ICurrentDataScope
     {
         public bool IsEnabled => true;
-        public IReadOnlyList<string> DeclaredKeys => ["ProgramId", "Region"];
+        public IReadOnlyList<string> HostKeys => ["ProgramId", "Region"];
         public Task<ResolvedDataScope> GetAsync(CancellationToken cancellationToken) => Task.FromResult(scope);
     }
 

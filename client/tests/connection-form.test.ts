@@ -61,7 +61,10 @@ test('host, database and username are required and bounded', () => {
   assert.ok(validateConnection({ ...good, database: 'd'.repeat(129) }, 'postgreSql').database)
   assert.ok(validateConnection({ ...good, username: '' }, 'postgreSql').username)
   assert.ok(validateConnection({ ...good, username: 'u'.repeat(129) }, 'postgreSql').username)
-  assert.ok(validateConnection({ ...good, password: 'p'.repeat(1025) }, 'postgreSql').password)
+  assert.equal(validateConnection({ ...good, password: 'p'.repeat(5000) }, 'postgreSql').password, undefined)
+  assert.ok(validateConnection({ ...good, password: 'p'.repeat(5001) }, 'postgreSql').password)
+  assert.equal(validateConnection({ ...good, password: 'p'.repeat(128) }, 'sqlServer').password, undefined)
+  assert.ok(validateConnection({ ...good, password: 'p'.repeat(129) }, 'sqlServer').password)
 })
 
 test('hosts with whitespace or connection-string characters are rejected', () => {

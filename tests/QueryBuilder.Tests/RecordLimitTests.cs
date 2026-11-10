@@ -153,7 +153,7 @@ public class RecordLimitTests
     private sealed class UnrestrictedScope : ICurrentDataScope
     {
         public bool IsEnabled => false;
-        public IReadOnlyList<string> DeclaredKeys => [];
+        public IReadOnlyList<string> HostKeys => [];
         public Task<ResolvedDataScope> GetAsync(CancellationToken cancellationToken) => Task.FromResult(ResolvedDataScope.Unrestricted);
     }
 

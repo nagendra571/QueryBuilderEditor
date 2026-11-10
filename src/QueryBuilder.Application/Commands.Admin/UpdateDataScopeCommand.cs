@@ -1,5 +1,6 @@
 using QueryBuilder.Application.Abstractions;
 using QueryBuilder.Application.Common;
+using QueryBuilder.Application.DataScoping;
 using QueryBuilder.Application.Dtos;
 using QueryBuilder.Application.Exceptions;
 using QueryBuilder.Domain.Entities;
@@ -31,6 +32,7 @@ public sealed class UpdateDataScopeCommandHandler(
                 "Row-level data scoping is not enabled — configure options.DataScope in AddQueryBuilderEditor first.");
         }
 
+        var effectiveKeys = DataScopeKeys.Effective(currentScope.HostKeys, dataSource);
         var catalog = await catalogService.GetCatalogAsync(request.DataSourceId, cancellationToken);
         var comparison = IdentifierMatching.Comparison(catalog.Provider);
         var comparer = IdentifierMatching.Comparer(catalog.Provider);
@@ -69,7 +71,7 @@ public sealed class UpdateDataScopeCommandHandler(
             }
             foreach (var (key, columnName) in mappings)
             {
-                var declaredKey = currentScope.DeclaredKeys.FirstOrDefault(k => string.Equals(k, key, StringComparison.OrdinalIgnoreCase))
+                var declaredKey = effectiveKeys.FirstOrDefault(k => string.Equals(k, key, StringComparison.OrdinalIgnoreCase))
                     ?? throw new CatalogValidationException($"'{key}' is not a declared data-scope key.");
                 var column = metadata.Columns.FirstOrDefault(c => string.Equals(c.Name, columnName, comparison))
                     ?? throw new CatalogValidationException($"Column '{columnName}' does not exist on '{objectKey}'.");

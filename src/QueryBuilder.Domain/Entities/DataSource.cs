@@ -45,6 +45,10 @@ public sealed class DataSource : AuditableEntity
     /// exposed) — same "empty = no restriction" convention as <see cref="AllowedSchemas"/>.</summary>
     public List<string> AllowedObjects { get; set; } = [];
 
+    /// <summary>Row-level data-scope keys an admin added to this data source, on top of the keys the host
+    /// declares in code. Only names: each user's values still come from the host's resolver.</summary>
+    public List<string> ScopeKeys { get; set; } = [];
+
     /// <summary>Most records a query against this data source may return: the grid shows the
     /// first this-many with a "narrow it down" warning, and exports beyond it are refused. Null =
     /// fall back to the host's <c>DefaultMaxRecords</c> option (and if that's unset too, no limit).</summary>

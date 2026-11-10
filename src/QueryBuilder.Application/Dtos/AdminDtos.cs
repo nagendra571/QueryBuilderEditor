@@ -47,6 +47,8 @@ public sealed record UpdateRecordLimitRequest(int? MaxRecords);
 public sealed record AdminDataScopeDto(
     bool Enabled,
     List<string> DeclaredKeys,
+    List<string> HostKeys,
+    List<string> DataSourceKeys,
     List<AdminDataScopeObjectDto> Objects,
     List<AdminUnavailableObject> Unavailable);
 
@@ -62,5 +64,7 @@ public sealed record AdminDataScopeObjectDto(
     List<string> StaleKeys);
 
 public sealed record DataScopeObjectRuleDto(string ObjectName, DataScopeState State, Dictionary<string, string>? Mappings);
+
+public sealed record UpdateScopeKeysRequest(List<string>? Keys);
 
 public sealed record UpdateDataScopeRequest(List<DataScopeObjectRuleDto> Objects);

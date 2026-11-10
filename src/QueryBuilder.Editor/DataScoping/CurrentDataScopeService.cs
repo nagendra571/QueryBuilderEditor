@@ -18,7 +18,7 @@ public sealed class CurrentDataScopeService(
 
     public bool IsEnabled => editorOptions.DataScope.IsEnabled;
 
-    public IReadOnlyList<string> DeclaredKeys => editorOptions.DataScope.Keys.ToList();
+    public IReadOnlyList<string> HostKeys => editorOptions.DataScope.Keys.ToList();
 
     public async Task<ResolvedDataScope> GetAsync(CancellationToken cancellationToken)
     {
