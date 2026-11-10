@@ -109,6 +109,44 @@ public class HubRegistryModelTests
         await Assert.ThrowsAsync<CrossAppWriteException>(() => db.SaveChangesAsync());
     }
 
+    [Fact]
+    public void Save_guard_markers_are_mutually_exclusive()
+    {
+        using var db = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>().UseSqlServer("Server=never_opened;Database=never_opened").Options);
+        foreach (var type in db.Model.GetEntityTypes().Select(t => t.ClrType))
+        {
+            var markers = new[] { typeof(IAppOwned), typeof(IHubRegistryRecord), typeof(IHubSystemRecord) }.Count(m => m.IsAssignableFrom(type));
+            Assert.True(markers <= 1, $"{type.Name} implements {markers} save-guard markers");
+        }
+    }
+
+    [MetadataSqlFact]
+    public Task An_800_character_return_url_inserts() => MetadataDb.WithDatabaseAsync(async (options, _) =>
+    {
+        var app = new App { Key = "long-url", Name = "Long" };
+        await using var hub = new AppDbContext(options, new FixedAppContext(App.NoneId, hubWide: true));
+        hub.Apps.Add(app);
+        await hub.SaveChangesAsync();
+        hub.AppReturnUrls.Add(new AppReturnUrl { AppId = app.Id, Url = "https://h/" + new string('a', 790) });
+        await hub.SaveChangesAsync();
+    });
+
+    [MetadataSqlFact]
+    public Task Replay_ids_are_unique_per_app() => MetadataDb.WithDatabaseAsync(async (options, _) =>
+    {
+        await using var db = new AppDbContext(options, new FixedAppContext(App.NoneId));
+        var a = Guid.NewGuid();
+        var b = Guid.NewGuid();
+        var expires = DateTimeOffset.UtcNow.AddMinutes(3);
+        db.LaunchReplays.Add(new LaunchReplay { Jti = "same", AppId = a, ExpiresUtc = expires });
+        db.LaunchReplays.Add(new LaunchReplay { Jti = "same", AppId = b, ExpiresUtc = expires });
+        await db.SaveChangesAsync();
+
+        await using var again = new AppDbContext(options, new FixedAppContext(App.NoneId));
+        again.LaunchReplays.Add(new LaunchReplay { Jti = "same", AppId = a, ExpiresUtc = expires });
+        await Assert.ThrowsAsync<DbUpdateException>(() => again.SaveChangesAsync());
+    });
+
     [MetadataSqlFact]
     public Task AddHubRegistry_applies_on_top_of_AddApps() => MetadataDb.WithDatabaseAsync(async (options, connectionString) =>
     {

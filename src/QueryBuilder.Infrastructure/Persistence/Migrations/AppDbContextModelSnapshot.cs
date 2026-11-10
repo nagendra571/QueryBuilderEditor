@@ -67,8 +67,8 @@ namespace QueryBuilder.Infrastructure.Persistence.Migrations
 
                     b.Property<string>("Url")
                         .IsRequired()
-                        .HasMaxLength(2000)
-                        .HasColumnType("nvarchar(2000)");
+                        .HasMaxLength(800)
+                        .HasColumnType("nvarchar(800)");
 
                     b.HasKey("Id");
 
@@ -520,17 +520,17 @@ namespace QueryBuilder.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("QueryBuilder.Domain.Entities.LaunchReplay", b =>
                 {
+                    b.Property<Guid>("AppId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<string>("Jti")
                         .HasMaxLength(200)
                         .HasColumnType("nvarchar(200)");
 
-                    b.Property<Guid>("AppId")
-                        .HasColumnType("uniqueidentifier");
-
                     b.Property<DateTimeOffset>("ExpiresUtc")
                         .HasColumnType("datetimeoffset");
 
-                    b.HasKey("Jti");
+                    b.HasKey("AppId", "Jti");
 
                     b.HasIndex("ExpiresUtc");
 

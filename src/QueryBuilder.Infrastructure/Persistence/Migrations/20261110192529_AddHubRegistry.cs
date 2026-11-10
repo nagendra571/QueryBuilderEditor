@@ -24,7 +24,7 @@ namespace QueryBuilder.Infrastructure.Persistence.Migrations
                 {
                     Id = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
                     AppId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
-                    Url = table.Column<string>(type: "nvarchar(2000)", maxLength: 2000, nullable: false)
+                    Url = table.Column<string>(type: "nvarchar(800)", maxLength: 800, nullable: false)
                 },
                 constraints: table =>
                 {
@@ -84,7 +84,7 @@ namespace QueryBuilder.Infrastructure.Persistence.Migrations
                 },
                 constraints: table =>
                 {
-                    table.PrimaryKey("PK_LaunchReplays", x => x.Jti);
+                    table.PrimaryKey("PK_LaunchReplays", x => new { x.AppId, x.Jti });
                 });
 
             migrationBuilder.CreateTable(

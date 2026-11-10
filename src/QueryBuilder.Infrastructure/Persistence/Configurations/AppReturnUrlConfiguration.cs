@@ -10,7 +10,7 @@ public sealed class AppReturnUrlConfiguration : IEntityTypeConfiguration<AppRetu
     {
         builder.ToTable("AppReturnUrls");
         builder.HasKey(x => x.Id);
-        builder.Property(x => x.Url).HasMaxLength(2000).IsRequired();
+        builder.Property(x => x.Url).HasMaxLength(800).IsRequired();
         builder.HasIndex(x => new { x.AppId, x.Url }).IsUnique();
         builder.HasOne<App>().WithMany().HasForeignKey(x => x.AppId).OnDelete(DeleteBehavior.Restrict);
     }

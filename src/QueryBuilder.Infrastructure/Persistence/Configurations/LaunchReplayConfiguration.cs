@@ -9,7 +9,8 @@ public sealed class LaunchReplayConfiguration : IEntityTypeConfiguration<LaunchR
     public void Configure(EntityTypeBuilder<LaunchReplay> builder)
     {
         builder.ToTable("LaunchReplays");
-        builder.HasKey(x => x.Jti);
+        // Per app, so one app's predictable ids can't make another app's launches look replayed.
+        builder.HasKey(x => new { x.AppId, x.Jti });
         builder.Property(x => x.Jti).HasMaxLength(200);
         builder.HasIndex(x => x.ExpiresUtc);
     }
