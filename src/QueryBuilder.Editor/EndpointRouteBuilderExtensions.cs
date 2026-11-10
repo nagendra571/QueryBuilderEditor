@@ -25,6 +25,7 @@ public static class EndpointRouteBuilderExtensions
         if (options.Hub.Enabled)
         {
             endpoints.MapHubLaunchEndpoints();
+            endpoints.MapHubSuperAdminEndpoints();
         }
 
         var group = endpoints.MapGroup(QueryBuilderRoutes.BasePath);

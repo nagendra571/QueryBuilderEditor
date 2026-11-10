@@ -167,6 +167,23 @@ public static class ServiceCollectionExtensions
                     $"{nameof(HubOptions)}.{nameof(HubOptions.AbsoluteLifetime)} must not be shorter than {nameof(HubOptions.IdleTimeout)}.");
             }
 
+            if (string.IsNullOrWhiteSpace(options.Hub.Audience))
+            {
+                throw new InvalidOperationException($"{nameof(HubOptions)}.{nameof(HubOptions.Audience)} is required in hub mode.");
+            }
+
+            if (string.IsNullOrWhiteSpace(options.Hub.SuperAdminSignInScheme))
+            {
+                throw new InvalidOperationException($"{nameof(HubOptions)}.{nameof(HubOptions.SuperAdminSignInScheme)} is required in hub mode.");
+            }
+
+            if (SuperAdminRecognizer.ConfiguredEntryCount(options.Hub.SuperAdmins) == 0)
+            {
+                throw new InvalidOperationException(
+                    $"{nameof(HubOptions)}.{nameof(HubOptions.SuperAdmins)} needs at least one entry in {nameof(SuperAdminOptions.ObjectIds)}, " +
+                    $"{nameof(SuperAdminOptions.Emails)} or {nameof(SuperAdminOptions.GroupIds)}: a hub nobody can administer is refused.");
+            }
+
             AddHubSession(services, options.Hub);
         }
 
@@ -194,6 +211,7 @@ public static class ServiceCollectionExtensions
 
         // A cookie scheme of our own, not the host's default: the host keeps whatever sign-in it already has.
         services.AddAuthentication().AddCookie(HubSession.Scheme, cookie => HubSessionCookie.Configure(cookie, hub));
+        services.AddAuthentication().AddCookie(HubSession.ExternalScheme, HubSessionCookie.ConfigureExternal);
         services.AddOptions<CookieAuthenticationOptions>(HubSession.Scheme)
             .Configure<TimeProvider>((cookie, clock) => cookie.TimeProvider = clock);
 

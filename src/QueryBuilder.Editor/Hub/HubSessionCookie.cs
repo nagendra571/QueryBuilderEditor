@@ -34,6 +34,22 @@ internal static class HubSessionCookie
         cookie.Events.OnRedirectToAccessDenied = context => ApiOrRedirect(context, StatusCodes.Status403Forbidden);
     }
 
+    /// <summary>
+    /// A remote handler (OpenID Connect) cannot be authenticated on demand, so the host points its SignInScheme at
+    /// this cookie and the complete endpoint reads and deletes it. Short-lived and never a session itself.
+    /// </summary>
+    public static void ConfigureExternal(CookieAuthenticationOptions cookie)
+    {
+        cookie.Cookie.Name = "__Host-qb-hub-ext";
+        cookie.Cookie.HttpOnly = true;
+        cookie.Cookie.SecurePolicy = CookieSecurePolicy.Always;
+        cookie.Cookie.SameSite = SameSiteMode.Lax;
+        cookie.Cookie.Path = "/";
+        cookie.Cookie.IsEssential = true;
+        cookie.ExpireTimeSpan = TimeSpan.FromMinutes(5);
+        cookie.SlidingExpiration = false;
+    }
+
     private static Task ApiOrRedirect(RedirectContext<CookieAuthenticationOptions> context, int status)
     {
         if (context.Request.Path.StartsWithSegments(ApiPath))

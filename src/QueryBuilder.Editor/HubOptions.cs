@@ -20,7 +20,13 @@ public sealed class HubOptions
     /// <summary>Who may sign in as a super admin through the host's own sign-in. A launch token can never make one.</summary>
     public SuperAdminOptions SuperAdmins { get; set; } = new();
 
-    /// <summary>The host authentication scheme whose signed-in user may become a super admin, if on the allowlist.</summary>
+    /// <summary>
+    /// The host's authentication scheme that signs a super admin in (typically its OpenID Connect handler). Required in hub mode.
+    /// Set that handler's <c>SignInScheme</c> to <c>"QueryBuilder.HubExternal"</c>, a short-lived cookie scheme the package
+    /// registers: a remote handler cannot be read back on demand, so the package reads the user it leaves there, checks
+    /// the allowlist, and deletes it. Entra group claims are only honoured when the token carries them; when it omits
+    /// them for being too many, such a user can only match by object id or email.
+    /// </summary>
     public string? SuperAdminSignInScheme { get; set; }
 }
 

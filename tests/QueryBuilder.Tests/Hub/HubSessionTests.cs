@@ -64,6 +64,8 @@ public class HubSessionTests
                         o.ApplyMigrations = false;
                         o.Hub.Enabled = hub;
                         o.Hub.Audience = "https://hub.test";
+                        o.Hub.SuperAdminSignInScheme = "host";
+                        o.Hub.SuperAdmins.ObjectIds = ["admin-oid"];
                         o.DataSourceManagement.EncryptionKey = key ?? KeyA;
                         o.DataSourceManagement.PreviousEncryptionKeys = previousKeys?.ToList() ?? [];
                         configure?.Invoke(o);

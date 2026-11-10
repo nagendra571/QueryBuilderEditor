@@ -13,6 +13,9 @@ internal static class HubSession
 {
     public const string Scheme = "QueryBuilder.Hub";
 
+    /// <summary>Where the host's sign-in handler parks its result for a moment; see <see cref="HubOptions.SuperAdminSignInScheme"/>.</summary>
+    public const string ExternalScheme = "QueryBuilder.HubExternal";
+
     public const string Kind = "qb:kind";
     public const string App = "qb:app";
     public const string User = "qb:user";

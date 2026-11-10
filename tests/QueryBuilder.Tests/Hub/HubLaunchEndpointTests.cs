@@ -182,6 +182,8 @@ public class HubLaunchEndpointTests
                         o.ApplyMigrations = false;
                         o.Hub.Enabled = hub;
                         o.Hub.Audience = Audience;
+                        o.Hub.SuperAdminSignInScheme = "host";
+                        o.Hub.SuperAdmins.ObjectIds = ["admin-oid"];
                         o.DataSourceManagement.EncryptionKey = Key;
                     });
                 });
@@ -493,6 +495,8 @@ public class HubLaunchEndpointTests
             o.ApplyMigrations = false;
             o.Hub.Enabled = hub;
             o.Hub.Audience = Audience;
+            o.Hub.SuperAdminSignInScheme = "host";
+            o.Hub.SuperAdmins.ObjectIds = ["admin-oid"];
             o.DataSourceManagement.EncryptionKey = Key;
         });
         return services.BuildServiceProvider(new ServiceProviderOptions { ValidateOnBuild = true, ValidateScopes = true });
