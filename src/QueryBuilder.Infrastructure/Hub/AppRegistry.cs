@@ -72,7 +72,9 @@ internal sealed class AppRegistry(AppDbContext db, ICurrentUserService user, IHt
     public async Task RevokeKeyAsync(Guid appId, string kid, CancellationToken ct)
     {
         var app = await FindAsync(appId, ct);
-        var key = await db.AppSigningKeys.FirstOrDefaultAsync(k => k.AppId == appId && k.Kid == kid, ct)
+        // The database compares ignoring case; the validator matches kids exactly, so only an exact match is revoked.
+        var key = (await db.AppSigningKeys.Where(k => k.AppId == appId && k.Kid == kid).ToListAsync(ct))
+            .FirstOrDefault(k => string.Equals(k.Kid, kid, StringComparison.Ordinal))
             ?? throw new NotFoundException("Signing key", kid);
 
         // Repeating a revoke changes nothing and so writes nothing.

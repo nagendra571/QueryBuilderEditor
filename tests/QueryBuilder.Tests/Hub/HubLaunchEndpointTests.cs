@@ -116,23 +116,23 @@ public class HubLaunchEndpointTests
         public async Task<string?> MeUserAsync()
         {
             var response = await GetAsync("/querybuilder/api/me");
-            // Hub mode answers 401 without a session; the tests read that as the anonymous caller they always meant.
+            // Null means 401: no session (or none that resolves to an app). Callers assert that explicitly.
             if (response.StatusCode == HttpStatusCode.Unauthorized)
             {
-                return "anonymous";
+                return null;
             }
 
             response.EnsureSuccessStatusCode();
             return JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement.GetProperty("userId").GetString();
         }
 
-        public async Task<int> DataSourceCountAsync()
+        public async Task<int?> DataSourceCountAsync()
         {
             var response = await GetAsync("/querybuilder/api/data-sources");
-            // No session (401) sees nothing, as the app-less "none" context always did.
+            // Null means 401: the gate refuses a session without an app before any query runs.
             if (response.StatusCode == HttpStatusCode.Unauthorized)
             {
-                return 0;
+                return null;
             }
 
             response.EnsureSuccessStatusCode();
@@ -327,7 +327,7 @@ public class HubLaunchEndpointTests
         Assert.Equal("user-1", await env.MeUserAsync());
 
         Assert.Equal(HttpStatusCode.BadRequest, (await env.LaunchAsync("garbage")).StatusCode);
-        Assert.Equal("anonymous", await env.MeUserAsync());
+        Assert.Null(await env.MeUserAsync());
     });
 
     [MetadataSqlFact]
@@ -394,7 +394,7 @@ public class HubLaunchEndpointTests
         var logout = await env.GetAsync("/querybuilder/logout");
         Assert.Equal(HttpStatusCode.Found, logout.StatusCode);
         Assert.Equal(ReturnUrl, logout.Headers.Location!.OriginalString);
-        Assert.Equal("anonymous", await env.MeUserAsync());
+        Assert.Null(await env.MeUserAsync());
 
         // The session's copy of the URL is a snapshot: once the app drops it, logout no longer follows it.
         await env.LaunchAsync(env.TokenA(change: c => c["returnUrl"] = ReturnUrl));
@@ -477,13 +477,13 @@ public class HubLaunchEndpointTests
         // Pre-signature (signed by the wrong key, claiming app B): hub-level, not app A and not even app B.
         var forged = TestTokens.Rs256(env.Stranger, env.Claims("app-b", "x"), "rsa-b");
         Assert.Equal(HttpStatusCode.BadRequest, (await env.LaunchAsync(forged)).StatusCode);
-        Assert.Equal("anonymous", await env.MeUserAsync());
+        Assert.Null(await env.MeUserAsync());
 
         // Post-signature (valid but expired): the token's verified app, still not the session's.
         await env.LaunchAsync(env.TokenA());
         var expired = TestTokens.Rs256(env.RsaB, env.Claims("app-b", "y", c => { c["iat"] = Env.Now - 200; c["exp"] = Env.Now - 100; }), "rsa-b");
         Assert.Equal(HttpStatusCode.BadRequest, (await env.LaunchAsync(expired)).StatusCode);
-        Assert.Equal("anonymous", await env.MeUserAsync());
+        Assert.Null(await env.MeUserAsync());
 
         await using var db = env.Db();
         var rows = await db.AuditLogEntries.IgnoreQueryFilters().Where(a => a.Action == AuditAction.LaunchRefused).OrderBy(a => a.TimestampUtc).ToListAsync();

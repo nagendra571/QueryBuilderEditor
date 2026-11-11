@@ -14,7 +14,8 @@ public static partial class RegistryRules
     public const int MaxReturnUrls = 20;
     public const int MaxReturnUrlLength = 800;
 
-    private const string P256Oid = "1.2.840.10045.3.1.7";
+    [GeneratedRegex("^[A-Za-z0-9._-]{1,64}$")]
+    private static partial Regex KidPattern();
 
     [GeneratedRegex("^[a-z0-9][a-z0-9-]{1,62}$")]
     private static partial Regex AppKeyPattern();
@@ -72,9 +73,11 @@ public static partial class RegistryRules
 
     public static string Kid(string? kid)
     {
-        if (string.IsNullOrWhiteSpace(kid) || kid.Length > MaxKidLength || kid != kid.Trim() || kid.Any(char.IsControl))
+        // Letters, digits, dot, underscore, hyphen only: anything else (a slash, %, ?) cannot be reliably addressed in
+        // the revoke URL, and revoking is the incident-response path.
+        if (kid is null || !KidPattern().IsMatch(kid))
         {
-            throw new CatalogValidationException($"A key id is required, at most {MaxKidLength} characters, with no surrounding spaces.");
+            throw new CatalogValidationException($"A key id is 1 to {MaxKidLength} characters: letters, digits, '.', '_' and '-' only.");
         }
 
         return kid;
@@ -131,9 +134,9 @@ public static partial class RegistryRules
                     return null;
                 }
 
-                if (rsa.KeySize < 2048)
+                if (!SigningKeyStrength.IsAcceptable(rsa))
                 {
-                    problem = "An RS256 key must be RSA of at least 2048 bits.";
+                    problem = "An RS256 key must be RSA of 2048 to 8192 bits.";
                     return null;
                 }
 
@@ -148,8 +151,7 @@ public static partial class RegistryRules
                     return null;
                 }
 
-                // KeySize alone also admits secp256k1 and brainpoolP256r1, which ES256 does not allow.
-                if (ecdsa.ExportParameters(false).Curve.Oid?.Value != P256Oid)
+                if (!SigningKeyStrength.IsAcceptable(ecdsa))
                 {
                     problem = "An ES256 key must be on the P-256 curve.";
                     return null;
@@ -178,18 +180,18 @@ public static partial class RegistryRules
         }
 
         var result = new List<string>();
+        var seen = new HashSet<string>(StringComparer.Ordinal);
         foreach (var url in urls)
         {
             ValidateReturnUrl(url);
-            if (!result.Contains(url, StringComparer.Ordinal))
+            if (seen.Add(url))
             {
                 result.Add(url);
+                if (result.Count > MaxReturnUrls)
+                {
+                    throw new CatalogValidationException($"An app can have at most {MaxReturnUrls} return URLs.");
+                }
             }
-        }
-
-        if (result.Count > MaxReturnUrls)
-        {
-            throw new CatalogValidationException($"An app can have at most {MaxReturnUrls} return URLs.");
         }
 
         // The stored set is unique ignoring case on typical collations, so two spellings could not both be saved.
@@ -204,7 +206,10 @@ public static partial class RegistryRules
     private static void ValidateReturnUrl(string? url)
     {
         if (string.IsNullOrEmpty(url) || url.Length > MaxReturnUrlLength || url != url.Trim() || url.Any(char.IsControl)
-            || url.Contains('#') || !Uri.TryCreate(url, UriKind.Absolute, out var uri) || uri.UserInfo.Length != 0)
+            || url.Contains('#') || !Uri.TryCreate(url, UriKind.Absolute, out var uri) || uri.UserInfo.Length != 0
+            // Must already be in the form a browser will follow ("https:evil.com" parses but is not "https://evil.com/"),
+            // so what is validated is what a launch can redirect to.
+            || !url.Contains("//", StringComparison.Ordinal) || !string.Equals(uri.AbsoluteUri, url, StringComparison.Ordinal))
         {
             throw new CatalogValidationException($"A return URL must be an absolute https URL of at most {MaxReturnUrlLength} characters, without a fragment or credentials.");
         }

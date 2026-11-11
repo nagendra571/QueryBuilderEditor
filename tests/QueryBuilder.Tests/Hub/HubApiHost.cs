@@ -157,6 +157,7 @@ internal sealed class HubApiHost : IAsyncDisposable
                     app.UseEndpoints(e =>
                     {
                         e.MapQueryBuilderEditor();
+                        e.MapGet("/querybuilder/test/challenge", () => Results.Challenge(authenticationSchemes: [HubSession.Scheme]));
                         e.MapGet("/querybuilder/test/signin", async (HttpContext ctx, TimeProvider clock) =>
                         {
                             var q = ctx.Request.Query;

@@ -91,12 +91,26 @@ public class HubRegistryTests
         using var small = RSA.Create(1024);
         using var good = RSA.Create(2048);
         using var p384 = ECDsa.Create(ECCurve.NamedCurves.nistP384);
-        using var k1 = ECDsa.Create(ECCurve.CreateFromFriendlyName("secp256k1"));
+        // Another 256-bit curve ES256 does not allow. Which ones the platform can create varies, so try both.
+        ECDsa? other256 = null;
+        foreach (var curve in new[] { "secp256k1", "brainpoolP256r1" })
+        {
+            try { other256 = ECDsa.Create(ECCurve.CreateFromFriendlyName(curve)); break; }
+            catch (Exception ex) when (ex is CryptographicException or PlatformNotSupportedException or ArgumentException) { }
+        }
+
+        Assert.NotNull(other256);
+        using var _ = other256;
         using var p256 = ECDsa.Create(ECCurve.NamedCurves.nistP256);
 
         Assert.Equal(HttpStatusCode.BadRequest, await AddKey("a", "RS256", TestTokens.Pem(small)));
         Assert.Equal(HttpStatusCode.BadRequest, await AddKey("b", "ES256", TestTokens.Pem(p384)));
+        Assert.Equal(HttpStatusCode.BadRequest, await AddKey("b2", "ES256", TestTokens.Pem(other256!)));
         Assert.Equal(HttpStatusCode.BadRequest, await AddKey("c", "ES256", TestTokens.Pem(good)));
+        Assert.Equal(HttpStatusCode.BadRequest, await AddKey("a/b", "RS256", TestTokens.Pem(good)));
+        Assert.Equal(HttpStatusCode.BadRequest, await AddKey("a b", "RS256", TestTokens.Pem(good)));
+        Assert.Equal(HttpStatusCode.BadRequest, await AddKey("a%2Fb", "RS256", TestTokens.Pem(good)));
+        Assert.Equal(HttpStatusCode.BadRequest, await AddKey("a?b", "RS256", TestTokens.Pem(good)));
         Assert.Equal(HttpStatusCode.BadRequest, await AddKey("d", "RS256", TestTokens.Pem(p256)));
         Assert.Equal(HttpStatusCode.BadRequest, await AddKey("e", "HS256", TestTokens.Pem(good)));
         Assert.Equal(HttpStatusCode.BadRequest, await AddKey("f", "RS256", good.ExportPkcs8PrivateKeyPem()));
@@ -106,6 +120,9 @@ public class HubRegistryTests
         Assert.Equal(HttpStatusCode.BadRequest, await AddKey("j", "RS256", TestTokens.Pem(good) + new string(' ', 4000)));
         Assert.Equal(HttpStatusCode.BadRequest, await AddKey(new string('k', 65), "RS256", TestTokens.Pem(good)));
         Assert.Equal(HttpStatusCode.BadRequest, await AddKey("", "RS256", TestTokens.Pem(good)));
+
+        using var huge = RSA.Create(8448);
+        Assert.Equal(HttpStatusCode.BadRequest, await AddKey("huge", "RS256", TestTokens.Pem(huge)));
 
         Assert.Equal(HttpStatusCode.Created, await AddKey("ok", "RS256", TestTokens.Pem(good)));
         Assert.Equal(HttpStatusCode.BadRequest, await AddKey("ok", "RS256", TestTokens.Pem(good)));
@@ -119,6 +136,13 @@ public class HubRegistryTests
         Assert.Equal(HttpStatusCode.BadRequest, await SetUrls("https://user:pw@a.example/x"));
         Assert.Equal(HttpStatusCode.BadRequest, await SetUrls("/relative"));
         Assert.Equal(HttpStatusCode.BadRequest, await SetUrls("ftp://a.example/x"));
+        // Not in the form a browser follows: no authority, or a spelling the URI parser rewrites.
+        Assert.Equal(HttpStatusCode.BadRequest, await SetUrls("https:evil.com"));
+        Assert.Equal(HttpStatusCode.BadRequest, await SetUrls("https:/evil.com/x"));
+        Assert.Equal(HttpStatusCode.BadRequest, await SetUrls("https://A.example/x"));
+        Assert.Equal(HttpStatusCode.BadRequest, await SetUrls("https://a.example"));
+        Assert.Equal(HttpStatusCode.BadRequest, await SetUrls("https://a.example/a b"));
+        Assert.Equal(HttpStatusCode.BadRequest, await SetUrls("https://a.example:443/x"));
         Assert.Equal(HttpStatusCode.BadRequest, await SetUrls("javascript:alert(1)"));
         Assert.Equal(HttpStatusCode.BadRequest, await SetUrls("https://a.example/" + new string('x', 800)));
         Assert.Equal(HttpStatusCode.BadRequest, await SetUrls(Enumerable.Range(0, 21).Select(i => $"https://a.example/{i}").ToArray()));
@@ -151,6 +175,26 @@ public class HubRegistryTests
         await using var db = env.HubWideDb();
         Assert.Equal(["ok"], await db.AppSigningKeys.Where(k => k.AppId == id).Select(k => k.Kid).ToListAsync());
         Assert.Equal(1, await db.AppReturnUrls.CountAsync(u => u.AppId == id));
+    });
+
+    [MetadataSqlFact]
+    public Task A_kid_with_dots_underscores_and_hyphens_can_be_added_and_revoked_exactly() => HubApiHost.RunAsync(async env =>
+    {
+        var super = await SuperAsync(env);
+        var id = await CreateAppAsync(super);
+        using var one = RSA.Create(2048);
+        using var two = RSA.Create(2048);
+        Assert.Equal(HttpStatusCode.Created, (await super.PostAsync($"{Apps}/{id}/keys", new { kid = "Key.2026_11-a", algorithm = "RS256", publicKeyPem = TestTokens.Pem(one) })).StatusCode);
+        Assert.Equal(HttpStatusCode.Created, (await super.PostAsync($"{Apps}/{id}/keys", new { kid = "key.2026_11-b", algorithm = "RS256", publicKeyPem = TestTokens.Pem(two) })).StatusCode);
+
+        // A case variant of an existing kid names no key, and must not revoke the other one.
+        Assert.Equal(HttpStatusCode.NotFound, (await super.SendAsync(HttpMethod.Delete, $"{Apps}/{id}/keys/KEY.2026_11-A")).StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, (await super.SendAsync(HttpMethod.Delete, $"{Apps}/{id}/keys/Key.2026_11-a")).StatusCode);
+
+        await using var db = env.HubWideDb();
+        var keys = await db.AppSigningKeys.Where(k => k.AppId == id).ToListAsync();
+        Assert.NotNull(keys.Single(k => k.Kid == "Key.2026_11-a").RevokedAtUtc);
+        Assert.Null(keys.Single(k => k.Kid == "key.2026_11-b").RevokedAtUtc);
     });
 
     [MetadataSqlFact]

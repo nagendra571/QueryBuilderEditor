@@ -11,6 +11,8 @@ public static class MeEndpoints
     /// ever describes the requester, so it reveals nothing they couldn't already infer from their data.
     /// In hub mode the same answer also says which app, role and return address the session has; embedded mode's
     /// JSON is exactly what it always was.</summary>
+    public static void MapMeEndpoints(this IEndpointRouteBuilder app) => app.MapMeEndpoints(false);
+
     internal static void MapMeEndpoints(this IEndpointRouteBuilder app, bool hub)
     {
         // Two handlers rather than one with optional services: IAppSessionSource exists only in hub mode, and an

@@ -167,23 +167,23 @@ public class SuperAdminTests
         public async Task<string?> MeUserAsync()
         {
             var response = await GetAsync("/querybuilder/api/me");
-            // Hub mode answers 401 without a session; the tests read that as the anonymous caller they always meant.
+            // Null means 401: no session (or none that resolves to an app). Callers assert that explicitly.
             if (response.StatusCode == HttpStatusCode.Unauthorized)
             {
-                return "anonymous";
+                return null;
             }
 
             response.EnsureSuccessStatusCode();
             return JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement.GetProperty("userId").GetString();
         }
 
-        public async Task<int> DataSourceCountAsync()
+        public async Task<int?> DataSourceCountAsync()
         {
             var response = await GetAsync("/querybuilder/api/data-sources");
-            // No session (401) sees nothing, as the app-less "none" context always did.
+            // Null means 401: the gate refuses a session without an app before any query runs.
             if (response.StatusCode == HttpStatusCode.Unauthorized)
             {
-                return 0;
+                return null;
             }
 
             response.EnsureSuccessStatusCode();
@@ -327,7 +327,7 @@ public class SuperAdminTests
         Assert.DoesNotContain("QueryBuilder.Hub", response.Headers.TryGetValues("Set-Cookie", out var c) ? string.Join(";", c) : "");
         Assert.False(env.Jar.ContainsKey("__Host-qb-hub"));
         Assert.False(env.Jar.ContainsKey("__Host-qb-hub-ext"));
-        Assert.Equal("anonymous", await env.MeUserAsync());
+        Assert.Null(await env.MeUserAsync());
 
         await using var db = env.Db();
         Assert.False(await db.AuditLogEntries.AnyAsync(a => a.Action == AuditAction.SuperAdminSignedIn));
@@ -367,7 +367,7 @@ public class SuperAdminTests
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         Assert.False(env.Jar.ContainsKey("__Host-qb-hub"));
-        Assert.Equal("anonymous", await env.MeUserAsync());
+        Assert.Null(await env.MeUserAsync());
         await using var db = env.Db();
         var audit = await db.AuditLogEntries.SingleAsync(a => a.Action == AuditAction.LaunchRefused);
         Assert.Contains("UnknownRole", audit.DetailsJson);
@@ -377,7 +377,7 @@ public class SuperAdminTests
     public Task View_app_switches_resolution_and_audits_inside_that_app() => RunAsync(async env =>
     {
         await env.SignInAsync(("oid", AdminOid), ("name", "Super Sam"));
-        Assert.Equal(0, await env.DataSourceCountAsync());
+        Assert.Null(await env.DataSourceCountAsync());
 
         var toA = await env.PostAsync("/querybuilder/api/hub/view-app", new { appId = env.AppA });
         Assert.Equal(HttpStatusCode.OK, toA.StatusCode);
@@ -392,7 +392,7 @@ public class SuperAdminTests
         Assert.Equal(2, await env.DataSourceCountAsync());
 
         Assert.Equal(HttpStatusCode.OK, (await env.PostAsync("/querybuilder/api/hub/view-app", new { })).StatusCode);
-        Assert.Equal(0, await env.DataSourceCountAsync());
+        Assert.Null(await env.DataSourceCountAsync());
 
         // Inside app A, a normal handler's audit entry lands in A, attributed to the super admin.
         await env.PostAsync("/querybuilder/api/hub/view-app", new { appId = env.AppA });
@@ -444,7 +444,7 @@ public class SuperAdminTests
         Assert.Equal(1, await env.DataSourceCountAsync());
 
         env.Clock.Offset = TimeSpan.FromMinutes(490);
-        Assert.Equal("anonymous", await env.MeUserAsync());
+        Assert.Null(await env.MeUserAsync());
     });
 
     [MetadataSqlFact]
@@ -512,7 +512,7 @@ public class SuperAdminTests
         }
 
         await env.SignInAsync(("oid", "66666666-0000-0000-0000-000000000006"));
-        Assert.Equal("anonymous", await env.MeUserAsync());
+        Assert.Null(await env.MeUserAsync());
         await using (var db = env.Db())
         {
             var audit = await db.AuditLogEntries.SingleAsync(a => a.Action == AuditAction.SuperAdminSignInRefused);
@@ -546,7 +546,7 @@ public class SuperAdminTests
         await env.SignInAsync(("oid", AdminOid));
         Assert.Equal(HttpStatusCode.NotFound, (await env.PostAsync("/querybuilder/api/hub/view-app", new { appId = App.DefaultId })).StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, (await env.PostAsync("/querybuilder/api/hub/view-app", new { appId = App.NoneId })).StatusCode);
-        Assert.Equal(0, await env.DataSourceCountAsync());
+        Assert.Null(await env.DataSourceCountAsync());
     });
 
     [Fact]

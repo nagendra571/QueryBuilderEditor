@@ -61,8 +61,10 @@ public class HubAuthorizationTests
     [MetadataSqlFact]
     public Task A_challenge_never_redirects_to_the_host_login() => HubApiHost.RunAsync(async env =>
     {
-        // Not an API path either: still a bare status, not a redirect to /Account/Login.
-        var response = await env.NewBrowser().GetAsync("/querybuilder/api/data-sources");
+        // A real challenge of the hub scheme on a path that is not an API path: the cookie handler would otherwise
+        // redirect to /Account/Login. It answers a bare 401 instead, with no Location at all.
+        var response = await env.NewBrowser().GetAsync("/querybuilder/test/challenge");
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
         Assert.Null(response.Headers.Location);
     });
 

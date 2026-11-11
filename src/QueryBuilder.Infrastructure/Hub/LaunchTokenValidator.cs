@@ -33,7 +33,6 @@ public sealed class LaunchTokenValidator : ILaunchTokenValidator
     // The handler's own size limit (250 KB by default) must equal ours, or an oversized token would surface as BadSignature.
     private static readonly JsonWebTokenHandler Handler = new() { MaximumTokenSizeInBytes = MaxTokenLength };
 
-    private const string P256Oid = "1.2.840.10045.3.1.7";
 
     private readonly IHubWideScopeFactory _hubWide;
     private readonly LaunchReplayStore _replays;
@@ -293,7 +292,7 @@ public sealed class LaunchTokenValidator : ILaunchTokenValidator
             {
                 rsa = RSA.Create();
                 rsa.ImportFromPem(pem);
-                if (rsa.KeySize < 2048)
+                if (!SigningKeyStrength.IsAcceptable(rsa))
                 {
                     return false;
                 }
@@ -304,8 +303,7 @@ public sealed class LaunchTokenValidator : ILaunchTokenValidator
             {
                 ecdsa = ECDsa.Create();
                 ecdsa.ImportFromPem(pem);
-                // KeySize alone also admits secp256k1 and brainpoolP256r1, which ES256 does not allow.
-                if (ecdsa.ExportParameters(false).Curve.Oid?.Value != P256Oid)
+                if (!SigningKeyStrength.IsAcceptable(ecdsa))
                 {
                     return false;
                 }
