@@ -25,7 +25,7 @@ public sealed class GetParameterOptionsQueryHandler(
         var actor = AccessActor.From(currentUser);
         if (request.DashboardId is { } dashboardId && request.TileId is { } tileId)
         {
-            await grantResolver.TryGrantAsync(dashboardId, tileId, query.Id, null, actor, cancellationToken);
+            await grantResolver.TryGrantAsync(dashboardId, tileId, query, null, actor, cancellationToken);
         }
 
         if (!(SavedQueryAccess.CanView(query, actor) || dashboardGrant.Covers(query.Id)))

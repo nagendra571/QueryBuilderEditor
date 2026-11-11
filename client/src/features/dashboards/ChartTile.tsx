@@ -11,7 +11,7 @@ import { isBlank, parameterTitle, valuesEqual, type ParameterValues } from '@/fe
 import { ChartRenderer } from '@/features/visualizations/ChartRenderer'
 import { useMe, zoneLabel } from '@/hooks/useMe'
 import { useVisualizations, visualizationDataPrefix } from '@/hooks/useVisualizations'
-import { savedQueriesApi, visualizationsApi } from '@/lib/api'
+import { dashboardsApi, savedQueriesApi, visualizationsApi } from '@/lib/api'
 import { ApiError } from '@/lib/api-client'
 import { cn } from '@/lib/utils'
 import type { DashboardContext, DashboardTileDto, QueryParameter } from '@/types'
@@ -76,6 +76,10 @@ export function ChartTileBody({ tile, titleId, statusId }: { tile: DashboardTile
   const [tileValues, setTileValues] = useState<ParameterValues>({})
   const [promptOpen, setPromptOpen] = useState(false)
 
+  const { data: me, isLoading: meLoading } = useMe()
+  // Under the hub a tile asks the dashboard for its chart, because the viewer may not be allowed to open the query.
+  const hubTile = !!me?.permissions && !!context
+
   const chart = tile.chart
   const queryId = chart?.savedQueryId ?? ''
   const vizId = chart?.visualizationId ?? ''
@@ -84,14 +88,24 @@ export function ChartTileBody({ tile, titleId, statusId }: { tile: DashboardTile
   const queryDetail = useQuery({
     queryKey: ['saved-query', queryId],
     queryFn: () => savedQueriesApi.getById(queryId),
-    enabled: !!chart,
+    enabled: !!chart && !meLoading && !hubTile,
     retry: false,
     staleTime: 30_000,
   })
-  const vizList = useVisualizations(chart ? queryId : null)
-  const visualization = vizList.data?.find((v) => v.id === vizId)
+  const tileChart = useQuery({
+    queryKey: ['tile-chart', context?.dashboardId, tile.id],
+    queryFn: () => dashboardsApi.tileChart(context!.dashboardId, context!.tileId),
+    enabled: !!chart && hubTile,
+    retry: false,
+    staleTime: 30_000,
+  })
+  const vizList = useVisualizations(chart && !meLoading && !hubTile ? queryId : null)
+  const visualization = hubTile ? tileChart.data?.visualization : vizList.data?.find((v) => v.id === vizId)
+  const detail = hubTile ? tileChart : queryDetail
 
-  const parameters = queryDetail.data?.definition.parameters ?? []
+  const parameters: QueryParameter[] = hubTile
+    ? (tileChart.data?.parameters ?? []).map((p) => ({ ...p, optionsQueryId: null }))
+    : (queryDetail.data?.definition.parameters ?? [])
   const mappings = tile.parameterMappings
   const { values, missing } = resolveTileValues(parameters, mappings, dashboardValues, tileValues, promptValues)
   const needsValues = missing.length > 0
@@ -100,8 +114,8 @@ export function ChartTileBody({ tile, titleId, statusId }: { tile: DashboardTile
     .filter((p): p is NonNullable<typeof p> => !!p)
   const hasUnmapped = parameters.some((p) => !mappings?.[p.name] || mappings[p.name].source === 'default')
   const needsPrompt = missing.some((m) => !m.mapping || m.mapping.source === 'default')
-  const isDisabled = queryDetail.data?.isDisabled ?? false
-  const ready = !!queryDetail.data && !!visualization && !isDisabled && !needsValues
+  const isDisabled = (hubTile ? tileChart.data?.isDisabled : queryDetail.data?.isDisabled) ?? false
+  const ready = !!detail.data && !!visualization && !isDisabled && !needsValues
 
   const data = useQuery({
     queryKey: [...visualizationDataPrefix(queryId), vizId, values, dashboardId, tile.id],
@@ -113,14 +127,13 @@ export function ChartTileBody({ tile, titleId, statusId }: { tile: DashboardTile
   })
 
   const title = tile.title?.trim() || chart?.visualizationName || 'Chart'
-  const { data: me } = useMe()
   const zone = zoneLabel(me)
   const refreshing = data.isFetching && !!data.data
 
   let body: ReactNode
   let status = ''
-  if (queryDetail.isError) {
-    const failure = classify(queryDetail.error)
+  if (detail.isError) {
+    const failure = classify(detail.error)
     status = failure.message
     body = (
       <Notice
@@ -130,11 +143,11 @@ export function ChartTileBody({ tile, titleId, statusId }: { tile: DashboardTile
         fenced={failure.kind === 'noAccess'}
       />
     )
-  } else if (vizList.isError) {
+  } else if (!hubTile && vizList.isError) {
     const failure = classify(vizList.error)
     status = failure.message
     body = <Notice icon={<Lock className="size-4" />} title="No access" message={failure.message} fenced />
-  } else if (queryDetail.isLoading || vizList.isLoading) {
+  } else if (meLoading || detail.isLoading || (!hubTile && vizList.isLoading)) {
     status = 'Loading'
     body = <Loading />
   } else if (!visualization) {

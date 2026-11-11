@@ -24,6 +24,7 @@ import type {
   QueryShareDto,
   RenderVisualizationRequest,
   DashboardContext,
+  TileChartDto,
   SaveDashboardRequest,
   SaveDashboardTilesRequest,
   SaveVisualizationRequest,
@@ -153,6 +154,8 @@ export interface MeDto {
   displayName: string
   /** Null when the host configured no data scoping. */
   zone: { unrestricted: boolean; values: Record<string, string[]> } | null
+  /** Present only in hub mode; its presence is how the client knows it is running under the hub. */
+  permissions?: { canBuildQueries: boolean; canManageDashboards: boolean; canPublish: boolean; canAdmin: boolean; isViewer: boolean }
 }
 
 export const meApi = {
@@ -160,6 +163,10 @@ export const meApi = {
 }
 
 export const dashboardsApi = {
+  tileChart: async (dashboardId: string, tileId: string): Promise<TileChartDto> =>
+    (await apiClient.get(`/dashboards/${dashboardId}/tiles/${tileId}/chart`)).data,
+  parameterOptions: async (dashboardId: string, name: string): Promise<ParameterOption[]> =>
+    (await apiClient.get(`/dashboards/${dashboardId}/parameters/${encodeURIComponent(name)}/options`)).data,
   list: async (): Promise<DashboardSummaryDto[]> => (await apiClient.get('/dashboards')).data,
   getById: async (id: string): Promise<DashboardDetailDto> => (await apiClient.get(`/dashboards/${id}`)).data,
   create: async (request: SaveDashboardRequest): Promise<DashboardDetailDto> =>

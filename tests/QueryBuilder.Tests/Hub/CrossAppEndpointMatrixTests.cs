@@ -72,6 +72,8 @@ public partial class CrossAppEndpointMatrixTests
         ["PUT /api/admin/data-sources/{id}/scope-keys"] = _ => new { keys = new[] { "ProgramId" } },
         ["PUT /api/admin/data-sources/{id}/record-limit"] = _ => new { maxRecords = 5 },
         ["GET /api/dashboards/{id}"] = _ => null,
+        ["GET /api/dashboards/{id}/tiles/{tileId}/chart"] = _ => null,
+        ["GET /api/dashboards/{id}/parameters/{name}/options"] = _ => null,
         ["PUT /api/dashboards/{id}"] = _ => new { name = "renamed", description = "x", version = 1 },
         ["PUT /api/dashboards/{id}/tiles"] = _ => new { version = 1, tiles = Array.Empty<object>() },
         ["POST /api/dashboards/{id}/tiles/chart"] = a => new { visualizationId = a.Visualization },
@@ -228,7 +230,12 @@ public partial class CrossAppEndpointMatrixTests
         var ids = new Ids(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
         db.DataSources.Add(new DataSource { Id = ids.DataSource, AppId = app, Name = $"{tag}-source", ConnectionStringName = "biz", AllowedObjects = ["dbo.v"], ScopeKeys = ["ProgramId"] });
         db.SavedQueries.Add(new SavedQuery { Id = ids.Query, AppId = app, Name = $"{tag}-query", DataSourceId = ids.DataSource, OwnerId = owner, DefinitionJson = DefinitionJson(ids.Query) });
-        db.Dashboards.Add(new Dashboard { Id = ids.Dashboard, AppId = app, Name = $"{tag}-dashboard", OwnerId = owner });
+        db.Dashboards.Add(new Dashboard
+        {
+            Id = ids.Dashboard, AppId = app, Name = $"{tag}-dashboard", OwnerId = owner,
+            ParametersJson = QueryBuilder.Application.Dashboards.DashboardParameterStore.WriteParameters(
+                [new QueryBuilder.Application.Dtos.DashboardParameterDto("p", "p", ParameterType.QueryList, null, ids.Query, "c", "c", false, null)])
+        });
         if (oldKey is not null)
         {
             var details = new ManagedConnectionDetails("db.example", 1433, "d", "u", "pw", ConnectionSslMode.Require);
@@ -319,6 +326,7 @@ public partial class CrossAppEndpointMatrixTests
         {
             "queryId" => ids.Query.ToString(),
             "visualizationId" => ids.Visualization.ToString(),
+            "tileId" => ids.Tile.ToString(),
             "shareId" => (dashboards ? ids.DashboardShare : ids.QueryShare).ToString(),
             "name" => "p",
             "id" when dashboards => ids.Dashboard.ToString(),

@@ -51,7 +51,7 @@ public sealed class RenderVisualizationCommandHandler(
         var actor = AccessActor.From(currentUser);
         if (request.DashboardId is { } dashboardId && request.TileId is { } tileId)
         {
-            await grantResolver.TryGrantAsync(dashboardId, tileId, savedQuery.Id, request.VisualizationId, actor, cancellationToken);
+            await grantResolver.TryGrantAsync(dashboardId, tileId, savedQuery, request.VisualizationId, actor, cancellationToken);
         }
 
         if (!(SavedQueryAccess.CanView(savedQuery, actor) || dashboardGrant.Covers(savedQuery.Id)))

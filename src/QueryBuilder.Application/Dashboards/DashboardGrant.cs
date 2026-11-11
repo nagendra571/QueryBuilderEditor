@@ -1,6 +1,7 @@
 using QueryBuilder.Application.Abstractions;
 using QueryBuilder.Application.Common;
 using QueryBuilder.Application.Parameters;
+using QueryBuilder.Domain.Entities;
 using QueryBuilder.Domain.Enums;
 
 namespace QueryBuilder.Application.Dashboards;
@@ -25,16 +26,16 @@ public sealed class DashboardGrant : IDashboardGrant
     public bool Covers(Guid savedQueryId) => _covered.Contains(savedQueryId);
 }
 
-public sealed class DashboardGrantResolver(IDashboardRepository dashboards, ISavedQueryRepository savedQueries, IDashboardGrant grant)
+public sealed class DashboardGrantResolver(IDashboardRepository dashboards, IDashboardGrant grant)
 {
     /// <summary>
     /// Hub mode only. True (and the grant filled) when the dashboard loads in the caller's app, the caller can see it, the
     /// tile is a chart tile of that dashboard, it points at <paramref name="visualizationId"/> when one is given, and that
-    /// visualization belongs to <paramref name="queryId"/>. The grant then covers that query and the source queries of
+    /// visualization belongs to <paramref name="query"/>. The grant then covers that query and the source queries of
     /// the query-list parameters named by that query and by the dashboard — nothing else.
     /// </summary>
     public async Task<bool> TryGrantAsync(
-        Guid dashboardId, Guid tileId, Guid queryId, Guid? visualizationId, AccessActor actor, CancellationToken cancellationToken)
+        Guid dashboardId, Guid tileId, SavedQuery query, Guid? visualizationId, AccessActor actor, CancellationToken cancellationToken)
     {
         if (!actor.InHub)
         {
@@ -58,18 +59,12 @@ public sealed class DashboardGrantResolver(IDashboardRepository dashboards, ISav
             return false;
         }
 
-        if (visualization.SavedQueryId != queryId)
+        if (visualization.SavedQueryId != query.Id)
         {
             return false;
         }
 
-        var query = await savedQueries.GetByIdAsync(queryId, cancellationToken);
-        if (query is null)
-        {
-            return false;
-        }
-
-        var covered = new List<Guid> { queryId };
+        var covered = new List<Guid> { query.Id };
         covered.AddRange(QueryDefinitionSerializer.Deserialize(query.DefinitionJson).Parameters
             .Where(p => ParameterTypes.Effective(p) == ParameterType.QueryList && p.OptionsQueryId is { } id && id != Guid.Empty)
             .Select(p => p.OptionsQueryId!.Value));

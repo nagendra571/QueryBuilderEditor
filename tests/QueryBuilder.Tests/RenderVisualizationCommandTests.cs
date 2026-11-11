@@ -20,7 +20,7 @@ public class RenderVisualizationCommandTests
             f.Queries, f.Visualizations, f.DataSources, f.Catalog, f.Builders, f.Executor, f.Guard,
             new VizFixture.FakeScope(), f.Limits, f.Audit, f.User,
             new QueryBuilder.Application.Parameters.ParameterBinder(null!, TimeProvider.System),
-            grant, new QueryBuilder.Application.Dashboards.DashboardGrantResolver(null!, f.Queries, grant));
+            grant, new QueryBuilder.Application.Dashboards.DashboardGrantResolver(null!, grant));
     }
 
     private static Task<QueryBuilder.Application.Dtos.VisualizationDataDto> Render(VizFixture f, QueryVisualization viz, Dictionary<string, string?>? parameters = null) =>

@@ -601,6 +601,24 @@ export interface RenderVisualizationRequest {
   tileId?: string
 }
 
+/** What a granted tile needs to draw: the chart and its parameter controls, never the query itself. */
+export interface TileChartDto {
+  savedQueryId: string
+  savedQueryName: string | null
+  isDisabled: boolean
+  visualization: { id: string; name: string; type: VisualizationType; options: VisualizationOptions }
+  parameters: Array<{
+    name: string
+    label: string
+    dataType: ColumnDataType
+    type: ParameterType
+    defaultValue?: string | null
+    isRequired: boolean
+    options: string[]
+    allowMultiple: boolean
+  }>
+}
+
 /** The dashboard tile a chart or its parameter choices are requested for. */
 export interface DashboardContext {
   dashboardId: string

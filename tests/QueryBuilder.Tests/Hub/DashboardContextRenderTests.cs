@@ -78,7 +78,9 @@ public class DashboardContextRenderTests
             new Dashboard { Id = ids.Published, AppId = app, Name = "published", OwnerId = "mary", OwnerName = "Mary", PublishedToApp = true },
             new Dashboard { Id = ids.OtherPublished, AppId = app, Name = "other-published", OwnerId = "mary", OwnerName = "Mary", PublishedToApp = true },
             new Dashboard { Id = ids.Private, AppId = app, Name = "private", OwnerId = "mary", OwnerName = "Mary" },
-            new Dashboard { Id = ids.ListDashboard, AppId = app, Name = "list-dashboard", OwnerId = "mary", OwnerName = "Mary", PublishedToApp = true });
+            new Dashboard { Id = ids.ListDashboard, AppId = app, Name = "list-dashboard", OwnerId = "mary", OwnerName = "Mary", PublishedToApp = true,
+                ParametersJson = QueryBuilder.Application.Dashboards.DashboardParameterStore.WriteParameters(
+                [new QueryBuilder.Application.Dtos.DashboardParameterDto("dp", "Pick", ParameterType.QueryList, null, ids.OptionsSource, "label", "label", false, null)]) });
         await db.SaveChangesAsync();
 
         db.QueryVisualizations.AddRange(
@@ -182,7 +184,8 @@ public class DashboardContextRenderTests
         // No value for the key at all: scoped to nothing, so the data source's rule hides the view entirely.
         var nothing = await ViewerAsync(env, "Other=1");
         var refused = await nothing.PostAsync(DataUrl(s.Query, s.Viz), body);
-        Assert.NotEqual(HttpStatusCode.OK, refused.StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, refused.StatusCode);
+        Assert.DoesNotContain("ten-a", await refused.Content.ReadAsStringAsync(), StringComparison.Ordinal);
     });
 
     [MetadataSqlFact]
@@ -253,6 +256,96 @@ public class DashboardContextRenderTests
     });
 
     [MetadataSqlFact]
+    public Task Viewer_gets_tile_chart_without_query_definition() => HubApiHost.RunAsync(async env =>
+    {
+        var s = await SeedAsync(env);
+        var viewer = await ViewerAsync(env);
+        var text = await (await viewer.GetAsync($"{Api}/dashboards/{s.ListDashboard}/tiles/{s.ListTile}/chart")).Content.ReadAsStringAsync();
+        using var doc = JsonDocument.Parse(text);
+        var root = doc.RootElement;
+        Assert.Equal(s.ListViz, root.GetProperty("visualization").GetProperty("id").GetGuid());
+        Assert.Equal("table", root.GetProperty("visualization").GetProperty("type").GetString());
+        Assert.Equal(JsonValueKind.Null, root.GetProperty("savedQueryName").ValueKind);
+        Assert.False(root.GetProperty("isDisabled").GetBoolean());
+        var parameter = root.GetProperty("parameters").EnumerateArray().Single();
+        Assert.Equal("p", parameter.GetProperty("name").GetString());
+        Assert.Equal("queryList", parameter.GetProperty("type").GetString(), ignoreCase: true);
+
+        foreach (var forbidden in new[] { "definition", "sql", "optionsQueryId", "optionsLabelColumn", "filters", "source", "list-query" })
+        {
+            Assert.DoesNotContain(forbidden, text, StringComparison.OrdinalIgnoreCase);
+        }
+        Assert.DoesNotContain(s.OptionsSource.ToString(), text, StringComparison.OrdinalIgnoreCase);
+
+        // Other dashboards' tiles, private dashboards and unknown ids give nothing.
+        Assert.Equal(HttpStatusCode.Forbidden, await viewer.StatusAsync($"{Api}/dashboards/{s.Private}/tiles/{s.PrivateTile}/chart"));
+        Assert.Equal(HttpStatusCode.NotFound, await viewer.StatusAsync($"{Api}/dashboards/{s.Published}/tiles/{Guid.NewGuid()}/chart"));
+    });
+
+    [MetadataSqlFact]
+    public Task Tile_chart_for_tile_of_other_dashboard_is_404() => HubApiHost.RunAsync(async env =>
+    {
+        var s = await SeedAsync(env);
+        var viewer = await ViewerAsync(env);
+        Assert.Equal(HttpStatusCode.NotFound, await viewer.StatusAsync($"{Api}/dashboards/{s.Published}/tiles/{s.OtherPublishedTile}/chart"));
+        await using (var db = env.HubWideDb())
+        {
+            var foreign = new Dashboard { AppId = env.AppB, Name = "b", OwnerId = "x", PublishedToApp = true };
+            db.Dashboards.Add(foreign);
+            await db.SaveChangesAsync();
+            Assert.Equal(HttpStatusCode.NotFound, await viewer.StatusAsync($"{Api}/dashboards/{foreign.Id}/tiles/{s.PublishedTile}/chart"));
+        }
+    });
+
+    [MetadataSqlFact]
+    public Task Author_without_query_access_renders_published_tile() => HubApiHost.RunAsync(async env =>
+    {
+        var s = await SeedAsync(env);
+        var author = env.NewBrowser();
+        await author.SignInAppAsync(env.AppA, HubRole.Author, "bob");
+        Assert.Equal(HttpStatusCode.Forbidden, await author.StatusAsync($"{Api}/queries/{s.Query}"));
+        var response = await author.PostAsync(DataUrl(s.Query, s.Viz), new { parameterValues = new { }, dashboardId = s.Published, tileId = s.PublishedTile });
+        Assert.Equal(3, await RowsAsync(response));
+        var chart = await HubApiHost.Browser.JsonAsync(await author.GetAsync($"{Api}/dashboards/{s.Published}/tiles/{s.PublishedTile}/chart"));
+        Assert.Equal(JsonValueKind.Null, chart.GetProperty("savedQueryName").ValueKind);
+    });
+
+    [MetadataSqlFact]
+    public Task Granted_render_of_a_disabled_query_is_409() => HubApiHost.RunAsync(async env =>
+    {
+        var s = await SeedAsync(env);
+        await using (var db = env.HubWideDb())
+        {
+            (await db.SavedQueries.SingleAsync(q => q.Id == s.Query)).IsDisabled = true;
+            await db.SaveChangesAsync();
+        }
+
+        var viewer = await ViewerAsync(env);
+        var response = await viewer.PostAsync(DataUrl(s.Query, s.Viz), new { parameterValues = new { }, dashboardId = s.Published, tileId = s.PublishedTile });
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        var chart = await HubApiHost.Browser.JsonAsync(await viewer.GetAsync($"{Api}/dashboards/{s.Published}/tiles/{s.PublishedTile}/chart"));
+        Assert.True(chart.GetProperty("isDisabled").GetBoolean());
+    });
+
+    [MetadataSqlFact]
+    public Task Viewer_gets_dashboard_parameter_options_as_themselves() => HubApiHost.RunAsync(async env =>
+    {
+        var s = await SeedAsync(env);
+        var url = $"{Api}/dashboards/{s.ListDashboard}/parameters/dp/options";
+        var all = await ViewerAsync(env);
+        var options = await HubApiHost.Browser.JsonAsync(await all.GetAsync(url));
+        Assert.Equal(["ten-a", "ten-b", "twenty"], options.EnumerateArray().Select(o => o.GetProperty("value").GetString()!).Order(StringComparer.Ordinal));
+        Assert.Equal(HttpStatusCode.Forbidden, await all.StatusAsync($"{Api}/queries/{s.OptionsSource}"));
+
+        var twenty = await ViewerAsync(env, "ProgramId=20");
+        var scoped = await HubApiHost.Browser.JsonAsync(await twenty.GetAsync(url));
+        Assert.Equal(["twenty"], scoped.EnumerateArray().Select(o => o.GetProperty("value").GetString()!));
+
+        Assert.Equal(HttpStatusCode.NotFound, await all.StatusAsync($"{Api}/dashboards/{s.ListDashboard}/parameters/nope/options"));
+        Assert.Equal(HttpStatusCode.Forbidden, await all.StatusAsync($"{Api}/dashboards/{s.Private}/parameters/dp/options"));
+    });
+
+    [MetadataSqlFact]
     public Task Embedded_tiles_stay_restricted() => HubApiHost.RunAsync(async env =>
     {
         await using (var setup = env.HubWideDb())
@@ -283,6 +376,8 @@ public class DashboardContextRenderTests
         // Context is ignored outside hub mode: the owner rule alone decides.
         var response = await browser.PostAsync(DataUrl(query, viz), new { parameterValues = new { }, dashboardId = dashboard, tileId = tile });
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, await browser.StatusAsync($"{Api}/dashboards/{dashboard}/tiles/{tile}/chart"));
+        Assert.Equal(HttpStatusCode.NotFound, await browser.StatusAsync($"{Api}/dashboards/{dashboard}/parameters/dp/options"));
     }, hub: false);
 
     [MetadataSqlFact]

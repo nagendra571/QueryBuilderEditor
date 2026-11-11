@@ -5,21 +5,8 @@ import { Label } from '@/components/ui/label'
 import { dashboardParameterTitle, toQueryParameter } from '@/features/dashboards/dashboard-params'
 import { ParameterControl } from '@/features/parameters/controls/ParameterControl'
 import { valuesEqual, type ParameterValues } from '@/features/parameters/param-values'
-import type { DashboardParameterDto, DashboardTileDto } from '@/types'
-import type { OptionsSource } from '@/hooks/useParameterOptions'
-
-/** A parameter fed by a chart tile is asked through that tile, so choices load under the tile's own grant. */
-export function tileOptionsSource(parameterName: string, dashboardId: string | undefined, tiles: DashboardTileDto[] | undefined): OptionsSource | null {
-  if (!dashboardId || !tiles) return null
-  for (const tile of tiles) {
-    if (tile.restricted || !tile.chart || !tile.parameterMappings) continue
-    const entry = Object.entries(tile.parameterMappings).find(
-      ([, m]) => m.source === 'dashboard' && m.dashboardParameter === parameterName,
-    )
-    if (entry) return { kind: 'saved', queryId: tile.chart.savedQueryId, name: entry[0], context: { dashboardId, tileId: tile.id } }
-  }
-  return null
-}
+import { useMe } from '@/hooks/useMe'
+import type { DashboardParameterDto } from '@/types'
 
 /**
  * The strip above a dashboard's tiles. Same contract as a query's parameter bar: nothing is drawn
@@ -35,7 +22,6 @@ export function DashboardParameterBar({
   editing,
   onManage,
   dashboardId,
-  tiles,
 }: {
   parameters: DashboardParameterDto[]
   values: ParameterValues
@@ -46,10 +32,11 @@ export function DashboardParameterBar({
   onReset: () => void
   editing: boolean
   onManage: (name: string) => void
-  /** With the tiles, lets a viewer without access to the source query still get a dashboard parameter's choices. */
+  /** In hub mode, a query-list parameter's choices come from the dashboard, so a viewer without access to the source query still gets them. */
   dashboardId?: string
-  tiles?: DashboardTileDto[]
 }) {
+  const { data: me } = useMe()
+  const hub = !!me?.permissions
   const baseId = useId()
   const queryParameters = parameters.map(toQueryParameter)
   const unapplied = !valuesEqual(queryParameters, values, appliedValues)
@@ -95,7 +82,9 @@ export function DashboardParameterBar({
               onChange={(v) => onChange(parameter.name, v)}
               optionsSource={
                 parameter.type === 'queryList'
-                  ? (editing ? null : tileOptionsSource(parameter.name, dashboardId, tiles)) ?? { kind: 'draft', parameter: queryParameters[index] }
+                  ? hub && !editing && dashboardId
+                    ? { kind: 'dashboard', dashboardId, name: parameter.name }
+                    : { kind: 'draft', parameter: queryParameters[index] }
                   : null
               }
             />

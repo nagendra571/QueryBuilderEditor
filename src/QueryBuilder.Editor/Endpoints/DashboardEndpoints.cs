@@ -30,6 +30,14 @@ public static class DashboardEndpoints
             Results.Json(await sender.Send(new GetDashboardQuery(id), ct), QueryBuilderJson.Options))
             .AllowViewers();
 
+        group.MapGet("/{id:guid}/tiles/{tileId:guid}/chart", async (Guid id, Guid tileId, ISender sender, CancellationToken ct) =>
+            Results.Json(await sender.Send(new GetTileChartQuery(id, tileId), ct), QueryBuilderJson.Options))
+            .AllowViewers();
+
+        group.MapGet("/{id:guid}/parameters/{name}/options", async (Guid id, string name, ISender sender, CancellationToken ct) =>
+            Results.Json(await sender.Send(new GetDashboardParameterOptionsQuery(id, name), ct), QueryBuilderJson.Options))
+            .AllowViewers();
+
         group.MapPut("/{id:guid}/published", async (Guid id, HttpContext http, ISender sender, CancellationToken ct) =>
         {
             var request = await http.Request.ReadFromJsonAsync<PublishDashboardRequest>(QueryBuilderJson.Options, ct)

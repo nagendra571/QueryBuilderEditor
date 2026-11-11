@@ -97,6 +97,8 @@ public partial class ViewerAndPublishingTests
             {
                 "GET /api/dashboards",
                 "GET /api/dashboards/{id}",
+                "GET /api/dashboards/{id}/parameters/{name}/options",
+                "GET /api/dashboards/{id}/tiles/{tileId}/chart",
                 "GET /api/me",
                 "GET /api/queries/{id}/parameters/{name}/options",
                 "POST /api/queries/{queryId}/visualizations/{visualizationId}/data"

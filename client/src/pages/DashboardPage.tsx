@@ -458,7 +458,6 @@ export function DashboardPage() {
           editing={editing}
           onManage={setManageName}
           dashboardId={id}
-          tiles={dashboard?.tiles}
         />
 
         {tiles.length === 0 ? (

@@ -115,3 +115,24 @@ public sealed record PickableVisualizationDto(
     VisualizationType Type,
     Guid SavedQueryId,
     string SavedQueryName);
+
+/// <summary>What a granted tile needs to draw its chart and show its parameter controls, and nothing of the query itself:
+/// no definition or SQL, no source-query ids for choice lists. The query's name only goes to someone who could open it.</summary>
+public sealed record TileChartDto(
+    Guid SavedQueryId,
+    string? SavedQueryName,
+    bool IsDisabled,
+    TileChartVisualizationDto Visualization,
+    List<TileChartParameterDto> Parameters);
+
+public sealed record TileChartVisualizationDto(Guid Id, string Name, VisualizationType Type, QueryBuilder.Domain.Model.VisualizationOptions Options);
+
+public sealed record TileChartParameterDto(
+    string Name,
+    string Label,
+    ColumnDataType DataType,
+    ParameterType Type,
+    string? DefaultValue,
+    bool IsRequired,
+    List<string> Options,
+    bool AllowMultiple);
