@@ -13,10 +13,15 @@ public class RenderVisualizationCommandTests
     private static Dictionary<string, object?> Row(string? region, decimal? total, string channel = "Web", decimal orders = 1) =>
         new() { ["Region"] = region, ["Channel"] = channel, ["Total"] = total, ["Orders"] = orders, ["HiddenNote"] = "secret" };
 
-    private static RenderVisualizationCommandHandler Handler(VizFixture f) => new(
-        f.Queries, f.Visualizations, f.DataSources, f.Catalog, f.Builders, f.Executor, f.Guard,
-        new VizFixture.FakeScope(), f.Limits, f.Audit, f.User,
-        new QueryBuilder.Application.Parameters.ParameterBinder(null!, TimeProvider.System));
+    private static RenderVisualizationCommandHandler Handler(VizFixture f)
+    {
+        var grant = new QueryBuilder.Application.Dashboards.DashboardGrant();
+        return new(
+            f.Queries, f.Visualizations, f.DataSources, f.Catalog, f.Builders, f.Executor, f.Guard,
+            new VizFixture.FakeScope(), f.Limits, f.Audit, f.User,
+            new QueryBuilder.Application.Parameters.ParameterBinder(null!, TimeProvider.System),
+            grant, new QueryBuilder.Application.Dashboards.DashboardGrantResolver(null!, f.Queries, grant));
+    }
 
     private static Task<QueryBuilder.Application.Dtos.VisualizationDataDto> Render(VizFixture f, QueryVisualization viz, Dictionary<string, string?>? parameters = null) =>
         Handler(f).Handle(new RenderVisualizationCommand(f.Query.Id, viz.Id, parameters ?? []), default);

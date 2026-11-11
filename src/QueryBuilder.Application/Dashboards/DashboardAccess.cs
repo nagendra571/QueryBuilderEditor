@@ -59,7 +59,7 @@ public static class DashboardMapper
     public static DashboardDetailDto ToDetail(Dashboard d, AccessActor actor) => new(
         d.Id, d.Name, d.Description, d.OwnerId, d.OwnerName, DashboardAccess.IsOwner(d, actor),
         DashboardAccess.AccessLevelFor(d, actor), d.Version,
-        ResolveBoxes(d).Select(r => ToTile(r.Item, r.Box, actor)).ToList(),
+        ResolveBoxes(d).Select(r => ToTile(r.Item, r.Box, actor, viaDashboard: actor.InHub && DashboardAccess.CanView(d, actor))).ToList(),
         DashboardParameterStore.ReadParameters(d.ParametersJson), d.PublishedToApp);
 
     /// <summary>Stored boxes for a positioned dashboard; a converted flow for a legacy one. Never mutates.</summary>
@@ -74,7 +74,7 @@ public static class DashboardMapper
 
     /// <summary>The only place a tile's chart and query identity is exposed. A chart whose query the
     /// viewer can't see is reduced to its position and size, so no name or id of it can leak.</summary>
-    private static DashboardTileDto ToTile(DashboardTile tile, LayoutBox box, AccessActor actor)
+    private static DashboardTileDto ToTile(DashboardTile tile, LayoutBox box, AccessActor actor, bool viaDashboard)
     {
         if (tile.Kind is DashboardTileKind.Text or DashboardTileKind.Section)
         {
@@ -90,6 +90,20 @@ public static class DashboardMapper
         }
 
         var query = viz.SavedQuery;
+
+        // In hub mode the dashboard itself is the grant (see DashboardGrantResolver): the tile shows its chart, and the
+        // query's name only to someone who could open the query anyway.
+        if (viaDashboard)
+        {
+            return query is null
+                ? new DashboardTileDto(tile.Id, tile.Kind, tile.Order, box.X, box.Y, box.W, box.H, tile.AutoHeight,
+                    Restricted: false, Missing: true, tile.Title, Text: null, Chart: null)
+                : new DashboardTileDto(tile.Id, tile.Kind, tile.Order, box.X, box.Y, box.W, box.H, tile.AutoHeight,
+                    Restricted: false, Missing: false, tile.Title, Text: null,
+                    new DashboardTileChartDto(query.Id, SavedQueryAccess.CanView(query, actor) ? query.Name : null, viz.Id, viz.Name, viz.Type),
+                    DashboardParameterStore.ReadMappings(tile.ParameterMappingsJson));
+        }
+
         if (query is null || !SavedQueryAccess.CanView(query, actor))
         {
             return new DashboardTileDto(tile.Id, tile.Kind, tile.Order, box.X, box.Y, box.W, box.H, tile.AutoHeight,

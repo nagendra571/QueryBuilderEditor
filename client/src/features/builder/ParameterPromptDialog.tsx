@@ -3,13 +3,14 @@ import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
 import { ParameterControl } from '@/features/parameters/controls/ParameterControl'
-import type { QueryParameter } from '@/types'
+import type { DashboardContext, QueryParameter } from '@/types'
 
 export function ParameterPromptDialog({
   open,
   onOpenChange,
   parameters,
   queryId,
+  context,
   onConfirm,
 }: {
   open: boolean
@@ -17,6 +18,8 @@ export function ParameterPromptDialog({
   parameters: QueryParameter[]
   /** The saved query the parameters belong to; lets query-based dropdowns load their choices. */
   queryId?: string
+  /** Set when the query is a dashboard tile's, so choices load through the dashboard. */
+  context?: DashboardContext
   onConfirm: (values: Record<string, string | null>) => void
 }) {
   const [values, setValues] = useState<Record<string, string>>({})
@@ -40,7 +43,7 @@ export function ParameterPromptDialog({
                 id={`prompt-${param.name}`}
                 value={values[param.name] ?? param.defaultValue ?? null}
                 onChange={(v) => setValues((prev) => ({ ...prev, [param.name]: v ?? '' }))}
-                optionsSource={queryId ? { kind: 'saved', queryId, name: param.name } : null}
+                optionsSource={queryId ? { kind: 'saved', queryId, name: param.name, context } : null}
               />
             </div>
           ))}

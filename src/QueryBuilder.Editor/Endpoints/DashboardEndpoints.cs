@@ -34,7 +34,8 @@ public static class DashboardEndpoints
         {
             var request = await http.Request.ReadFromJsonAsync<PublishDashboardRequest>(QueryBuilderJson.Options, ct)
                 ?? throw new BadHttpRequestException("Request body is required.");
-            await sender.Send(new PublishDashboardCommand(id, request.Published), ct);
+            await sender.Send(
+                new PublishDashboardCommand(id, request.Published ?? throw new BadHttpRequestException("'published' is required.")), ct);
             return Results.NoContent();
         });
 

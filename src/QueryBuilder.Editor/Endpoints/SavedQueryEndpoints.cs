@@ -47,8 +47,8 @@ public static class SavedQueryEndpoints
             return Results.Json(new { isDisabled }, QueryBuilderJson.Options);
         });
 
-        group.MapGet("/{id:guid}/parameters/{name}/options", async (Guid id, string name, ISender sender, CancellationToken ct) =>
-            Results.Json(await sender.Send(new GetParameterOptionsQuery(id, name), ct), QueryBuilderJson.Options))
+        group.MapGet("/{id:guid}/parameters/{name}/options", async (Guid id, string name, Guid? dashboardId, Guid? tileId, ISender sender, CancellationToken ct) =>
+            Results.Json(await sender.Send(new GetParameterOptionsQuery(id, name, dashboardId, tileId), ct), QueryBuilderJson.Options))
             .AllowViewers();
 
         group.MapGet("/{id:guid}/shares", async (Guid id, ISender sender, CancellationToken ct) =>

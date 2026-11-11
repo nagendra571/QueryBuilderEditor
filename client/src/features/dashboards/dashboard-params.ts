@@ -5,6 +5,9 @@ import type { DashboardParameterDto, ParameterMappingDto, ParameterType, QueryPa
 /** The values a viewer has applied in the dashboard's parameter bar, by dashboard parameter name. */
 export const DashboardValuesContext = createContext<ParameterValues>({})
 
+/** The dashboard being shown; null outside a dashboard. Chart tiles send it so the server can check the tile belongs to it. */
+export const DashboardIdContext = createContext<string | null>(null)
+
 export const MAX_DASHBOARD_PARAMETERS = 20
 
 export function dashboardParameterTitle(p: DashboardParameterDto) {

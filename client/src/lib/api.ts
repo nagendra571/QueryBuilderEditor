@@ -23,6 +23,7 @@ import type {
   QueryParameter,
   QueryShareDto,
   RenderVisualizationRequest,
+  DashboardContext,
   SaveDashboardRequest,
   SaveDashboardTilesRequest,
   SaveVisualizationRequest,
@@ -73,8 +74,12 @@ export const savedQueriesApi = {
     (await apiClient.post('/queries/run', request)).data,
   export: async (request: ExportQueryRequest): Promise<Blob> =>
     (await apiClient.post('/queries/export', request, { responseType: 'blob' })).data,
-  parameterOptions: async (id: string, name: string): Promise<ParameterOption[]> =>
-    (await apiClient.get(`/queries/${id}/parameters/${encodeURIComponent(name)}/options`)).data,
+  parameterOptions: async (id: string, name: string, context?: DashboardContext): Promise<ParameterOption[]> =>
+    (
+      await apiClient.get(`/queries/${id}/parameters/${encodeURIComponent(name)}/options`, {
+        params: context ? { dashboardId: context.dashboardId, tileId: context.tileId } : undefined,
+      })
+    ).data,
   getShares: async (id: string): Promise<QueryShareDto[]> => (await apiClient.get(`/queries/${id}/shares`)).data,
   share: async (id: string, request: ShareQueryRequest): Promise<{ id: string }> =>
     (await apiClient.post(`/queries/${id}/shares`, request)).data,

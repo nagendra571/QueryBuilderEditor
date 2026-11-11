@@ -100,8 +100,8 @@ internal sealed class HubApiHost : IAsyncDisposable
 
         public async Task<HttpStatusCode> StatusAsync(string url) => (await GetAsync(url)).StatusCode;
 
-        public async Task SignInAppAsync(Guid app, HubRole role, string user = "mary") =>
-            Assert.Equal(HttpStatusCode.OK, (await GetAsync($"/querybuilder/test/signin?kind=app&app={app}&role={role}&user={user}")).StatusCode);
+        public async Task SignInAppAsync(Guid app, HubRole role, string user = "mary", string? scope = null) =>
+            Assert.Equal(HttpStatusCode.OK, (await GetAsync($"/querybuilder/test/signin?kind=app&app={app}&role={role}&user={user}{(scope is null ? "" : "&scope=" + Uri.EscapeDataString(scope))}")).StatusCode);
 
         public async Task SignInSuperAsync(Guid? viewing = null) =>
             Assert.Equal(HttpStatusCode.OK, (await GetAsync($"/querybuilder/test/signin?kind=super&oid=admin-oid{(viewing is { } v ? $"&viewing={v}" : "")}")).StatusCode);
@@ -210,7 +210,7 @@ internal sealed class HubApiHost : IAsyncDisposable
                             var principal = q["kind"] == "super"
                                 ? HubSession.ForSuperAdmin(q["oid"]!, "Super", "s@x", q.ContainsKey("viewing") ? Guid.Parse(q["viewing"]!) : null, now, Enum.Parse<SuperAdminMatchKind>(q["mkind"].FirstOrDefault() ?? "ObjectId"), q["mvalue"].FirstOrDefault() ?? q["oid"]!, q["tid"].FirstOrDefault() ?? "tenant-1")
                                 : HubSession.ForApp(Guid.Parse(q["app"]!), q["user"]!, "Name", "u@x", Enum.Parse<HubRole>(q["role"]!),
-                                    QueryBuilder.Application.Abstractions.ResolvedDataScope.Unrestricted, "/back", now);
+                                    q.ContainsKey("scope") ? ScopeOf(q["scope"]!) : QueryBuilder.Application.Abstractions.ResolvedDataScope.Unrestricted, "/back", now);
                             await Microsoft.AspNetCore.Authentication.AuthenticationHttpContextExtensions.SignInAsync(ctx, HubSession.Scheme, principal);
                             return Results.Ok();
                         });
@@ -219,6 +219,12 @@ internal sealed class HubApiHost : IAsyncDisposable
             }).StartAsync();
         }
     }
+
+    // "Key=v1,v2;Other=x"
+    private static QueryBuilder.Application.Abstractions.ResolvedDataScope ScopeOf(string text) =>
+        new(false, text.Split(';', StringSplitOptions.RemoveEmptyEntries)
+            .Select(part => part.Split('=', 2))
+            .ToDictionary(p => p[0], p => (IReadOnlyList<string>)p[1].Split(','), StringComparer.OrdinalIgnoreCase));
 
     public async ValueTask DisposeAsync()
     {

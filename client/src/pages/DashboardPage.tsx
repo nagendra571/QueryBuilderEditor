@@ -10,7 +10,7 @@ import { AddChartDialog } from '@/features/dashboards/AddChartDialog'
 import { ConfirmDeleteDialog } from '@/features/dashboards/ConfirmDeleteDialog'
 import { DashboardParameterBar } from '@/features/dashboards/DashboardParameterBar'
 import { DashboardParameterDialog } from '@/features/dashboards/DashboardParameterDialog'
-import { DashboardValuesContext, toQueryParameter } from '@/features/dashboards/dashboard-params'
+import { DashboardIdContext, DashboardValuesContext, toQueryParameter } from '@/features/dashboards/dashboard-params'
 import { ParameterMappingDialog } from '@/features/dashboards/ParameterMappingDialog'
 import { defaultValues, valuesFromSearchParams, writeValuesToSearchParams, type ParameterValues } from '@/features/parameters/param-values'
 import { DashboardGrid, type DraftTile } from '@/features/dashboards/DashboardGrid'
@@ -346,6 +346,7 @@ export function DashboardPage() {
 
   return (
     <RenderLimiterContext.Provider value={limiter}>
+      <DashboardIdContext.Provider value={id ?? null}>
       <DashboardValuesContext.Provider value={appliedValues}>
       <div className="mx-auto flex max-w-7xl flex-col gap-(--space-section) p-(--space-section)">
         <div className="flex flex-wrap items-start justify-between gap-3">
@@ -456,6 +457,8 @@ export function DashboardPage() {
           onReset={() => applyValues(defaultValues(queryParams))}
           editing={editing}
           onManage={setManageName}
+          dashboardId={id}
+          tiles={dashboard?.tiles}
         />
 
         {tiles.length === 0 ? (
@@ -568,6 +571,7 @@ export function DashboardPage() {
         onConfirm={() => remove.mutate(dashboard.id, { onSuccess: () => navigate('/dashboards') })}
       />
       </DashboardValuesContext.Provider>
+      </DashboardIdContext.Provider>
     </RenderLimiterContext.Provider>
   )
 }

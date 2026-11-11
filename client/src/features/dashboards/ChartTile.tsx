@@ -1,9 +1,9 @@
 import { AlertTriangle, Ban, Check, Loader2, Lock, SlidersHorizontal, Trash2 } from 'lucide-react'
-import { useContext, useId, useState, type ReactNode } from 'react'
+import { useContext, useId, useMemo, useState, type ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Button } from '@/components/ui/button'
 import { ParameterPromptDialog } from '@/features/builder/ParameterPromptDialog'
-import { DashboardValuesContext, mappedBy, resolveTileValues } from '@/features/dashboards/dashboard-params'
+import { DashboardIdContext, DashboardValuesContext, mappedBy, resolveTileValues } from '@/features/dashboards/dashboard-params'
 import { useRenderLimiter } from '@/features/dashboards/render-limiter'
 import { Label } from '@/components/ui/label'
 import { ParameterControl } from '@/features/parameters/controls/ParameterControl'
@@ -14,7 +14,7 @@ import { useVisualizations, visualizationDataPrefix } from '@/hooks/useVisualiza
 import { savedQueriesApi, visualizationsApi } from '@/lib/api'
 import { ApiError } from '@/lib/api-client'
 import { cn } from '@/lib/utils'
-import type { DashboardTileDto, QueryParameter } from '@/types'
+import type { DashboardContext, DashboardTileDto, QueryParameter } from '@/types'
 
 type Failure = { kind: 'noAccess' | 'disabled' | 'tooMany' | 'stale' | 'error'; message: string }
 
@@ -68,6 +68,8 @@ export function ChartTileBody({ tile, titleId, statusId }: { tile: DashboardTile
   const natural = tile.autoHeight
   const limit = useRenderLimiter()
   const dashboardValues = useContext(DashboardValuesContext)
+  const dashboardId = useContext(DashboardIdContext)
+  const context = useMemo(() => (dashboardId ? { dashboardId, tileId: tile.id } : undefined), [dashboardId, tile.id])
   // Values typed into the "Set values" prompt, for parameters that have no mapping.
   const [promptValues, setPromptValues] = useState<ParameterValues | null>(null)
   // Values applied in this tile's own header controls (parameters mapped to "Tile input").
@@ -102,8 +104,8 @@ export function ChartTileBody({ tile, titleId, statusId }: { tile: DashboardTile
   const ready = !!queryDetail.data && !!visualization && !isDisabled && !needsValues
 
   const data = useQuery({
-    queryKey: [...visualizationDataPrefix(queryId), vizId, values],
-    queryFn: () => limit(() => visualizationsApi.render(queryId, vizId, { parameterValues: values })),
+    queryKey: [...visualizationDataPrefix(queryId), vizId, values, dashboardId, tile.id],
+    queryFn: () => limit(() => visualizationsApi.render(queryId, vizId, { parameterValues: values, ...context })),
     enabled: ready,
     // Errors here are meaningful tile states (no access, disabled, too many rows), not transient.
     retry: false,
@@ -231,6 +233,7 @@ export function ChartTileBody({ tile, titleId, statusId }: { tile: DashboardTile
           mappings={mappings}
           applied={tileValues}
           queryId={queryId}
+          context={context}
           title={title}
           onApply={setTileValues}
         />
@@ -244,6 +247,7 @@ export function ChartTileBody({ tile, titleId, statusId }: { tile: DashboardTile
         onOpenChange={setPromptOpen}
         parameters={parameters.filter((p) => !mappings?.[p.name] || mappings[p.name].source === 'default')}
         queryId={queryId}
+        context={context}
         onConfirm={(v) => {
           setPromptOpen(false)
           setPromptValues(v)
@@ -267,6 +271,7 @@ function TileInputs({
   mappings,
   applied,
   queryId,
+  context,
   title,
   onApply,
 }: {
@@ -274,6 +279,7 @@ function TileInputs({
   mappings: DashboardTileDto['parameterMappings']
   applied: ParameterValues
   queryId: string
+  context?: DashboardContext
   title: string
   onApply: (values: ParameterValues) => void
 }) {
@@ -307,7 +313,7 @@ function TileInputs({
               id={id}
               value={current(p)}
               onChange={(v) => setPending((prev) => ({ ...prev, [p.name]: v }))}
-              optionsSource={{ kind: 'saved', queryId, name: p.name }}
+              optionsSource={{ kind: 'saved', queryId, name: p.name, context }}
             />
           </div>
         )

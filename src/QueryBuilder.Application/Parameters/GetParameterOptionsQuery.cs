@@ -8,19 +8,27 @@ using QueryBuilder.Domain.Model;
 namespace QueryBuilder.Application.Parameters;
 
 /// <summary>Choices for a query-list parameter declared on a saved query.</summary>
-public sealed record GetParameterOptionsQuery(Guid SavedQueryId, string ParameterName) : IRequest<List<ParameterOption>>;
+public sealed record GetParameterOptionsQuery(Guid SavedQueryId, string ParameterName, Guid? DashboardId = null, Guid? TileId = null) : IRequest<List<ParameterOption>>;
 
 public sealed class GetParameterOptionsQueryHandler(
     ISavedQueryRepository savedQueries,
     ICurrentUserService currentUser,
-    IParameterOptionsService optionsService)
+    IParameterOptionsService optionsService,
+    Dashboards.IDashboardGrant dashboardGrant,
+    Dashboards.DashboardGrantResolver grantResolver)
     : IRequestHandler<GetParameterOptionsQuery, List<ParameterOption>>
 {
     public async Task<List<ParameterOption>> Handle(GetParameterOptionsQuery request, CancellationToken cancellationToken)
     {
         var query = await savedQueries.GetByIdAsync(request.SavedQueryId, cancellationToken)
             ?? throw new NotFoundException(nameof(SavedQuery), request.SavedQueryId);
-        if (!SavedQueryAccess.CanView(query, AccessActor.From(currentUser)))
+        var actor = AccessActor.From(currentUser);
+        if (request.DashboardId is { } dashboardId && request.TileId is { } tileId)
+        {
+            await grantResolver.TryGrantAsync(dashboardId, tileId, query.Id, null, actor, cancellationToken);
+        }
+
+        if (!(SavedQueryAccess.CanView(query, actor) || dashboardGrant.Covers(query.Id)))
         {
             throw new ForbiddenException("You do not have access to this query.");
         }

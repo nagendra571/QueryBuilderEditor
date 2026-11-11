@@ -17,7 +17,7 @@ public sealed record DashboardSummaryDto(
 
 public sealed record DashboardTileChartDto(
     Guid SavedQueryId,
-    string SavedQueryName,
+    string? SavedQueryName,
     Guid VisualizationId,
     string VisualizationName,
     VisualizationType Type);
@@ -52,7 +52,7 @@ public sealed record DashboardDetailDto(
     List<DashboardParameterDto>? Parameters = null,
     bool Published = false);
 
-public sealed record PublishDashboardRequest(bool Published);
+public sealed record PublishDashboardRequest(bool? Published);
 
 public sealed record SaveDashboardRequest(string Name, string? Description, int? Version);
 

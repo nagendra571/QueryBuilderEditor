@@ -596,6 +596,15 @@ export interface SaveVisualizationRequest {
 
 export interface RenderVisualizationRequest {
   parameterValues: Record<string, string | null>
+  /** Set when the chart is drawn as a tile: the server then checks the caller may see that dashboard and tile. */
+  dashboardId?: string
+  tileId?: string
+}
+
+/** The dashboard tile a chart or its parameter choices are requested for. */
+export interface DashboardContext {
+  dashboardId: string
+  tileId: string
 }
 
 /** Only the columns the chart references — never the query's full output. */
@@ -625,7 +634,7 @@ export interface DashboardSummaryDto {
 
 export interface DashboardTileChartDto {
   savedQueryId: string
-  savedQueryName: string
+  savedQueryName: string | null
   visualizationId: string
   visualizationName: string
   type: VisualizationType

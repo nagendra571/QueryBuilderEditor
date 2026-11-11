@@ -44,7 +44,7 @@ public static class VisualizationEndpoints
                 ? await http.Request.ReadFromJsonAsync<RenderVisualizationRequest>(QueryBuilderJson.Options, ct)
                 : null;
             var data = await sender.Send(
-                new RenderVisualizationCommand(queryId, visualizationId, request?.ParameterValues ?? []), ct);
+                new RenderVisualizationCommand(queryId, visualizationId, request?.ParameterValues ?? [], request?.DashboardId, request?.TileId), ct);
             return Results.Json(data, QueryBuilderJson.Options);
         }).AllowViewers();
     }

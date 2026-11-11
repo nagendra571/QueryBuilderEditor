@@ -20,6 +20,8 @@ public static class DependencyInjection
         services.TryAddSingleton(TimeProvider.System);
         services.AddScoped<IParameterBinder, ParameterBinder>();
         services.AddScoped<IParameterOptionsService, ParameterOptionsService>();
+        services.AddScoped<Dashboards.IDashboardGrant, Dashboards.DashboardGrant>();
+        services.AddScoped<Dashboards.DashboardGrantResolver>();
         RegisterHandlers(services, assembly);
 
         services.AddValidatorsFromAssembly(assembly);

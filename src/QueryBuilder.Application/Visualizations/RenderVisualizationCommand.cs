@@ -12,7 +12,9 @@ namespace QueryBuilder.Application.Visualizations;
 public sealed record RenderVisualizationCommand(
     Guid SavedQueryId,
     Guid VisualizationId,
-    Dictionary<string, string?> ParameterValues) : IRequest<VisualizationDataDto>;
+    Dictionary<string, string?> ParameterValues,
+    Guid? DashboardId = null,
+    Guid? TileId = null) : IRequest<VisualizationDataDto>;
 
 /// <summary>
 /// Draws a saved chart from the viewer's own authorized results. The definition is loaded from the
@@ -33,7 +35,9 @@ public sealed class RenderVisualizationCommandHandler(
     RecordLimitSettings recordLimitSettings,
     IAuditLogger auditLogger,
     ICurrentUserService currentUser,
-    IParameterBinder parameterBinder)
+    IParameterBinder parameterBinder,
+    Dashboards.IDashboardGrant dashboardGrant,
+    Dashboards.DashboardGrantResolver grantResolver)
     : IRequestHandler<RenderVisualizationCommand, VisualizationDataDto>
 {
     public async Task<VisualizationDataDto> Handle(RenderVisualizationCommand request, CancellationToken cancellationToken)
@@ -41,8 +45,16 @@ public sealed class RenderVisualizationCommandHandler(
         var savedQuery = await savedQueries.GetByIdAsync(request.SavedQueryId, cancellationToken)
             ?? throw new NotFoundException(nameof(SavedQuery), request.SavedQueryId);
 
-        // Checked against the share table on every request, so a revoked share takes effect at once.
-        if (!SavedQueryAccess.CanView(savedQuery, AccessActor.From(currentUser)))
+        // Checked against the share table on every request, so a revoked share takes effect at once. A hub Viewer has no
+        // query access of its own, so only a dashboard context that proves this chart belongs to a dashboard they can
+        // see gets through; an invalid or missing context leaves the grant empty and the refusal stands.
+        var actor = AccessActor.From(currentUser);
+        if (request.DashboardId is { } dashboardId && request.TileId is { } tileId)
+        {
+            await grantResolver.TryGrantAsync(dashboardId, tileId, savedQuery.Id, request.VisualizationId, actor, cancellationToken);
+        }
+
+        if (!(SavedQueryAccess.CanView(savedQuery, actor) || dashboardGrant.Covers(savedQuery.Id)))
         {
             throw new ForbiddenException("You do not have access to this query.");
         }
