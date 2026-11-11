@@ -79,8 +79,10 @@ public sealed class ShareDashboardCommandHandler(
         }
 
         // Every id is checked before anything is written, so one bad id shares nothing.
-        if (actor.InHub)
+        var targetChecked = false;
+        if (actor.InHub && !dashboard.Shares.Any(s => s.SharedWithUserId == request.SharedWithUserId))
         {
+            targetChecked = true;
             var sourceIds = dashboard.Tiles.Where(t => t.Visualization?.SavedQuery is not null)
                 .Select(t => t.Visualization!.SavedQuery!.DataSourceId);
             if (!await targets.IsKnownAsync(request.SharedWithUserId, sourceIds, cancellationToken))
@@ -149,7 +151,7 @@ public sealed class ShareDashboardCommandHandler(
             }
 
             await shareQuery.Handle(
-                new ShareQueryCommand(query.Id, request.SharedWithUserId, request.SharedWithUserEmail, QueryAccessLevel.Viewer, TargetChecked: true),
+                new ShareQueryCommand(query.Id, request.SharedWithUserId, request.SharedWithUserEmail, QueryAccessLevel.Viewer, TargetChecked: targetChecked),
                 cancellationToken);
         }
 

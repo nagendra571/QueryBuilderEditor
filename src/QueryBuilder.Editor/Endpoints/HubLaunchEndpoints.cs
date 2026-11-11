@@ -58,6 +58,23 @@ internal static class HubLaunchEndpoints
             ? LaunchResult.Refused(LaunchRefusalReason.Malformed)
             : await services.GetRequiredService<ILaunchTokenValidator>().ValidateAsync(token, ct);
 
+        if (result.Claims is { } validated)
+        {
+            // A new scope, with its app chosen first: the request's own scope must not read (and so freeze) an app
+            // from whatever session the browser arrived with.
+            bool recorded;
+            await using (var scope = services.GetRequiredService<IServiceScopeFactory>().CreateAsyncScope())
+            {
+                scope.ServiceProvider.GetRequiredService<IAppContextScope>().UseApp(validated.AppId);
+                recorded = await scope.ServiceProvider.GetRequiredService<ILaunchRecorder>().RecordSuccessAsync(validated, ct);
+            }
+
+            if (!recorded)
+            {
+                result = LaunchResult.Refused(LaunchRefusalReason.UserIdCaseConflict, validated.AppId);
+            }
+        }
+
         if (result.Claims is not { } claims)
         {
             // Signed out first: if the audit write fails, the old session must not survive a refused launch.
@@ -71,14 +88,6 @@ internal static class HubLaunchEndpoints
 
             context.Response.Headers.CacheControl = "no-store";
             return Results.Content(RefusalPage, "text/html; charset=utf-8", statusCode: StatusCodes.Status400BadRequest);
-        }
-
-        // A new scope, with its app chosen first: the request's own scope must not read (and so freeze) an app
-        // from whatever session the browser arrived with.
-        await using (var scope = services.GetRequiredService<IServiceScopeFactory>().CreateAsyncScope())
-        {
-            scope.ServiceProvider.GetRequiredService<IAppContextScope>().UseApp(claims.AppId);
-            await scope.ServiceProvider.GetRequiredService<ILaunchRecorder>().RecordSuccessAsync(claims, ct);
         }
 
         var principal = HubSession.ForApp(claims.AppId, claims.UserId, claims.Name, claims.Email, claims.Role, claims.Scope,

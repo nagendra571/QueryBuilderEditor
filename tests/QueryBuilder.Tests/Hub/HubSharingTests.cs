@@ -24,7 +24,8 @@ public class HubSharingTests
                 "SELECT CAST(N'mary' AS nvarchar(450)) AS Id, CAST(N'Mary Directory' AS nvarchar(200)) AS DisplayName, CAST(N'other@x' AS nvarchar(256)) AS Email " +
                 "UNION ALL SELECT N'dir-1', N'Dir One', N'dir1@x' " +
                 "UNION ALL SELECT N'dir-2', N'Dir Two', N'MARY@X' " +
-                "UNION ALL SELECT N'zed2', N'Dir Three', NULL");
+                "UNION ALL SELECT N'zed2', N'Dir Three', NULL " +
+                "UNION ALL SELECT N'ZED', N'Zed Directory', N'zeddir@x'");
         }
 
         var source = new DataSource { AppId = app, Name = "src", ConnectionStringName = "biz", AllowedObjects = ["dbo.v"] };
@@ -76,6 +77,79 @@ public class HubSharingTests
         Assert.Equal(("launch", "zed@x"), users["zed"]);
         Assert.Equal("directory", users["dir-1"].Source);
         Assert.Equal("directory", users["zed2"].Source);
+    });
+
+    [MetadataSqlFact]
+    public Task Picker_drops_directory_case_variant() => HubApiHost.RunAsync(async env =>
+    {
+        var s = await SeedAsync(env, env.AppA, "owner");
+        await SeeUsersAsync(env);
+        var author = env.NewBrowser();
+        await author.SignInAppAsync(env.AppA, HubRole.Author, "owner");
+
+        var json = await HubApiHost.Browser.JsonAsync(await author.GetAsync($"{Api}/data-sources/{s.DataSource}/app-users"));
+        var ids = json.GetProperty("users").EnumerateArray().Select(u => u.GetProperty("id").GetString()!).ToList();
+        Assert.Contains("zed", ids);
+        Assert.DoesNotContain("ZED", ids);
+    });
+
+    [MetadataSqlFact]
+    public Task Directory_id_differing_only_by_case_from_a_seen_user_is_refused() => HubApiHost.RunAsync(async env =>
+    {
+        var s = await SeedAsync(env, env.AppA, "owner");
+        await SeeUsersAsync(env);
+        var owner = env.NewBrowser();
+        await owner.SignInAppAsync(env.AppA, HubRole.Author, "owner");
+
+        // "ZED" is in the AppUsers view, but "zed" has launched: the case-insensitive filters would hand zed the share.
+        Assert.Equal(HttpStatusCode.BadRequest, (await owner.PostAsync($"{Api}/queries/{s.Query}/shares", ShareBody("ZED"))).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await owner.PostAsync($"{Api}/dashboards/{s.Dashboard}/shares", ShareBody("ZED"))).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await owner.PostAsync($"{Api}/queries/{s.Query}/shares", ShareBody("zed"))).StatusCode);
+    });
+
+    [MetadataSqlFact]
+    public Task Changing_level_of_existing_share_to_departed_user_works() => HubApiHost.RunAsync(async env =>
+    {
+        var s = await SeedAsync(env, env.AppA, "owner", directoryView: false);
+        await using (var db = env.HubWideDb())
+        {
+            db.QueryShares.Add(new QueryShare { AppId = env.AppA, SavedQueryId = s.Query, SharedWithUserId = "gone", SharedWithUserEmail = "gone@x", AccessLevel = QueryAccessLevel.Viewer });
+            db.DashboardShares.Add(new DashboardShare { AppId = env.AppA, DashboardId = s.Dashboard, SharedWithUserId = "gone", SharedWithUserEmail = "gone@x", AccessLevel = QueryAccessLevel.Viewer });
+            await db.SaveChangesAsync();
+        }
+
+        var owner = env.NewBrowser();
+        await owner.SignInAppAsync(env.AppA, HubRole.Author, "owner");
+        Assert.Equal(HttpStatusCode.OK, (await owner.PostAsync($"{Api}/queries/{s.Query}/shares", ShareBody("gone", "Editor"))).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await owner.PostAsync($"{Api}/dashboards/{s.Dashboard}/shares", ShareBody("gone", "Editor"))).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await owner.PostAsync($"{Api}/queries/{s.Query}/shares", ShareBody("never-seen"))).StatusCode);
+
+        await using var check = env.HubWideDb();
+        Assert.Equal(QueryAccessLevel.Editor, (await check.QueryShares.SingleAsync(x => x.SharedWithUserId == "gone")).AccessLevel);
+        Assert.Equal(QueryAccessLevel.Editor, (await check.DashboardShares.SingleAsync(x => x.SharedWithUserId == "gone")).AccessLevel);
+    });
+
+    [MetadataSqlFact]
+    public Task Recorder_refuses_to_merge_a_case_variant_row() => HubApiHost.RunAsync(async env =>
+    {
+        await using (var db = env.HubWideDb())
+        {
+            db.SeenUsers.Add(new SeenUser { AppId = env.AppA, UserId = "User-1", Name = "First" });
+            await db.SaveChangesAsync();
+        }
+
+        // What the second of two simultaneous first launches reaches once the unique index has refused its insert.
+        await using var scoped = new QueryBuilder.Infrastructure.Persistence.AppDbContext(env.Options, new FixedAppContext(env.AppA));
+        var recorder = new QueryBuilder.Infrastructure.Hub.LaunchRecorder(scoped, new Microsoft.AspNetCore.Http.HttpContextAccessor(), TimeProvider.System);
+        var claims = new QueryBuilder.Application.Hub.LaunchClaims(env.AppA, "app-a", "user-1", "Second", null, HubRole.Author,
+            QueryBuilder.Application.Abstractions.ResolvedDataScope.Unrestricted, null, "j", DateTimeOffset.UtcNow.AddMinutes(1));
+        Assert.False(await recorder.RecordSuccessAsync(claims, default));
+
+        await using var check = env.HubWideDb();
+        var row = await check.SeenUsers.SingleAsync();
+        Assert.Equal("User-1", row.UserId);
+        Assert.Equal("First", row.Name);
+        Assert.Empty(await check.AuditLogEntries.Where(a => a.Action == AuditAction.LaunchSucceeded).ToListAsync());
     });
 
     [MetadataSqlFact]
@@ -155,14 +229,17 @@ public class HubSharingTests
     [MetadataSqlFact]
     public Task Embedded_share_rules_unchanged() => HubApiHost.RunAsync(async env =>
     {
-        var s = await SeedAsync(env, App.DefaultId, "Admin", directoryView: false);
+        var s = await SeedAsync(env, App.DefaultId, "Admin");
         var browser = env.NewBrowser();
         Assert.Equal(HttpStatusCode.OK, (await browser.PostAsync($"{Api}/queries/{s.Query}/shares", ShareBody("stranger"))).StatusCode);
         Assert.Equal(HttpStatusCode.OK, (await browser.PostAsync($"{Api}/dashboards/{s.Dashboard}/shares", ShareBody("stranger"))).StatusCode);
 
         var users = await HubApiHost.Browser.JsonAsync(await browser.GetAsync($"{Api}/data-sources/{s.DataSource}/app-users"));
-        Assert.False(users.GetProperty("available").GetBoolean());
+        Assert.True(users.GetProperty("available").GetBoolean());
         Assert.Equal(["available", "users"], users.EnumerateObject().Select(p => p.Name).Order(StringComparer.Ordinal));
+        var items = users.GetProperty("users").EnumerateArray().ToList();
+        Assert.NotEmpty(items);
+        Assert.All(items, u => Assert.Equal(["displayName", "email", "id"], u.EnumerateObject().Select(p => p.Name).Order(StringComparer.Ordinal)));
     }, hub: false, configure: o => o.ActorResolver = _ => "Admin");
 
     [MetadataSqlFact]

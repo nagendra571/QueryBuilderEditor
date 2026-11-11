@@ -246,6 +246,18 @@ public sealed class LaunchTokenValidator : ILaunchTokenValidator
             return Refuse(LaunchRefusalReason.UserIdCaseConflict);
         }
 
+        // A first launch must not inherit what was created or shared for a case-variant of the id (a share to a
+        // directory-only "MARY" would otherwise reach "mary"): the filters on these columns ignore case too.
+        var stored = new List<string>();
+        stored.AddRange(await db.SavedQueries.AsNoTracking().Where(q => q.AppId == app.Id && q.OwnerId == sub).Select(q => q.OwnerId).Distinct().ToListAsync(ct));
+        stored.AddRange(await db.Dashboards.AsNoTracking().Where(d => d.AppId == app.Id && d.OwnerId == sub).Select(d => d.OwnerId).Distinct().ToListAsync(ct));
+        stored.AddRange(await db.QueryShares.AsNoTracking().Where(s => s.AppId == app.Id && s.SharedWithUserId == sub).Select(s => s.SharedWithUserId).Distinct().ToListAsync(ct));
+        stored.AddRange(await db.DashboardShares.AsNoTracking().Where(s => s.AppId == app.Id && s.SharedWithUserId == sub).Select(s => s.SharedWithUserId).Distinct().ToListAsync(ct));
+        if (stored.Any(u => !string.Equals(u, sub, StringComparison.Ordinal)))
+        {
+            return Refuse(LaunchRefusalReason.UserIdCaseConflict);
+        }
+
         var expiresUtc = DateTimeOffset.FromUnixTimeSeconds(exp);
 
         // Last, so a token refused for any other reason does not burn its id.

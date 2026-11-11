@@ -50,15 +50,16 @@ public sealed class ShareQueryCommandHandler(
             throw new CatalogValidationException("The owner already has full access — no need to share with themselves.");
         }
 
-        if (AccessActor.From(currentUser).InHub && !request.TargetChecked
-            && !await targets.IsKnownAsync(request.SharedWithUserId, [query.DataSourceId], cancellationToken))
-        {
-            throw new ValidationException(Hub.ShareTargets.NotKnownMessage);
-        }
-
         var share = query.Shares.FirstOrDefault(s => s.SharedWithUserId == request.SharedWithUserId);
         if (share is null)
         {
+            // Only a new share needs a known person: changing the level of an existing one must work for someone who has since left the list.
+            if (AccessActor.From(currentUser).InHub && !request.TargetChecked
+                && !await targets.IsKnownAsync(request.SharedWithUserId, [query.DataSourceId], cancellationToken))
+            {
+                throw new ValidationException(Hub.ShareTargets.NotKnownMessage);
+            }
+
             share = new QueryShare
             {
                 SavedQueryId = query.Id,

@@ -6,6 +6,7 @@ namespace QueryBuilder.Application.Hub;
 /// </summary>
 public interface ILaunchRecorder
 {
-    Task RecordSuccessAsync(LaunchClaims claims, CancellationToken ct);
+    /// <summary>False when a row for a case-variant of the same user id exists; nothing is recorded then and the caller must refuse the launch.</summary>
+    Task<bool> RecordSuccessAsync(LaunchClaims claims, CancellationToken ct);
     Task RecordRefusalAsync(LaunchRefusalReason reason, Guid? claimedAppId, CancellationToken ct);
 }

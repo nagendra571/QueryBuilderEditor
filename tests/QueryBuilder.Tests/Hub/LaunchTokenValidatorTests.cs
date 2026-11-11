@@ -465,6 +465,32 @@ public class LaunchTokenValidatorTests
     });
 
     [MetadataSqlFact]
+    public Task Launch_refused_when_a_share_exists_for_a_case_variant() => RunAsync(async env =>
+    {
+        await using (var db = new AppDbContext(env.Options, new FixedAppContext(App.NoneId, hubWide: true)))
+        {
+            var source = await db.DataSources.SingleAsync(d => d.AppId == env.AppA);
+            var query = new SavedQuery { AppId = env.AppA, Name = "q", DataSourceId = source.Id, OwnerId = "owner", DefinitionJson = "{}" };
+            var dashboard = new Dashboard { AppId = env.AppA, Name = "d", OwnerId = "OWNER-2" };
+            db.SavedQueries.Add(query);
+            db.Dashboards.Add(dashboard);
+            await db.SaveChangesAsync();
+            db.QueryShares.Add(new QueryShare { AppId = env.AppA, SavedQueryId = query.Id, SharedWithUserId = "USER-1", SharedWithUserEmail = "u@x", AccessLevel = QueryAccessLevel.Viewer });
+            db.DashboardShares.Add(new DashboardShare { AppId = env.AppA, DashboardId = dashboard.Id, SharedWithUserId = "DASH-USER", SharedWithUserEmail = "d@x", AccessLevel = QueryAccessLevel.Viewer });
+            await db.SaveChangesAsync();
+        }
+
+        await ExpectAsync(env, env.Token(c => c["sub"] = "user-1"), LaunchRefusalReason.UserIdCaseConflict, env.AppA);
+        await ExpectAsync(env, env.Token(c => c["sub"] = "dash-user"), LaunchRefusalReason.UserIdCaseConflict, env.AppA);
+        await ExpectAsync(env, env.Token(c => c["sub"] = "owner-2"), LaunchRefusalReason.UserIdCaseConflict, env.AppA);
+        await ExpectAsync(env, env.Token(c => c["sub"] = "OWNER"), LaunchRefusalReason.UserIdCaseConflict, env.AppA);
+
+        // The exact ids are fine.
+        Assert.Null((await env.Validate(env.Token(c => c["sub"] = "USER-1"))).Refusal);
+        Assert.Null((await env.Validate(env.Token(c => c["sub"] = "owner"))).Refusal);
+    });
+
+    [MetadataSqlFact]
     public Task Same_id_relaunch_is_accepted() => RunAsync(async env =>
     {
         await SeeAsync(env, env.AppA, "user-1");

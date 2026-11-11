@@ -23,9 +23,12 @@ public sealed class LaunchRecorder(AppDbContext db, IHttpContextAccessor httpCon
         LaunchRefusalReason.BadSignature,
     ];
 
-    public async Task RecordSuccessAsync(LaunchClaims claims, CancellationToken ct)
+    public async Task<bool> RecordSuccessAsync(LaunchClaims claims, CancellationToken ct)
     {
-        await UpsertSeenUserAsync(claims, ct);
+        if (!await UpsertSeenUserAsync(claims, ct))
+        {
+            return false;
+        }
 
         var counts = claims.Scope.IsUnrestricted
             ? new Dictionary<string, int>()
@@ -51,6 +54,7 @@ public sealed class LaunchRecorder(AppDbContext db, IHttpContextAccessor httpCon
             TimestampUtc = clock.GetUtcNow(),
         });
         await db.SaveChangesAsync(ct);
+        return true;
     }
 
     public async Task RecordRefusalAsync(LaunchRefusalReason reason, Guid? claimedAppId, CancellationToken ct)
@@ -82,7 +86,7 @@ public sealed class LaunchRecorder(AppDbContext db, IHttpContextAccessor httpCon
         await db.SaveChangesAsync(ct);
     }
 
-    private async Task UpsertSeenUserAsync(LaunchClaims claims, CancellationToken ct)
+    private async Task<bool> UpsertSeenUserAsync(LaunchClaims claims, CancellationToken ct)
     {
         var now = clock.GetUtcNow();
 
@@ -92,11 +96,18 @@ public sealed class LaunchRecorder(AppDbContext db, IHttpContextAccessor httpCon
             var existing = await db.SeenUsers.FirstOrDefaultAsync(u => u.UserId == claims.UserId, ct);
             if (existing is not null)
             {
+                // Two first launches of User-1 and user-1 can both pass validation; the unique index (case-insensitive)
+                // then hands the second one the first one's row, which must never be merged.
+                if (!string.Equals(existing.UserId, claims.UserId, StringComparison.Ordinal))
+                {
+                    return false;
+                }
+
                 existing.Name = claims.Name ?? existing.Name;
                 existing.Email = claims.Email ?? existing.Email;
                 existing.LastLaunchUtc = now;
                 await db.SaveChangesAsync(ct);
-                return;
+                return true;
             }
 
             var added = new SeenUser
@@ -107,12 +118,14 @@ public sealed class LaunchRecorder(AppDbContext db, IHttpContextAccessor httpCon
             try
             {
                 await db.SaveChangesAsync(ct);
-                return;
+                return true;
             }
             catch (DbUpdateException) when (attempt == 0)
             {
                 db.Entry(added).State = EntityState.Detached;
             }
         }
+
+        return true;
     }
 }

@@ -7,6 +7,7 @@ public interface ISeenUserDirectory
 {
     Task<List<SeenUser>> ListAsync(CancellationToken cancellationToken);
 
-    /// <summary>Exact (ordinal) match: the metadata collation ignores case, so a case-only difference must not count.</summary>
-    Task<bool> ExistsAsync(string userId, CancellationToken cancellationToken);
+    /// <summary>The app's stored ids equal to <paramref name="userId"/> ignoring case (the metadata collation does), so
+    /// callers can tell an exact match from a case-only variant.</summary>
+    Task<IReadOnlyList<string>> MatchingIdsAsync(string userId, CancellationToken cancellationToken);
 }

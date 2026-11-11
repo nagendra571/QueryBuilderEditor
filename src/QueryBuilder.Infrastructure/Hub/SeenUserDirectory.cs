@@ -13,10 +13,6 @@ public sealed class SeenUserDirectory(AppDbContext db) : ISeenUserDirectory
     public Task<List<SeenUser>> ListAsync(CancellationToken cancellationToken) =>
         db.SeenUsers.AsNoTracking().OrderByDescending(u => u.LastLaunchUtc).Take(MaxPeople).ToListAsync(cancellationToken);
 
-    public async Task<bool> ExistsAsync(string userId, CancellationToken cancellationToken)
-    {
-        // The column's collation ignores case, so the SQL match is only a narrowing step.
-        var matches = await db.SeenUsers.AsNoTracking().Where(u => u.UserId == userId).Select(u => u.UserId).ToListAsync(cancellationToken);
-        return matches.Any(m => string.Equals(m, userId, StringComparison.Ordinal));
-    }
+    public async Task<IReadOnlyList<string>> MatchingIdsAsync(string userId, CancellationToken cancellationToken) =>
+        await db.SeenUsers.AsNoTracking().Where(u => u.UserId == userId).Select(u => u.UserId).ToListAsync(cancellationToken);
 }

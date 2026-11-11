@@ -26,7 +26,8 @@ public sealed class ShareTargets(ISeenUserDirectory seenUsers, IAppUsersDirector
     public async Task<List<AppUserDto>> MergedAsync(Guid dataSourceId, CancellationToken ct)
     {
         var merged = await PeopleAsync(ct);
-        var ids = new HashSet<string>(merged.Select(u => u.Id), StringComparer.Ordinal);
+        // Ignoring case: ids that differ only by case would reach each other's queries through the case-insensitive filters.
+        var ids = new HashSet<string>(merged.Select(u => u.Id), StringComparer.OrdinalIgnoreCase);
         var emails = new HashSet<string>(merged.Where(u => !string.IsNullOrWhiteSpace(u.Email)).Select(u => u.Email!), StringComparer.OrdinalIgnoreCase);
 
         var fromDirectory = await directory.GetUsersAsync(dataSourceId, ct);
@@ -52,9 +53,17 @@ public sealed class ShareTargets(ISeenUserDirectory seenUsers, IAppUsersDirector
 
     public async Task<bool> IsKnownAsync(string userId, IEnumerable<Guid> dataSourceIds, CancellationToken ct)
     {
-        if (await seenUsers.ExistsAsync(userId, ct))
+        var seen = await seenUsers.MatchingIdsAsync(userId, ct);
+        if (seen.Any(s => string.Equals(s, userId, StringComparison.Ordinal)))
         {
             return true;
+        }
+
+        // A case-only variant of a launched person must not be shareable, directory or not: the owner/share filters
+        // ignore case, so the share would give that person access they were never granted.
+        if (seen.Count > 0)
+        {
+            return false;
         }
 
         foreach (var dataSourceId in dataSourceIds.Distinct())
