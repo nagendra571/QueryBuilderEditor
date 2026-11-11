@@ -44,7 +44,8 @@ public static class DashboardAccess
         !actor.IsViewer && (IsOwner(dashboard, actor) || actor.SeesWholeApp);
 
     public static QueryAccessLevel AccessLevelFor(Dashboard dashboard, AccessActor actor) =>
-        actor.SeesWholeApp || IsOwner(dashboard, actor)
+        actor.IsViewer ? QueryAccessLevel.Viewer
+        : actor.SeesWholeApp || IsOwner(dashboard, actor)
             ? QueryAccessLevel.Owner
             : dashboard.Shares.FirstOrDefault(s => s.SharedWithUserId == actor.UserId)?.AccessLevel ?? QueryAccessLevel.Viewer;
 }
@@ -53,13 +54,13 @@ public static class DashboardMapper
 {
     public static DashboardSummaryDto ToSummary(Dashboard d, AccessActor actor) => new(
         d.Id, d.Name, d.Description, d.OwnerId, d.OwnerName, DashboardAccess.IsOwner(d, actor),
-        DashboardAccess.AccessLevelFor(d, actor), d.Tiles.Count, d.CreatedAtUtc, d.UpdatedAtUtc);
+        DashboardAccess.AccessLevelFor(d, actor), d.Tiles.Count, d.CreatedAtUtc, d.UpdatedAtUtc, d.PublishedToApp);
 
     public static DashboardDetailDto ToDetail(Dashboard d, AccessActor actor) => new(
         d.Id, d.Name, d.Description, d.OwnerId, d.OwnerName, DashboardAccess.IsOwner(d, actor),
         DashboardAccess.AccessLevelFor(d, actor), d.Version,
         ResolveBoxes(d).Select(r => ToTile(r.Item, r.Box, actor)).ToList(),
-        DashboardParameterStore.ReadParameters(d.ParametersJson));
+        DashboardParameterStore.ReadParameters(d.ParametersJson), d.PublishedToApp);
 
     /// <summary>Stored boxes for a positioned dashboard; a converted flow for a legacy one. Never mutates.</summary>
     internal static List<(DashboardTile Item, LayoutBox Box)> ResolveBoxes(Dashboard d)

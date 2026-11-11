@@ -36,7 +36,7 @@ public static class EndpointRouteBuilderExtensions
         // Hub sessions replace the host's own gates; embedded mode keeps them exactly as before.
         if (options.Hub.Enabled)
         {
-            group.RequireHubApp();
+            group.RequireHubApp().RequireNotViewerUnlessAllowed();
         }
         else
         {

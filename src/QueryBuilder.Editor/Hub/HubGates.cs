@@ -37,6 +37,15 @@ internal static class HubGates
             _ => Forbidden(),
         });
 
+    /// <summary>A hub Viewer reaches only endpoints marked <see cref="ViewerAllowedMetadata"/>; the refusal comes before any
+    /// handler runs. A super admin acts as Admin and is never a Viewer.</summary>
+    public static TBuilder RequireNotViewerUnlessAllowed<TBuilder>(this TBuilder builder) where TBuilder : IEndpointConventionBuilder =>
+        builder.AddEndpointFilter(async (context, next) =>
+            Session(context) is { IsSuperAdmin: false, Role: HubRole.Viewer }
+            && context.HttpContext.GetEndpoint()?.Metadata.GetMetadata<ViewerAllowedMetadata>() is null
+                ? Forbidden()
+                : await next(context));
+
     public static TBuilder RequireSuperAdmin<TBuilder>(this TBuilder builder) where TBuilder : IEndpointConventionBuilder =>
         builder.AddEndpointFilter(async (context, next) => Session(context) switch
         {

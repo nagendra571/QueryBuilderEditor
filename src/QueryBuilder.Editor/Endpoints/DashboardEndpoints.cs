@@ -1,3 +1,4 @@
+using QueryBuilder.Editor.Hub;
 using QueryBuilder.Application.Common;
 using QueryBuilder.Application.Dashboards;
 using QueryBuilder.Application.Dtos;
@@ -15,7 +16,8 @@ public static class DashboardEndpoints
         var group = app.MapGroup("/api/dashboards").WithTags("Dashboards");
 
         group.MapGet("/", async (ISender sender, CancellationToken ct) =>
-            Results.Json(await sender.Send(new GetDashboardsQuery(), ct), QueryBuilderJson.Options));
+            Results.Json(await sender.Send(new GetDashboardsQuery(), ct), QueryBuilderJson.Options))
+            .AllowViewers();
 
         group.MapPost("/", async (HttpContext http, ISender sender, CancellationToken ct) =>
         {
@@ -25,7 +27,16 @@ public static class DashboardEndpoints
         });
 
         group.MapGet("/{id:guid}", async (Guid id, ISender sender, CancellationToken ct) =>
-            Results.Json(await sender.Send(new GetDashboardQuery(id), ct), QueryBuilderJson.Options));
+            Results.Json(await sender.Send(new GetDashboardQuery(id), ct), QueryBuilderJson.Options))
+            .AllowViewers();
+
+        group.MapPut("/{id:guid}/published", async (Guid id, HttpContext http, ISender sender, CancellationToken ct) =>
+        {
+            var request = await http.Request.ReadFromJsonAsync<PublishDashboardRequest>(QueryBuilderJson.Options, ct)
+                ?? throw new BadHttpRequestException("Request body is required.");
+            await sender.Send(new PublishDashboardCommand(id, request.Published), ct);
+            return Results.NoContent();
+        });
 
         group.MapPut("/{id:guid}", async (Guid id, HttpContext http, ISender sender, CancellationToken ct) =>
         {

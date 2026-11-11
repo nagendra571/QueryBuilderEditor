@@ -75,6 +75,7 @@ public partial class CrossAppEndpointMatrixTests
         ["PUT /api/dashboards/{id}"] = _ => new { name = "renamed", description = "x", version = 1 },
         ["PUT /api/dashboards/{id}/tiles"] = _ => new { version = 1, tiles = Array.Empty<object>() },
         ["POST /api/dashboards/{id}/tiles/chart"] = a => new { visualizationId = a.Visualization },
+        ["PUT /api/dashboards/{id}/published"] = _ => new { published = true },
         ["DELETE /api/dashboards/{id}"] = _ => null,
         ["GET /api/dashboards/{id}/shares"] = _ => null,
         ["POST /api/dashboards/{id}/shares"] = a => new { sharedWithUserId = "x", sharedWithUserEmail = "x@x", accessLevel = "Viewer", alsoShareQueryIds = new[] { a.Query } },

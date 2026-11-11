@@ -12,7 +12,8 @@ public sealed record DashboardSummaryDto(
     QueryAccessLevel AccessLevel,
     int TileCount,
     DateTimeOffset CreatedAtUtc,
-    DateTimeOffset? UpdatedAtUtc);
+    DateTimeOffset? UpdatedAtUtc,
+    bool Published = false);
 
 public sealed record DashboardTileChartDto(
     Guid SavedQueryId,
@@ -48,7 +49,10 @@ public sealed record DashboardDetailDto(
     QueryAccessLevel AccessLevel,
     int Version,
     List<DashboardTileDto> Tiles,
-    List<DashboardParameterDto>? Parameters = null);
+    List<DashboardParameterDto>? Parameters = null,
+    bool Published = false);
+
+public sealed record PublishDashboardRequest(bool Published);
 
 public sealed record SaveDashboardRequest(string Name, string? Description, int? Version);
 

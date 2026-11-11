@@ -42,7 +42,7 @@ public class HubAuthorizationTests
         var expected = new (string Who, HttpStatusCode Api, HttpStatusCode Admin, HttpStatusCode Registry)[]
         {
             ("none", HttpStatusCode.Unauthorized, HttpStatusCode.Unauthorized, HttpStatusCode.Unauthorized),
-            ("viewer", HttpStatusCode.OK, HttpStatusCode.Forbidden, HttpStatusCode.Forbidden),
+            ("viewer", HttpStatusCode.Forbidden, HttpStatusCode.Forbidden, HttpStatusCode.Forbidden),
             ("author", HttpStatusCode.OK, HttpStatusCode.Forbidden, HttpStatusCode.Forbidden),
             ("admin", HttpStatusCode.OK, HttpStatusCode.NoContent, HttpStatusCode.Forbidden),
             ("super", HttpStatusCode.Unauthorized, HttpStatusCode.Unauthorized, HttpStatusCode.OK),

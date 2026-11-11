@@ -1,3 +1,4 @@
+using QueryBuilder.Editor.Hub;
 using QueryBuilder.Application.Common;
 using QueryBuilder.Application.Dtos;
 using QueryBuilder.Application.Visualizations;
@@ -45,6 +46,6 @@ public static class VisualizationEndpoints
             var data = await sender.Send(
                 new RenderVisualizationCommand(queryId, visualizationId, request?.ParameterValues ?? []), ct);
             return Results.Json(data, QueryBuilderJson.Options);
-        });
+        }).AllowViewers();
     }
 }

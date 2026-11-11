@@ -1,3 +1,4 @@
+using QueryBuilder.Editor.Hub;
 using QueryBuilder.Application.Common;
 using QueryBuilder.Application.Abstractions;
 using QueryBuilder.Application.Commands.SavedQueries;
@@ -47,7 +48,8 @@ public static class SavedQueryEndpoints
         });
 
         group.MapGet("/{id:guid}/parameters/{name}/options", async (Guid id, string name, ISender sender, CancellationToken ct) =>
-            Results.Json(await sender.Send(new GetParameterOptionsQuery(id, name), ct), QueryBuilderJson.Options));
+            Results.Json(await sender.Send(new GetParameterOptionsQuery(id, name), ct), QueryBuilderJson.Options))
+            .AllowViewers();
 
         group.MapGet("/{id:guid}/shares", async (Guid id, ISender sender, CancellationToken ct) =>
             Results.Json(await sender.Send(new GetQuerySharesQuery(id), ct), QueryBuilderJson.Options));

@@ -1,3 +1,4 @@
+using QueryBuilder.Editor.Hub;
 using Microsoft.EntityFrameworkCore;
 using QueryBuilder.Application.Abstractions;
 using QueryBuilder.Application.Common;
@@ -29,6 +30,7 @@ public static class MeEndpoints
         {
             var zone = await ZoneAsync(scope, ct);
             var current = session.Current!;
+            var actor = AccessActor.From(user);
 
             // The app the session works in: an app session's own, or the one a super admin is viewing. Null for a super
             // admin who has not picked one, which is how the shell knows to show the picker.
@@ -49,8 +51,16 @@ public static class MeEndpoints
                 isSuperAdmin = current.IsSuperAdmin,
                 returnUrl = current.ReturnUrl,
                 viewingApp = current.IsSuperAdmin ? appInfo : null,
+                permissions = new
+                {
+                    canBuildQueries = !actor.IsViewer,
+                    canManageDashboards = !actor.IsViewer,
+                    canPublish = actor.SeesWholeApp,
+                    canAdmin = actor.SeesWholeApp,
+                    isViewer = actor.IsViewer,
+                },
             }, QueryBuilderJson.Options);
-        }).WithTags("Me");
+        }).WithTags("Me").AllowViewers();
     }
 
     private static async Task<object?> ZoneAsync(ICurrentDataScope scope, CancellationToken ct)
