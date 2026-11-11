@@ -26,7 +26,40 @@ integration ergonomics (single-call registration, embedded SPA, DBA-friendly mig
 
 ## Where we left off (update this at the end of each session)
 
-**As of 2026-11-10: multi-app hub ("QueryBuilder Hub") — Part 1 of 4 done, UNCOMMITTED on local branch `feature/hub`**
+**As of 2026-11-11: hub Parts 1 and 2 of 4 DONE, committed LOCALLY on `feature/hub` (never pushed; user approved
+local commits). Next: write the Part 3 plan.** Part 1 = `769bf08`; Part 2 = `763b007..30e6fa4` (plan
+`docs/superpowers/plans/2026-11-10-hub-part2-launch-and-sessions.md`). Part 2 built (all server-side, no UI yet):
+registry/system tables (`AppSigningKey` kid `^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`, `AppReturnUrl` ≤ 800 chars canonical
+`https://…/` only, `SeenUser`, `LaunchReplay` keyed (AppId, Jti), `DataProtectionKeyRecord`; markers `IHubRegistryRecord`
+= hub-wide-write-only, `IHubSystemRecord` = writable without an app; `App.ScopeKeys`, `App.SessionsValidAfterUtc`);
+`LaunchTokenValidator` (RS256 2048–8192 / ES256 P-256 only, 30 s skew, lifetime ≤ 120 s, replay via raw-SQL insert,
+serialised scope ≤ 6,144 bytes, Default app never launchable); hub session cookie `__Host-qb-hub` (8 h absolute / 1 h idle,
+renewed every request, Data Protection keys in the metadata DB encrypted with the data-source key, app re-checked ≤ 30 s:
+disabled or issued before `SessionsValidAfterUtc` → rejected); `POST /querybuilder/launch` (form only), `GET /logout`,
+CSRF header `X-QueryBuilder-Request: 1`; super admin via `/signin` → host OIDC scheme (`SignInScheme =
+QueryBuilder.HubExternal`) + `SuperAdmins.TenantIds` (required) + ObjectIds/Emails/GroupIds, re-checked every request,
+`POST /api/hub/view-app`; hub gates (endpoint filters) on API/admin/registry; registry API `/querybuilder/api/hub/apps*`;
+`IHubWideScopeFactory` is the ONLY way to a hub-wide scope (`UseHubWide()` throws in hub mode); cross-app endpoint matrix
+test. Hub mode refuses to start without Audience, SuperAdminSignInScheme, TenantIds, an allowlist entry and
+`DataSourceManagement.EncryptionKey`. Migrations: `AddHubRegistry`, `AddAppSessionsValidAfter`. User decision: sessions
+stay cookie-only (no server-side session table) with the limits above. Verified: 1190/1190 on both targets with both DB
+variables (before the last fix waves; 1012 + 46 PostgreSQL skips after them), client 175, packed 2.0.0-part2-test in a
+throwaway host with a fake Entra scheme: 30/32 end-to-end checks (the 2 = a pre-existing 500 since fixed, and the Part 3
+item below). net8.0 metadata tests take ~14 s each (EF 9 test-DB setup) → full net8 suite 20–25 min, not a hang.
+**Part 3 must:** let Admins and super admins see everything in their app (super admin viewing A gets 403 on A's query
+today); Viewer = published dashboards only + dashboard-context chart rendering; refuse a data source pointing at the hub's
+own metadata DB; console UI (apps, keys, return URLs, view-app switcher, banner; logout as POST); registry update
+concurrency + no-op audits; tighten the matrix test (expected status per role, B-on-B controls for body-id routes, add
+return-URL host and kid to secrets); architecture test listing allowed `IHubWideScopeFactory` callers; SeenUser user-id
+case rules; decide whether app admins see super admins' oid in audit; Default rename fails while enabled (turn Default off
+when the hub claims a DB); revoke stamp max(existing, now). **Part 4 must:** host with HTTPS+HSTS, UseForwardedHeaders,
+UseExceptionHandler, no UsePathBase, frame-ancestors 'self', rate limit on /launch, OIDC SignInScheme above, no host Data
+Protection persistence, same EncryptionKey/PreviousEncryptionKeys on every instance; `QueryBuilder.Launch` states the 6 KB
+scope limit and whole-second iat/exp. **Release docs:** hub takes over host Data Protection; key rotation keeps old key
+≥ 90 days + 8 h; HTTPS required; group-based super admins only re-checked at sign-in for Entra membership; worst-case
+cookie ~13–15 KB; ServicesStartConcurrently breaks startup ordering; plus the Part 1 release items below.
+
+**Part 1 summary (2026-11-10), multi-app hub ("QueryBuilder Hub"), committed `769bf08` on local branch `feature/hub`**
 (from `feature/rea1` `de592e8`). Spec (approved): `docs/superpowers/specs/2026-11-10-multi-app-hub-design.md` — one
 central QueryBuilder; apps (tenants) hand users over with a signed JWT launch token (form POST); roles Admin/Author/Viewer
 from the token, super admins via Entra ID + allowlist; app admins see everything in their app; Viewers see dashboards
