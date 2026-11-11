@@ -33,6 +33,9 @@ public sealed class MetadataDatabaseIdentity(MetadataConnectionStringAccessor me
             return false;
         }
 
+        // Before touching the candidate, so a failure reading our own identity is never mistaken for "unreachable".
+        await OwnAsync(ct);
+
         using var limit = CancellationTokenSource.CreateLinkedTokenSource(ct);
         limit.CancelAfter(TimeSpan.FromSeconds(LimitSeconds));
         try
@@ -88,11 +91,19 @@ public sealed class MetadataDatabaseIdentity(MetadataConnectionStringAccessor me
                 return again;
             }
 
-            await using var connection = new SqlConnection(metadata.ConnectionString);
-            await connection.OpenAsync(ct);
-            var read = await ReadAsync(connection, ct);
-            own = read;
-            return read;
+            try
+            {
+                await using var connection = new SqlConnection(metadata.ConnectionString);
+                await connection.OpenAsync(ct);
+                var read = await ReadAsync(connection, ct);
+                own = read;
+                return read;
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                // The driver text would name the hub's own login and server; fail closed with a generic 400.
+                throw new QueryBuilder.Application.Exceptions.CatalogValidationException("Couldn't check the connection.");
+            }
         }
         finally
         {

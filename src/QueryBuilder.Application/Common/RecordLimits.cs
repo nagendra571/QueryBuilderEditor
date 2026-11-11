@@ -4,8 +4,8 @@ namespace QueryBuilder.Application.Common;
 public sealed record RecordLimitSettings(int? DefaultMaxRecords);
 
 /// <summary>
-/// Resolves how many records a query may return: the lowest of the app ceiling (hub), the data source's own
-/// admin-set limit and the host's package-wide default. When neither is set there is no limit and the pre-1.0.13 behavior
+/// Resolves how many records a query may return: the data source's own admin-set limit, else the host's
+/// package-wide default, then capped by the app ceiling in hub mode. When neither is set there is no limit and the pre-1.0.13 behavior
 /// is kept exactly (grid capped at the client's requested rows, export at 100,000, both silently)
 /// so upgrading the package can never start refusing exports on its own.
 /// </summary>
@@ -21,20 +21,12 @@ public static class RecordLimits
     /// <summary>Hard ceiling on points a chart will draw, whatever the record limit says.</summary>
     public const int ChartMaxRows = 1_000;
 
-    /// <summary>The lowest limit that is set: a hub app's ceiling, the data source's own limit and the host default can
-    /// only tighten each other, never widen.</summary>
+    /// <summary>A hub app's ceiling caps whatever the data source resolves to; the data source's own limit still
+    /// overrides the host default, even when it is higher (as since 1.0.13).</summary>
     public static int? Effective(int? dataSourceMaxRecords, int? appCeiling, RecordLimitSettings settings)
     {
-        int? lowest = null;
-        foreach (var value in new[] { dataSourceMaxRecords, appCeiling, settings.DefaultMaxRecords })
-        {
-            if (value is { } v && (lowest is null || v < lowest))
-            {
-                lowest = v;
-            }
-        }
-
-        return lowest;
+        var resolved = dataSourceMaxRecords ?? settings.DefaultMaxRecords;
+        return appCeiling is { } ceiling && (resolved is null || ceiling < resolved) ? ceiling : resolved;
     }
 
     /// <summary>With a limit set the browser's requested row count is ignored — the limit is the cap.</summary>

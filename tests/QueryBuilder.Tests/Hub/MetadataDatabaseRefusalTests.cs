@@ -11,6 +11,9 @@ using QueryBuilder.Domain.Enums;
 using QueryBuilder.Infrastructure.Catalog;
 using QueryBuilder.Infrastructure.Hub;
 using QueryBuilder.Infrastructure.Persistence;
+using System.Net;
+using QueryBuilder.Domain.Model;
+using QueryBuilder.Application.Common;
 using Xunit;
 
 namespace QueryBuilder.Tests.Hub;
@@ -149,6 +152,106 @@ public class MetadataDatabaseRefusalTests
             Assert.Null(await scope.ServiceProvider.GetRequiredService<ICurrentAppSettings>().MaxRecordsAsync(default));
         }, hub: false);
     }
+
+    [Fact]
+    public async Task Failing_to_read_the_hubs_own_identity_fails_closed_without_driver_text()
+    {
+        var identity = new MetadataDatabaseIdentity(
+            new MetadataConnectionStringAccessor("Server=tcp:127.0.0.1,1;Database=secretdb;User Id=hubuser;Password=x;Connect Timeout=1;Encrypt=false"),
+            new MetadataMode(true));
+
+        var ex = await Assert.ThrowsAsync<CatalogValidationException>(() =>
+            identity.IsSameAsync(DataSourceProvider.SqlServer, "Server=other;Database=d", default));
+
+        Assert.Equal("Couldn't check the connection.", ex.Message);
+    }
+
+    private const string Api = "/querybuilder/api";
+
+    [MetadataSqlFact]
+    public Task Real_identity_refuses_a_stored_source_that_points_at_the_metadata_db() => HubApiHost.RunAsync(async env =>
+    {
+        var source = new DataSource { AppId = env.AppA, Name = "own-db", ConnectionStringName = "biz" };
+        await using (var db = env.HubWideDb())
+        {
+            db.DataSources.Add(source);
+            await db.SaveChangesAsync();
+        }
+
+        var super = env.NewBrowser();
+        await super.SignInSuperAsync(env.AppA);
+        var response = await super.PostAsync($"{Api}/admin/data-sources/{source.Id}/test", null);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Contains(Refusal, await response.Content.ReadAsStringAsync());
+    }, realIdentity: true);
+
+    [MetadataSqlFact]
+    public Task App_ceiling_caps_run_export_and_render() => HubApiHost.RunAsync(async env =>
+    {
+        var sourceId = Guid.NewGuid();
+        var queryId = Guid.NewGuid();
+        var vizId = Guid.NewGuid();
+        var definition = new QueryDefinition
+        {
+            Source = new QuerySource { SchemaName = "dbo", ObjectName = "ceil10", Kind = SchemaObjectKind.View, Alias = "t" },
+            Columns =
+            [
+                new QueryColumn { TableAlias = "t", ColumnName = "label", OrderIndex = 0, DataType = ColumnDataType.Text },
+                new QueryColumn { TableAlias = "t", ColumnName = "n", OrderIndex = 1, DataType = ColumnDataType.Number }
+            ]
+        };
+
+        await using (var db = env.HubWideDb())
+        {
+            await db.Database.ExecuteSqlRawAsync("CREATE VIEW dbo.ceil10 AS SELECT CAST(v AS nvarchar(5)) AS label, v AS n FROM (VALUES (1),(2),(3),(4),(5),(6),(7),(8),(9),(10)) AS x(v)");
+            db.DataSources.Add(new DataSource { Id = sourceId, AppId = env.AppA, Name = "src", ConnectionStringName = "biz", AllowedObjects = ["dbo.ceil10"], MaxRecords = 50 });
+            await db.SaveChangesAsync();
+            db.SavedQueries.Add(new SavedQuery { Id = queryId, AppId = env.AppA, Name = "q", DataSourceId = sourceId, OwnerId = "boss", OwnerName = "Boss", DefinitionJson = QueryDefinitionSerializer.Serialize(definition) });
+            await db.SaveChangesAsync();
+            db.QueryVisualizations.Add(new QueryVisualization
+            {
+                Id = vizId, AppId = env.AppA, SavedQueryId = queryId, Name = "bar", Type = VisualizationType.Bar,
+                OptionsJson = VisualizationOptionsSerializer.Serialize(new VisualizationOptions { X = "label", Measures = ["n"] })
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var admin = env.NewBrowser();
+        await admin.SignInAppAsync(env.AppA, HubRole.Admin, "boss");
+        object body(string? format = null) => new { dataSourceId = sourceId, definition, parameterValues = new { }, maxRows = 1000, format, fileName = "x" };
+
+        // With only the source's own limit (50) all ten rows come back.
+        var open = await HubApiHost.Browser.JsonAsync(await admin.PostAsync($"{Api}/queries/run", body()));
+        Assert.Equal(10, open.GetProperty("rows").GetArrayLength());
+        Assert.Equal(HttpStatusCode.OK, (await admin.PostAsync($"{Api}/queries/export", body("csv"))).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await admin.PostAsync($"{Api}/queries/{queryId}/visualizations/{vizId}/data", new { parameterValues = new { } })).StatusCode);
+
+        await using (var db = env.HubWideDb())
+        {
+            var app = await db.Apps.FirstAsync(a => a.Id == env.AppA);
+            app.MaxRecords = 5;
+            await db.SaveChangesAsync();
+        }
+
+        // The ceiling is cached for up to 30 s, so a new host (fresh cache) sees it at once.
+        await env.RestartAsync(null);
+        admin = env.NewBrowser();
+        await admin.SignInAppAsync(env.AppA, HubRole.Admin, "boss");
+
+        var capped = await HubApiHost.Browser.JsonAsync(await admin.PostAsync($"{Api}/queries/run", body()));
+        Assert.Equal(5, capped.GetProperty("rows").GetArrayLength());
+        Assert.True(capped.GetProperty("truncated").GetBoolean());
+        Assert.Equal(5, capped.GetProperty("rowLimit").GetInt32());
+
+        var export = await admin.PostAsync($"{Api}/queries/export", body("csv"));
+        Assert.Equal(HttpStatusCode.Conflict, export.StatusCode);
+        Assert.DoesNotContain("data source", await export.Content.ReadAsStringAsync());
+
+        var render = await admin.PostAsync($"{Api}/queries/{queryId}/visualizations/{vizId}/data", new { parameterValues = new { } });
+        Assert.Equal(HttpStatusCode.Conflict, render.StatusCode);
+        Assert.Contains("more than 5 records", await render.Content.ReadAsStringAsync());
+    });
 
     private sealed class FixedResolver : IConnectionStringResolver
     {

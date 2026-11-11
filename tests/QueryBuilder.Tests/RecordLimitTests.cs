@@ -19,9 +19,19 @@ public class RecordLimitTests
     [InlineData(null, null, null, null)]
     [InlineData(500, 2000, 100, 100)]
     [InlineData(null, null, 100, 100)]
-    [InlineData(5000, 300, 2000, 300)]
+    [InlineData(5000, 300, 2000, 2000)]   // the data source overrides the host default; the ceiling only caps
+    [InlineData(5000, null, 2000, 2000)]
+    [InlineData(null, 300, 2000, 300)]
+    [InlineData(null, 3000, 2000, 2000)]
     public void Effective_is_the_lowest_set_limit(int? dataSource, int? hostDefault, int? appCeiling, int? expected) =>
         Assert.Equal(expected, RecordLimits.Effective(dataSource, appCeiling, new RecordLimitSettings(hostDefault)));
+
+    [Theory]
+    [InlineData(5000, 300, 5000)]
+    [InlineData(100, 300, 100)]
+    [InlineData(null, 300, 300)]
+    public void Data_source_limit_wins_over_host_default(int? dataSource, int? hostDefault, int? expected) =>
+        Assert.Equal(expected, RecordLimits.Effective(dataSource, null, new RecordLimitSettings(hostDefault)));
 
     [Fact]
     public async Task App_ceiling_caps_run_and_export()

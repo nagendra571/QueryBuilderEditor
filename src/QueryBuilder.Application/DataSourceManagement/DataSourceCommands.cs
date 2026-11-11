@@ -32,15 +32,6 @@ public sealed class CreateDataSourceCommandHandler(
     IMetadataDatabaseIdentity metadataIdentity)
     : IRequestHandler<CreateDataSourceCommand, AdminDataSourceSummaryDto>
 {
-    internal static async Task RefuseMetadataDatabaseAsync(
-        IMetadataDatabaseIdentity identity, DataSourceProvider provider, ManagedConnectionDetails details, CancellationToken ct)
-    {
-        if (await identity.IsSameAsync(provider, details, ct))
-        {
-            throw new CatalogValidationException(MetadataDatabaseMessages.Refused);
-        }
-    }
-
     public async Task<AdminDataSourceSummaryDto> Handle(CreateDataSourceCommand request, CancellationToken cancellationToken)
     {
         ManagedConnections.RequireEnabled(settings);
@@ -48,7 +39,7 @@ public sealed class CreateDataSourceCommandHandler(
         await DataSourceLock.EnsureCanManageConnectionsAsync(apps, actor, cancellationToken);
 
         var details = ManagedConnections.Resolve(request.Provider, request.Connection!, stored: null);
-        await RefuseMetadataDatabaseAsync(metadataIdentity, request.Provider, details, cancellationToken);
+        await MetadataDatabaseGuard.RefuseAsync(metadataIdentity, request.Provider, details, cancellationToken);
         var dataSource = new DataSource
         {
             Name = request.Name!.Trim(),
@@ -131,7 +122,7 @@ public sealed class UpdateDataSourceCommandHandler(
             var stored = ManagedConnections.TryRead(dataSource, protector);
             var details = ManagedConnections.Resolve(dataSource.Provider, request.Connection, stored, storedUnreadable: stored is null);
             host = details.Host;
-            await CreateDataSourceCommandHandler.RefuseMetadataDatabaseAsync(metadataIdentity, dataSource.Provider, details, cancellationToken);
+            await MetadataDatabaseGuard.RefuseAsync(metadataIdentity, dataSource.Provider, details, cancellationToken);
             pools.Clear(dataSource);
 
             if (stored is null)
@@ -277,7 +268,7 @@ public sealed class TestConnectionCommandHandler(
         }
 
         var details = ManagedConnections.Resolve(request.Provider, request.Connection!, stored, unreadable);
-        await CreateDataSourceCommandHandler.RefuseMetadataDatabaseAsync(metadataIdentity, request.Provider, details, cancellationToken);
+        await MetadataDatabaseGuard.RefuseAsync(metadataIdentity, request.Provider, details, cancellationToken);
         return await tester.TestAsync(request.Provider, details, cancellationToken);
     }
 }

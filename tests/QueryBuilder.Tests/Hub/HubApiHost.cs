@@ -123,6 +123,7 @@ internal sealed class HubApiHost : IAsyncDisposable
     public IHost Host = null!;
     public string ConnectionString = null!;
     private bool _hub;
+    private bool _realIdentity;
     private readonly List<HttpClient> _clients = [];
 
     /// <summary>Stops the host and starts another on the same database (so the same Data Protection key ring) with other options.</summary>
@@ -142,10 +143,10 @@ internal sealed class HubApiHost : IAsyncDisposable
 
     public AppDbContext HubWideDb() => new(Options, new FixedAppContext(App.NoneId, hubWide: true));
 
-    public static Task RunAsync(Func<HubApiHost, Task> body, bool hub = true, Action<QueryBuilderEditorOptions>? configure = null) =>
+    public static Task RunAsync(Func<HubApiHost, Task> body, bool hub = true, Action<QueryBuilderEditorOptions>? configure = null, bool realIdentity = false) =>
         MetadataDb.WithDatabaseAsync(async (options, connectionString) =>
         {
-            var env = new HubApiHost { Options = options, ConnectionString = connectionString, _hub = hub };
+            var env = new HubApiHost { Options = options, ConnectionString = connectionString, _hub = hub, _realIdentity = realIdentity };
             await using (var db = env.HubWideDb())
             {
                 db.MetadataSettings.Add(new MetadataSetting { Key = "Mode", Value = hub ? "Hub" : "Embedded" });
@@ -195,7 +196,10 @@ internal sealed class HubApiHost : IAsyncDisposable
                     });
                     services.AddSingleton<TimeProvider>(env.Clock);
                     // Test sources use the "biz" string, which points back at the metadata database on purpose.
-                    services.AddSingleton<QueryBuilder.Application.Abstractions.IMetadataDatabaseIdentity>(new FakeMetadataIdentity());
+                    if (!env._realIdentity)
+                    {
+                        services.AddSingleton<QueryBuilder.Application.Abstractions.IMetadataDatabaseIdentity>(new FakeMetadataIdentity());
+                    }
                 });
                 web.Configure(app =>
                 {

@@ -64,7 +64,7 @@ public sealed class ExportQueryCommandHandler(
         if (limit is not null && result.Truncated)
         {
             throw new RecordLimitExceededException(
-                $"This query returns more than {limit.Value:N0} records, the limit for this data source. " +
+                $"This query returns more than {limit.Value:N0} records, the record limit. " +
                 "Add filters to narrow it down before exporting.");
         }
 
