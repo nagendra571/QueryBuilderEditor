@@ -97,8 +97,9 @@ public static class AdminEndpoints
         group.MapGet("/data-sources/{id:guid}", async (Guid id, ISender sender, CancellationToken ct) =>
             Results.Json(await sender.Send(new GetAdminDataSourceDetailQuery(id), ct), QueryBuilderJson.Options));
 
-        group.MapPut("/data-sources/{id:guid}/lock", async (Guid id, HttpContext http, ISender sender, CancellationToken ct) =>
+        group.MapPut("/data-sources/{id:guid}/lock", async (Guid id, HttpContext http, QueryBuilderEditorOptions options, ISender sender, CancellationToken ct) =>
         {
+            if (!options.Hub.Enabled) return Results.NotFound();
             var request = await http.Request.ReadFromJsonAsync<SetDataSourceLockRequest>(QueryBuilderJson.Options, ct)
                 ?? throw new BadHttpRequestException("Request body is required.");
             await sender.Send(new SetDataSourceLockCommand(id, request.Locked), ct);

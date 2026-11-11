@@ -44,6 +44,10 @@ public static class DataSourceLock
         }
     }
 
+    /// <summary>What the admin UI may offer: in hub mode the role and app switch, in embedded mode the host flag.</summary>
+    public static async Task<bool> CanManageConnectionsAsync(Abstractions.ICurrentAppReader apps, AccessActor actor, DataSourceManagementSettings settings, CancellationToken ct) =>
+        actor.InHub ? await CanManageConnectionsAsync(apps, actor, ct) : settings.Enabled;
+
     public static async Task<bool> CanManageConnectionsAsync(Abstractions.ICurrentAppReader apps, AccessActor actor, CancellationToken ct) =>
         !actor.InHub || actor.IsSuperAdmin || CanManageConnections(await apps.GetCurrentAsync(ct), actor);
 }

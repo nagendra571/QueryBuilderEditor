@@ -16,7 +16,8 @@ public sealed class GetAdminDataSourceDetailQueryHandler(
     RecordLimitSettings recordLimitSettings,
     IConnectionSecretProtector protector,
     ICurrentUserService currentUser,
-    ICurrentAppReader apps)
+    ICurrentAppReader apps,
+    DataSourceManagementSettings settings)
     : IRequestHandler<GetAdminDataSourceDetailQuery, AdminDataSourceDetailDto>
 {
     public async Task<AdminDataSourceDetailDto> Handle(GetAdminDataSourceDetailQuery request, CancellationToken cancellationToken)
@@ -66,6 +67,6 @@ public sealed class GetAdminDataSourceDetailQueryHandler(
             usesMetadata,
             dataSource.LockedBySuperAdmin,
             DataSourceLock.CanEdit(dataSource, actor),
-            await DataSourceLock.CanManageConnectionsAsync(apps, actor, cancellationToken) && DataSourceLock.CanEdit(dataSource, actor));
+            await DataSourceLock.CanManageConnectionsAsync(apps, actor, settings, cancellationToken) && DataSourceLock.CanEdit(dataSource, actor));
     }
 }

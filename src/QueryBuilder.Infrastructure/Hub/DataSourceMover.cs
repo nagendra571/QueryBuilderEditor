@@ -18,7 +18,7 @@ internal sealed class DataSourceMover(AppDbContext db, ICurrentUserService user,
 {
     public async Task<MoveDataSourceResultDto> MoveAsync(Guid appId, Guid dataSourceId, Guid targetAppId, CancellationToken ct)
     {
-        var source = await db.DataSources.FirstOrDefaultAsync(d => d.Id == dataSourceId && d.AppId == appId, ct)
+        var source = await db.DataSources.AsNoTracking().FirstOrDefaultAsync(d => d.Id == dataSourceId && d.AppId == appId, ct)
             ?? throw new NotFoundException(nameof(DataSource), dataSourceId);
 
         // Default is the embedded-mode app and None the "no app" marker: neither is a place to hand a source to.
@@ -38,12 +38,38 @@ internal sealed class DataSourceMover(AppDbContext db, ICurrentUserService user,
                 "This data source is still used, so it can't move. Remove or repoint what uses it first.", counts);
         }
 
-        source.AppId = targetAppId;
-        source.UpdatedBy = user.UserId;
-        source.UpdatedAtUtc = clock.GetUtcNow();
+        // Same comparison as the name rule everywhere else (trimmed, ignoring case), but across the target app.
+        var targetNames = await db.DataSources.AsNoTracking().Where(d => d.AppId == targetAppId).Select(d => d.Name).ToListAsync(ct);
+        if (targetNames.Any(n => string.Equals(n, source.Name.Trim(), StringComparison.OrdinalIgnoreCase)))
+        {
+            throw new CatalogValidationException($"The app already has a data source named '{source.Name.Trim()}'.");
+        }
+
+        // The counts above can be stale by now, so the rewrite itself only matches a source nothing uses; the audit rows
+        // share its transaction.
+        var now = clock.GetUtcNow();
+        await using var transaction = await db.Database.BeginTransactionAsync(ct);
+        var rows = await db.DataSources
+            .Where(d => d.Id == dataSourceId && d.AppId == appId
+                && !db.SavedQueries.Any(q => q.DataSourceId == dataSourceId)
+                && !db.DataScopeRules.Any(r => r.DataSourceId == dataSourceId))
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(d => d.AppId, targetAppId)
+                .SetProperty(d => d.UpdatedBy, user.UserId)
+                .SetProperty(d => d.UpdatedAtUtc, now), ct);
+        if (rows == 0)
+        {
+            await transaction.RollbackAsync(ct);
+            _ = await db.DataSources.AsNoTracking().FirstOrDefaultAsync(d => d.Id == dataSourceId && d.AppId == appId, ct)
+                ?? throw new NotFoundException(nameof(DataSource), dataSourceId);
+            throw new InUseException(
+                "This data source is still used, so it can't move. Remove or repoint what uses it first.", await CountUsesAsync(source, ct));
+        }
+
         Audit(appId, source, $"Moved data source '{source.Name}' to app '{target.Name}'", new { to = target.Key, toAppId = targetAppId });
         Audit(targetAppId, source, $"Received data source '{source.Name}' from app '{from?.Name ?? appId.ToString()}'", new { from = from?.Key, fromAppId = appId });
         await db.SaveChangesAsync(ct);
+        await transaction.CommitAsync(ct);
 
         // Keyed by id alone and shared by every app: a copy left behind would still answer for the old app.
         cache.Remove($"catalog:{dataSourceId}");

@@ -199,7 +199,7 @@ public partial class DataSourceLockTests
     });
 
     [MetadataSqlFact]
-    public Task Lock_route_is_absent_in_embedded_mode() => HubApiHost.RunAsync(async env =>
+    public Task Lock_route_answers_404_in_embedded_mode() => HubApiHost.RunAsync(async env =>
     {
         var browser = env.NewBrowser();
         // No sessions exist in embedded mode; the handler itself answers 404 whoever asks.
@@ -217,7 +217,10 @@ public partial class DataSourceLockTests
         var management = await HubApiHost.Browser.JsonAsync(await admin.GetAsync($"{Api}/admin/data-source-management"));
         Assert.False(management.GetProperty("canManageConnections").GetBoolean());
         Assert.Equal(HttpStatusCode.Forbidden, (await admin.PostAsync($"{Api}/admin/data-sources", CreateBody("n"))).StatusCode);
-        Assert.Equal(HttpStatusCode.Forbidden, (await admin.PutAsync($"{Api}/admin/data-sources/{source.Id}", new { name = "n" })).StatusCode);
+        // A rename touches no connection, so the switch does not apply; changing the connection does need it.
+        Assert.Equal(HttpStatusCode.NoContent, (await admin.PutAsync($"{Api}/admin/data-sources/{source.Id}", new { name = "n-renamed" })).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await admin.PutAsync($"{Api}/admin/data-sources/{source.Id}",
+            new { name = "n", connection = new { host = "db.example", database = "d", username = "u", password = "p" } })).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, (await admin.PutAsync($"{Api}/admin/data-sources/{source.Id}/active", new { isActive = false })).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, (await admin.PostAsync($"{Api}/admin/data-sources/{source.Id}/test", null)).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, (await admin.PostAsync($"{Api}/admin/data-sources/test",
@@ -349,6 +352,12 @@ public partial class DataSourceLockTests
         Assert.Equal(HttpStatusCode.BadRequest, (await super.PostAsync(MoveUrl(env.AppA, source.Id), new { targetAppId = Guid.NewGuid() })).StatusCode);
         Assert.Equal(HttpStatusCode.BadRequest, (await super.PostAsync(MoveUrl(env.AppA, source.Id), new { targetAppId = disabled })).StatusCode);
         Assert.Equal(HttpStatusCode.BadRequest, (await super.PostAsync(MoveUrl(env.AppA, source.Id), new { targetAppId = env.AppA })).StatusCode);
+
+        // The target app already has a source of that name (compared trimmed, ignoring case).
+        await AddSourceAsync(env, env.AppB, "FREE");
+        var clash = await super.PostAsync(MoveUrl(env.AppA, source.Id), new { targetAppId = env.AppB });
+        Assert.Equal(HttpStatusCode.BadRequest, clash.StatusCode);
+        Assert.Contains("The app already has a data source named 'free'.", await clash.Content.ReadAsStringAsync());
 
         // An app admin, even of the source's own app, never reaches it.
         var admin = await AdminOf(env, env.AppA);

@@ -878,7 +878,7 @@ public class DataSourceManagementTests
     // ---- detail query -------------------------------------------------------------------------------------
 
     private static GetAdminDataSourceDetailQueryHandler DetailHandler(Rig rig, CatalogStub? catalog = null, IConnectionSecretProtector? protector = null) =>
-        new(rig.Repo, catalog ?? rig.Catalog, new RecordLimitSettings(null), protector ?? rig.Protector, new User(), new NoApp());
+        new(rig.Repo, catalog ?? rig.Catalog, new RecordLimitSettings(null), protector ?? rig.Protector, new User(), new NoApp(), rig.Settings);
 
     [Fact]
     public async Task Detail_returns_the_connection_without_the_password_and_without_the_sentinel()

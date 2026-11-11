@@ -97,7 +97,11 @@ public sealed class UpdateDataSourceCommandHandler(
             ?? throw new NotFoundException(nameof(DataSource), request.Id);
         var actor = AccessActor.From(currentUser);
         DataSourceLock.EnsureCanChange(dataSource, actor);
-        await DataSourceLock.EnsureCanManageConnectionsAsync(apps, actor, cancellationToken);
+        // The switch governs connections only: renaming an unlocked source needs no more than being an admin of its app.
+        if (request.Connection is not null)
+        {
+            await DataSourceLock.EnsureCanManageConnectionsAsync(apps, actor, cancellationToken);
+        }
 
         if (request.Connection is not null && !dataSource.IsManaged)
         {
