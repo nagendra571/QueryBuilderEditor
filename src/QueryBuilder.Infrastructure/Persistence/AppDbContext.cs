@@ -102,7 +102,7 @@ public sealed class AppDbContext : DbContext
                     continue;
                 }
 
-                RequireWritableApp();
+                RequireWritableApp(entry);
                 if (entry.State == EntityState.Added && owned.AppId == Guid.Empty)
                 {
                     owned.AppId = CurrentAppId;
@@ -126,11 +126,11 @@ public sealed class AppDbContext : DbContext
             else if (entry.Entity is not AuditLogEntry && !IsHubWide)
             {
                 // A future table that is not app-owned fails closed unless the context may write.
-                RequireWritableApp();
+                RequireWritableApp(entry);
             }
             else if (entry.Entity is AuditLogEntry audit && !IsHubWide)
             {
-                RequireWritableApp();
+                RequireWritableApp(entry);
                 if (entry.State == EntityState.Added && audit.AppId is null)
                 {
                     audit.AppId = CurrentAppId;
@@ -145,13 +145,14 @@ public sealed class AppDbContext : DbContext
 
     private CrossAppWriteException Refuse(string message, Microsoft.EntityFrameworkCore.ChangeTracking.EntityEntry entry) =>
         new(message, CurrentAppId, entry.Metadata.ClrType.Name,
-            entry.Metadata.FindPrimaryKey()?.Properties.Select(p => entry.Property(p.Name).CurrentValue?.ToString()).FirstOrDefault());
+            entry.Metadata.FindPrimaryKey()?.Properties.Select(p => entry.Property(p.Name).CurrentValue?.ToString()).FirstOrDefault(),
+            entry.Entity switch { IAppOwned owned => owned.AppId, AuditLogEntry audit => audit.AppId, _ => null });
 
-    private void RequireWritableApp()
+    private void RequireWritableApp(Microsoft.EntityFrameworkCore.ChangeTracking.EntityEntry entry)
     {
         if (CurrentAppId == App.NoneId)
         {
-            throw new CrossAppWriteException("No app is selected, so nothing can be written.", CurrentAppId);
+            throw Refuse("No app is selected, so nothing can be written.", entry);
         }
     }
 

@@ -9,6 +9,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using QueryBuilder.Domain.Entities;
@@ -133,6 +134,8 @@ internal sealed class HubApiHost : IAsyncDisposable
             env.Host = await new HostBuilder().ConfigureWebHost(web =>
             {
                 web.UseTestServer();
+                // A named connection string lets a test data source query the metadata database itself (see dbo.v in the matrix test).
+                web.ConfigureAppConfiguration((_, config) => config.AddInMemoryCollection(new Dictionary<string, string?> { ["ConnectionStrings:biz"] = connectionString }));
                 web.ConfigureServices(services =>
                 {
                     services.AddRouting();

@@ -23,11 +23,21 @@ public sealed class GlobalExceptionHandler(ILogger<GlobalExceptionHandler> logge
         if (exception is CrossAppWriteException crossApp)
         {
             // The caller sees a plain 404; operators need to know someone reached for another app's row.
-            var actor = httpContext.RequestServices is { } services
-                ? Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetService<Application.Abstractions.ICurrentUserService>(services)?.UserId
-                : null;
-            logger.LogWarning("Refused a write across apps: app {AppId}, actor {Actor}, {EntityType} {EntityId}",
-                crossApp.AppId, actor, crossApp.EntityType, crossApp.EntityId);
+            // A host resolver that throws must not turn the 404 into a 500.
+            string? actor = null;
+            try
+            {
+                actor = httpContext.RequestServices is { } services
+                    ? Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetService<Application.Abstractions.ICurrentUserService>(services)?.UserId
+                    : null;
+            }
+            catch (Exception)
+            {
+                actor = "(unknown)";
+            }
+
+            logger.LogWarning("Refused a write across apps: app {AppId}, actor {Actor}, {EntityType} {EntityId}, target row app {RowAppId}",
+                crossApp.AppId, actor, crossApp.EntityType, crossApp.EntityId, crossApp.RowAppId);
         }
 
         var problemDetails = new ProblemDetails

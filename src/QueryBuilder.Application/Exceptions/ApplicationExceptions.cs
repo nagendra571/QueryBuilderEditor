@@ -27,10 +27,11 @@ public sealed class RecordLimitExceededException(string message) : Exception(mes
 public sealed class ConcurrencyConflictException(string message) : Exception(message);
 
 /// <summary>A write named a row of another app, or no app at all. Callers treat it as not found.</summary>
-public sealed class CrossAppWriteException(string message, Guid? appId = null, string? entityType = null, string? entityId = null) : Exception(message)
+public sealed class CrossAppWriteException(string message, Guid? appId = null, string? entityType = null, string? entityId = null, Guid? rowAppId = null) : Exception(message)
 {
     // Only identifiers, never row contents: this is what the Warning log may say about a refused write.
     public Guid? AppId { get; } = appId;
     public string? EntityType { get; } = entityType;
     public string? EntityId { get; } = entityId;
+    public Guid? RowAppId { get; } = rowAppId;
 }
