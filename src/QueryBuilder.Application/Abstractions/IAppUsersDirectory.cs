@@ -1,6 +1,12 @@
 namespace QueryBuilder.Application.Abstractions;
 
-public sealed record AppUserDto(string Id, string DisplayName, string? Email);
+public sealed record AppUserDto(
+    string Id,
+    string DisplayName,
+    string? Email,
+    // Hub mode only ("launch" or "directory"); left out of embedded JSON so its shape never changes.
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    string? Source = null);
 
 public sealed record AppUsersResult(bool Available, List<AppUserDto> Users);
 

@@ -253,6 +253,8 @@ export interface AppUserDto {
   id: string
   displayName: string
   email?: string | null
+  /** Hub mode only: launched into the app, or listed by the data source's AppUsers view. */
+  source?: 'launch' | 'directory'
 }
 
 export interface AppUsersResult {

@@ -85,6 +85,12 @@ public class AppAdminVisibilityTests
         var s = await SeedAsync(env, env.AppA);
         var admin = env.NewBrowser();
         await admin.SignInAppAsync(env.AppA, HubRole.Admin, "boss");
+        await using (var seeding = env.HubWideDb())
+        {
+            // A share target must be a known person of the app (hub mode).
+            seeding.SeenUsers.Add(new SeenUser { AppId = env.AppA, UserId = "dave", Name = "Dave", Email = "dave@x" });
+            await seeding.SaveChangesAsync();
+        }
 
         Assert.Equal(HttpStatusCode.OK, await admin.StatusAsync($"{Api}/queries/{s.Query}/shares"));
         Assert.Equal(HttpStatusCode.OK, await admin.StatusAsync($"{Api}/dashboards/{s.Dashboard}/shares"));

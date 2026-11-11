@@ -14,7 +14,9 @@ public sealed record ShareQueryCommand(
     Guid SavedQueryId,
     string SharedWithUserId,
     string SharedWithUserEmail,
-    QueryAccessLevel AccessLevel) : IRequest<Guid>;
+    QueryAccessLevel AccessLevel,
+    // Set only by the dashboard share, which has already checked the person against every data source it uses.
+    bool TargetChecked = false) : IRequest<Guid>;
 
 public sealed class ShareQueryCommandValidator : AbstractValidator<ShareQueryCommand>
 {
@@ -30,7 +32,7 @@ public sealed class ShareQueryCommandValidator : AbstractValidator<ShareQueryCom
 }
 
 public sealed class ShareQueryCommandHandler(
-    ISavedQueryRepository repository, ICurrentUserService currentUser, IAuditLogger auditLogger)
+    ISavedQueryRepository repository, ICurrentUserService currentUser, IAuditLogger auditLogger, Hub.ShareTargets targets)
     : IRequestHandler<ShareQueryCommand, Guid>
 {
     public async Task<Guid> Handle(ShareQueryCommand request, CancellationToken cancellationToken)
@@ -46,6 +48,12 @@ public sealed class ShareQueryCommandHandler(
         if (request.SharedWithUserId == query.OwnerId)
         {
             throw new CatalogValidationException("The owner already has full access — no need to share with themselves.");
+        }
+
+        if (AccessActor.From(currentUser).InHub && !request.TargetChecked
+            && !await targets.IsKnownAsync(request.SharedWithUserId, [query.DataSourceId], cancellationToken))
+        {
+            throw new ValidationException(Hub.ShareTargets.NotKnownMessage);
         }
 
         var share = query.Shares.FirstOrDefault(s => s.SharedWithUserId == request.SharedWithUserId);

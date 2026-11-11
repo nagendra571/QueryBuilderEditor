@@ -379,7 +379,7 @@ public class DashboardTests
         var f = new DashFixture();
         var stray = new SavedQuery { Name = "Stray", OwnerId = DashFixture.Owner, DataSourceId = TestData.DataSourceId };
         var queries = new DashFixture.FakeQueries(f.QuerySecret, f.QueryOpen, stray);
-        var handler = new ShareDashboardCommandHandler(f.Dashboards, queries, new QueryBuilder.Application.Commands.SavedQueries.ShareQueryCommandHandler(queries, f.User, f.Audit), f.User, f.Audit);
+        var handler = new ShareDashboardCommandHandler(f.Dashboards, queries, new QueryBuilder.Application.Commands.SavedQueries.ShareQueryCommandHandler(queries, f.User, f.Audit, new QueryBuilder.Application.Hub.ShareTargets(null!, null!)), f.User, f.Audit, new QueryBuilder.Application.Hub.ShareTargets(null!, null!));
 
         await Assert.ThrowsAsync<CatalogValidationException>(() => handler.Handle(
             new ShareDashboardCommand(f.Dashboard.Id, "newbie", "n@x.com", QueryAccessLevel.Viewer, [f.QuerySecret.Id, stray.Id]), default));

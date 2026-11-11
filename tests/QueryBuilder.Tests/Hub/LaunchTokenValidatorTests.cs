@@ -446,6 +446,38 @@ public class LaunchTokenValidatorTests
         Assert.Contains("future", jtis);
     });
 
+    private static async Task SeeAsync(Env env, Guid app, string userId)
+    {
+        await using var db = new AppDbContext(env.Options, new FixedAppContext(App.NoneId, hubWide: true));
+        db.SeenUsers.Add(new SeenUser { AppId = app, UserId = userId });
+        await db.SaveChangesAsync();
+    }
+
+    [MetadataSqlFact]
+    public Task Launch_with_id_differing_only_by_case_is_refused() => RunAsync(async env =>
+    {
+        await SeeAsync(env, env.AppA, "User-1");
+        var jti = Guid.NewGuid().ToString("N");
+        await ExpectAsync(env, env.Token(c => { c["sub"] = "user-1"; c["jti"] = jti; }), LaunchRefusalReason.UserIdCaseConflict, env.AppA);
+
+        // The refused token did not burn its id.
+        Assert.Null((await env.Validate(env.Token(c => { c["sub"] = "User-1"; c["jti"] = jti; }))).Refusal);
+    });
+
+    [MetadataSqlFact]
+    public Task Same_id_relaunch_is_accepted() => RunAsync(async env =>
+    {
+        await SeeAsync(env, env.AppA, "user-1");
+        Assert.Null((await env.Validate(env.Token())).Refusal);
+    });
+
+    [MetadataSqlFact]
+    public Task Same_id_in_another_app_with_other_case_is_accepted() => RunAsync(async env =>
+    {
+        await SeeAsync(env, env.AppB, "USER-1");
+        Assert.Null((await env.Validate(env.Token())).Refusal);
+    });
+
     [MetadataSqlFact]
     public Task The_hub_wide_factory_scope_ignores_the_callers_app() => RunAsync(async env =>
     {

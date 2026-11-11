@@ -44,6 +44,11 @@ public static class EndpointRouteBuilderExtensions
         }
 
         group.MapDataSourceEndpoints();
+        if (options.Hub.Enabled)
+        {
+            group.MapPeopleEndpoints();
+        }
+
         group.MapSavedQueryEndpoints();
         group.MapParameterEndpoints();
         group.MapVisualizationEndpoints();

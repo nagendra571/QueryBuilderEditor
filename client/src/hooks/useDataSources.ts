@@ -22,3 +22,13 @@ export function useAppUsers(dataSourceId: string | undefined) {
     staleTime: 60_000,
   })
 }
+
+/** Hub mode: dashboards have no single data source, so their share dialog lists the people launched into the app. */
+export function usePeople(enabled: boolean) {
+  return useQuery({
+    queryKey: ['people'],
+    queryFn: dataSourcesApi.people,
+    enabled,
+    staleTime: 60_000,
+  })
+}

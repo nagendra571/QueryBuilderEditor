@@ -94,6 +94,7 @@ public static class DependencyInjection
         services.AddSingleton<ICatalogReader, PostgresCatalogReader>();
         services.AddScoped<IDataCatalogService, DataCatalogService>();
         services.AddScoped<IAppUsersDirectory, AppUsersDirectory>();
+        services.AddScoped<ISeenUserDirectory, SeenUserDirectory>();
 
         services.AddSingleton<IQuerySqlBuilder, SqlServerQuerySqlBuilder>();
         services.AddSingleton<IQuerySqlBuilder, PostgresQuerySqlBuilder>();

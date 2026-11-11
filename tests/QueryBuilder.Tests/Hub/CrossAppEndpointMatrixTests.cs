@@ -156,6 +156,7 @@ public partial class CrossAppEndpointMatrixTests
         ["POST /api/dashboards"] = (_, _) => [Post("create dashboard", "/api/dashboards", new { name = "mine", description = "x" })],
         ["GET /api/data-sources"] = (_, _) => [Get("sources", "/api/data-sources")],
         ["GET /api/me"] = (_, _) => [Get("me", "/api/me")],
+        ["GET /api/people"] = (_, _) => [Get("people", "/api/people")],
         ["POST /api/parameters/options"] = (a, _) =>
         [
             Post("param options A query", "/api/parameters/options", ParamOptionsBody(a, a.Query), Expect.Refused,

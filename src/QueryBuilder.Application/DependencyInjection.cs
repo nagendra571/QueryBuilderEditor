@@ -19,6 +19,7 @@ public static class DependencyInjection
         services.AddScoped<IDataScopeGuard, DataScopeGuard>();
         services.TryAddSingleton(TimeProvider.System);
         services.AddScoped<IParameterBinder, ParameterBinder>();
+        services.AddScoped<Hub.ShareTargets>();
         services.AddScoped<IParameterOptionsService, ParameterOptionsService>();
         services.AddScoped<Dashboards.IDashboardGrant, Dashboards.DashboardGrant>();
         services.AddScoped<Dashboards.DashboardGrantResolver>();

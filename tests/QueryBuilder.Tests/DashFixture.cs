@@ -125,7 +125,7 @@ internal sealed class DashFixture
     }
 
     public ShareDashboardCommandHandler ShareHandler() =>
-        new(Dashboards, Queries, new ShareQueryCommandHandler(Queries, User, Audit), User, Audit);
+        new(Dashboards, Queries, new ShareQueryCommandHandler(Queries, User, Audit, new QueryBuilder.Application.Hub.ShareTargets(null!, null!)), User, Audit, new QueryBuilder.Application.Hub.ShareTargets(null!, null!));
 
     public sealed class FakeQueries(params SavedQuery[] items) : ISavedQueryRepository
     {

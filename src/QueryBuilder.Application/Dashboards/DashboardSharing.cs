@@ -57,7 +57,8 @@ public sealed class ShareDashboardCommandHandler(
     ISavedQueryRepository savedQueries,
     IRequestHandler<ShareQueryCommand, Guid> shareQuery,
     ICurrentUserService currentUser,
-    IAuditLogger auditLogger)
+    IAuditLogger auditLogger,
+    Hub.ShareTargets targets)
     : IRequestHandler<ShareDashboardCommand, Guid>
 {
     public async Task<Guid> Handle(ShareDashboardCommand request, CancellationToken cancellationToken)
@@ -78,6 +79,16 @@ public sealed class ShareDashboardCommandHandler(
         }
 
         // Every id is checked before anything is written, so one bad id shares nothing.
+        if (actor.InHub)
+        {
+            var sourceIds = dashboard.Tiles.Where(t => t.Visualization?.SavedQuery is not null)
+                .Select(t => t.Visualization!.SavedQuery!.DataSourceId);
+            if (!await targets.IsKnownAsync(request.SharedWithUserId, sourceIds, cancellationToken))
+            {
+                throw new ValidationException(Hub.ShareTargets.NotKnownMessage);
+            }
+        }
+
         var onDashboard = dashboard.Tiles
             .Where(t => t.Visualization is not null)
             .Select(t => t.Visualization!.SavedQueryId)
@@ -138,7 +149,7 @@ public sealed class ShareDashboardCommandHandler(
             }
 
             await shareQuery.Handle(
-                new ShareQueryCommand(query.Id, request.SharedWithUserId, request.SharedWithUserEmail, QueryAccessLevel.Viewer),
+                new ShareQueryCommand(query.Id, request.SharedWithUserId, request.SharedWithUserEmail, QueryAccessLevel.Viewer, TargetChecked: true),
                 cancellationToken);
         }
 

@@ -235,6 +235,17 @@ public sealed class LaunchTokenValidator : ILaunchTokenValidator
             }
         }
 
+        // The hub-wide context sees every app's rows, so the app is named explicitly. The column collation ignores
+        // case, so ids are compared exactly in code: two users differing only by case would share each other's queries.
+        var sameIgnoringCase = await db.SeenUsers.AsNoTracking()
+            .Where(u => u.AppId == app.Id && u.UserId == sub)
+            .Select(u => u.UserId)
+            .ToListAsync(ct);
+        if (sameIgnoringCase.Any(u => !string.Equals(u, sub, StringComparison.Ordinal)))
+        {
+            return Refuse(LaunchRefusalReason.UserIdCaseConflict);
+        }
+
         var expiresUtc = DateTimeOffset.FromUnixTimeSeconds(exp);
 
         // Last, so a token refused for any other reason does not burn its id.

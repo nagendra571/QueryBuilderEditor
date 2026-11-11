@@ -12,7 +12,8 @@ import {
   useRemoveDashboardShare,
   useShareDashboard,
 } from '@/hooks/useDashboards'
-import { useAppUsers, useDataSources } from '@/hooks/useDataSources'
+import { useAppUsers, useDataSources, usePeople } from '@/hooks/useDataSources'
+import { useMe } from '@/hooks/useMe'
 import type { AppUserDto, QueryAccessLevel } from '@/types'
 
 export function ShareDashboardDialog({
@@ -31,7 +32,14 @@ export function ShareDashboardDialog({
   const [chosenSource, setChosenSource] = useState<string | null>(null)
   const dataSourceId = chosenSource ?? dataSources?.[0]?.id
 
-  const { data: appUsers, isLoading: usersLoading } = useAppUsers(dataSourceId)
+  // Under the hub people come from the app's launches; the server also accepts people from the AppUsers views of the
+  // data sources behind the dashboard's charts, but this list does not offer them.
+  const { data: me } = useMe()
+  const hub = !!me?.permissions
+  const directory = useAppUsers(hub ? undefined : dataSourceId)
+  const people = usePeople(hub)
+  const appUsers = hub ? (people.data ? { available: true, users: people.data } : undefined) : directory.data
+  const usersLoading = hub ? people.isLoading : directory.isLoading
   const { data: shares, isLoading: sharesLoading } = useDashboardShares(open ? dashboardId : undefined)
   const shareMutation = useShareDashboard(dashboardId)
   const removeMutation = useRemoveDashboardShare(dashboardId)
@@ -98,7 +106,7 @@ export function ShareDashboardDialog({
           </div>
         )}
 
-        {dataSources && dataSources.length > 1 && (
+        {!hub && dataSources && dataSources.length > 1 && (
           <div className="flex items-center gap-2">
             <Label className="shrink-0 text-xs">People from</Label>
             <Select

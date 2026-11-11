@@ -10,6 +10,7 @@ import type {
   EncryptionKeyStatusDto,
   ReencryptResultDto,
   AdminDataSourceSummaryDto,
+  AppUserDto,
   AppUsersResult,
   AuditLogEntryDto,
   DataSourceCatalog,
@@ -50,6 +51,8 @@ export const dataSourcesApi = {
     (await apiClient.get(`/data-sources/${dataSourceId}/catalog`)).data,
   appUsers: async (dataSourceId: string): Promise<AppUsersResult> =>
     (await apiClient.get(`/data-sources/${dataSourceId}/app-users`)).data,
+  /** Hub mode only: the people launched into the caller's app. */
+  people: async (): Promise<AppUserDto[]> => (await apiClient.get('/people')).data,
 }
 
 export const savedQueriesApi = {

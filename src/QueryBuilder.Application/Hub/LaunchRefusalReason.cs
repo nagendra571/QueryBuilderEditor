@@ -5,5 +5,6 @@ public enum LaunchRefusalReason
 {
     Malformed, UnknownApp, AppDisabled, UnknownKey, RevokedKey, BadSignature, AlgorithmNotAllowed, WrongAudience,
     Expired, NotYetValid, LifetimeTooLong, Replayed, MissingClaim, UnknownRole, ReturnUrlNotRegistered,
-    UndeclaredScopeKey, ScopeMissing, ScopeAndUnrestricted, ScopeTooLarge
+    UndeclaredScopeKey, ScopeMissing, ScopeAndUnrestricted, ScopeTooLarge,
+    UserIdCaseConflict
 }

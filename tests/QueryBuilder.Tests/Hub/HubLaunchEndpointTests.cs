@@ -263,6 +263,19 @@ public class HubLaunchEndpointTests
     });
 
     [MetadataSqlFact]
+    public Task A_launch_whose_id_differs_only_by_case_is_refused_and_audited_in_the_app() => RunAsync(async env =>
+    {
+        Assert.Equal(HttpStatusCode.SeeOther, (await env.LaunchAsync(env.TokenA("User-1"))).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await env.LaunchAsync(env.TokenA("user-1"))).StatusCode);
+
+        await using var db = env.Db();
+        var refused = await db.AuditLogEntries.SingleAsync(a => a.Action == AuditAction.LaunchRefused);
+        Assert.Equal(env.AppA, refused.AppId);
+        Assert.Contains("UserIdCaseConflict", refused.DetailsJson);
+        Assert.Single(await db.SeenUsers.IgnoreQueryFilters().ToListAsync());
+    });
+
+    [MetadataSqlFact]
     public Task A_replayed_launch_is_refused_without_an_error_in_the_log() => RunAsync(async env =>
     {
         var token = env.TokenA();
