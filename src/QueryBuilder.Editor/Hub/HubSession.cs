@@ -27,6 +27,9 @@ internal static class HubSession
     public const string Issued = "qb:issued";
     public const string Viewing = "qb:viewing";
     public const string ObjectId = "qb:oid";
+    public const string MatchKind = "qb:match-kind";
+    public const string MatchValue = "qb:match-value";
+    public const string TenantId = "qb:tid";
 
     public const string AppKind = "app";
     public const string SuperKind = "super";
@@ -50,13 +53,18 @@ internal static class HubSession
         return Principal(claims);
     }
 
-    public static ClaimsPrincipal ForSuperAdmin(string objectId, string? name, string? email, Guid? viewingAppId, DateTimeOffset issuedAt)
+    public static ClaimsPrincipal ForSuperAdmin(string objectId, string? name, string? email, Guid? viewingAppId, DateTimeOffset issuedAt,
+        SuperAdminMatchKind matchKind, string matchValue, string tenantId)
     {
         var claims = new List<Claim>
         {
             new(Kind, SuperKind),
             new(ObjectId, objectId),
             new(Issued, issuedAt.ToUnixTimeSeconds().ToString()),
+            // What matched the allowlist, so every request can check it is still there.
+            new(MatchKind, matchKind.ToString()),
+            new(MatchValue, matchValue),
+            new(TenantId, tenantId),
         };
         AddIfPresent(claims, Name, name);
         AddIfPresent(claims, Email, email);
@@ -116,6 +124,14 @@ internal static class HubSession
         return null;
     }
 
+    public static bool TryReadSuperMatch(ClaimsPrincipal principal, out SuperAdminMatchKind kind, out string value, out string tenantId)
+    {
+        value = principal.FindFirst(MatchValue)?.Value ?? "";
+        tenantId = principal.FindFirst(TenantId)?.Value ?? "";
+        return Enum.TryParse(principal.FindFirst(MatchKind)?.Value, out kind) && Enum.IsDefined(kind)
+            && value.Length > 0 && tenantId.Length > 0;
+    }
+
     public static bool TryReadIssued(ClaimsPrincipal principal, out DateTimeOffset issuedAt)
     {
         issuedAt = default;
@@ -136,7 +152,7 @@ internal static class HubSession
     }
 
     private static string SerializeScope(ResolvedDataScope scope) =>
-        scope.IsUnrestricted ? UnrestrictedScope : JsonSerializer.Serialize(scope.Values, QueryBuilderJson.Options);
+        scope.SerializeForSession();
 
     private static bool TryParseScope(string? raw, out ResolvedDataScope scope)
     {

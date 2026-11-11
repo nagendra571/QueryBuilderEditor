@@ -108,7 +108,16 @@ unknown/disabled app; unknown `kid`; bad signature; algorithm not RS256/ES256; w
 or lifetime > 120 s; `jti` already used (replay store keeps ids until expiry + skew); missing `sub`/`role`; unknown
 role; `returnUrl` not registered; a scope key the app hasn't declared; neither `scope` nor `unrestricted`;
 `scope` and `unrestricted=true` both present; a scope value list that's empty or over limits (≤ 20 keys,
-≤ 1,000 values per key, value ≤ 200 chars).
+≤ 1,000 values per key, value ≤ 200 chars); a scope whose serialised form, as the session stores it, exceeds
+6 KB (6,144 UTF-8 bytes, about 150-300 values), because the session rides in a cookie sent on every request.
+
+**Session limits (cookie sessions, decided by the product owner).** An app's sessions end when the app is turned
+off (and stay ended if it is turned back on) or when one of its signing keys is revoked: the registry stamps
+`Apps.SessionsValidAfterUtc`, and a session issued before the stamp is refused (checked per request, cached at most
+30 s). The session does not record which key signed its launch, so a revoke ends every session of that app.
+A super admin session records what matched the allowlist (kind, value, tenant id) and every request re-checks it
+against the current `Hub.SuperAdmins` options; options are fixed per process, so this models "removed from the
+config, then restarted" (live reload via `IOptionsMonitor` is not used).
 
 A declared key absent from `scope` means *no value* for that key → views mapped to it return no rows (existing
 fail-closed rule).

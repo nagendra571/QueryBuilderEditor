@@ -57,22 +57,35 @@ internal static class HubSessionCookie
         return Task.CompletedTask;
     }
 
+    // Rounded up: a session issued in the same second as the stamp cannot be told apart from one issued just before it,
+    // so it ends too (the holder launches again).
+    private static long CeilingSeconds(DateTimeOffset at) =>
+        at.ToUnixTimeSeconds() + (at.UtcTicks % TimeSpan.TicksPerSecond == 0 ? 0 : 1);
+
     private static async Task ValidateAsync(CookieValidatePrincipalContext context, HubOptions hub)
     {
         var services = context.HttpContext.RequestServices;
         var clock = services.GetRequiredService<TimeProvider>();
 
+        var issuedAt = default(DateTimeOffset);
         var session = HubSession.TryRead(context.Principal);
         var valid = session is not null
             && context.Principal is not null
-            && HubSession.TryReadIssued(context.Principal, out var issuedAt)
+            && HubSession.TryReadIssued(context.Principal, out issuedAt)
             && clock.GetUtcNow() - issuedAt <= hub.AbsoluteLifetime;
 
         // A super admin is not tied to an app; an app session ends the moment its app is gone or turned off.
         if (valid && session is { IsSuperAdmin: false, AppId: { } appId })
         {
-            valid = await services.GetRequiredService<HubAppEnabledCache>()
-                .IsEnabledAsync(appId, context.HttpContext.RequestAborted);
+            var state = await services.GetRequiredService<HubAppEnabledCache>()
+                .GetAsync(appId, context.HttpContext.RequestAborted);
+            valid = state is { Enabled: true }
+                && (state.SessionsValidAfterUtc is not { } after || issuedAt.ToUnixTimeSeconds() >= CeilingSeconds(after));
+        }
+        else if (valid && session is { IsSuperAdmin: true })
+        {
+            valid = HubSession.TryReadSuperMatch(context.Principal!, out var kind, out var value, out var tenant)
+                && SuperAdminRecognizer.StillAllowed(kind, value, tenant, hub.SuperAdmins);
         }
 
         if (!valid)
@@ -89,37 +102,42 @@ internal static class HubSessionCookie
 }
 
 /// <summary>
-/// Whether an app is still there and enabled, remembered for at most 30 seconds so a disabled app's sessions end
-/// quickly without a database read on every request. The read goes through a hub-wide scope of its own: using the
-/// request's context here would fix the request's app before its session had been read.
+/// Whether an app is still there and enabled, and when its sessions became invalid, remembered for at most 30 seconds so
+/// a disabled app's (or a revoked key's) sessions end quickly without a database read on every request. The read goes
+/// through a hub-wide scope of its own: using the request's context here would fix the request's app before its
+/// session had been read.
 /// </summary>
 internal sealed class HubAppEnabledCache(IHubWideScopeFactory hubWide, IMemoryCache cache, TimeProvider clock)
 {
     public static readonly TimeSpan MaxAge = TimeSpan.FromSeconds(30);
 
-    private sealed record Entry(bool Enabled, DateTimeOffset CheckedAt);
+    internal sealed record AppSessionState(bool Enabled, DateTimeOffset? SessionsValidAfterUtc);
 
-    public async Task<bool> IsEnabledAsync(Guid appId, CancellationToken cancellationToken)
+    private sealed record Entry(AppSessionState State, DateTimeOffset CheckedAt);
+
+    public async Task<AppSessionState> GetAsync(Guid appId, CancellationToken cancellationToken)
     {
         var now = clock.GetUtcNow();
-        var key = $"qb:hub:app-enabled:{appId}";
+        var key = $"qb:hub:app-state:{appId}";
 
         // The age is compared against the injected clock (not only the cache's own expiry) so tests, and any
         // host that substitutes TimeProvider, see the same 30 s bound.
         if (cache.TryGetValue(key, out Entry? entry) && entry is not null && now - entry.CheckedAt < MaxAge)
         {
-            return entry.Enabled;
+            return entry.State;
         }
 
-        bool enabled;
+        AppSessionState state;
         await using (var scope = hubWide.Create())
         {
             var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-            enabled = await db.Apps.AsNoTracking().AnyAsync(a => a.Id == appId && a.IsEnabled, cancellationToken);
+            state = await db.Apps.AsNoTracking().Where(a => a.Id == appId)
+                .Select(a => new AppSessionState(a.IsEnabled, a.SessionsValidAfterUtc))
+                .FirstOrDefaultAsync(cancellationToken) ?? new AppSessionState(false, null);
         }
 
-        cache.Set(key, new Entry(enabled, now), MaxAge);
-        return enabled;
+        cache.Set(key, new Entry(state, now), MaxAge);
+        return state;
     }
 }
 

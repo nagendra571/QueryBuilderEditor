@@ -17,6 +17,9 @@ public sealed class App : IHubRegistryRecord
 
     public string Name { get; set; } = string.Empty;
     public bool IsEnabled { get; set; } = true;
+    /// <summary>Set when the app is turned off or one of its signing keys is revoked: sessions issued before it end.</summary>
+    public DateTimeOffset? SessionsValidAfterUtc { get; set; }
+
     public DateTimeOffset CreatedAtUtc { get; set; } = DateTimeOffset.UtcNow;
 
     /// <summary>Scope keys the app declares itself (hub mode has no host options); a data source may add its own.</summary>

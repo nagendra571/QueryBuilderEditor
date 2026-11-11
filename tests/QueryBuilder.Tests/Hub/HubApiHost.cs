@@ -39,6 +39,20 @@ internal sealed class HubApiHost : IAsyncDisposable
     {
         private readonly Dictionary<string, string> _jar = new();
 
+        /// <summary>The same cookies, sent to a restarted host.</summary>
+        public Browser MovedTo(HttpClient other)
+        {
+            var moved = new Browser(other);
+            foreach (var pair in _jar)
+            {
+                moved._jar[pair.Key] = pair.Value;
+            }
+
+            return moved;
+        }
+
+        public IReadOnlyDictionary<string, string> Cookies => _jar;
+
         public async Task<HttpResponseMessage> SendAsync(HttpMethod method, string url, object? body = null, bool csrf = true)
         {
             var request = new HttpRequestMessage(method, url);
@@ -92,6 +106,9 @@ internal sealed class HubApiHost : IAsyncDisposable
         public async Task SignInSuperAsync(Guid? viewing = null) =>
             Assert.Equal(HttpStatusCode.OK, (await GetAsync($"/querybuilder/test/signin?kind=super&oid=admin-oid{(viewing is { } v ? $"&viewing={v}" : "")}")).StatusCode);
 
+        public async Task SignInSuperMatchedAsync(string kind, string value, string tenant = "tenant-1") =>
+            Assert.Equal(HttpStatusCode.OK, (await GetAsync($"/querybuilder/test/signin?kind=super&oid=admin-oid&mkind={kind}&mvalue={Uri.EscapeDataString(value)}&tid={tenant}")).StatusCode);
+
         public static async Task<JsonElement> JsonAsync(HttpResponseMessage response)
         {
             using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
@@ -104,7 +121,17 @@ internal sealed class HubApiHost : IAsyncDisposable
     public FakeClock Clock = new(DateTimeOffset.UtcNow);
     public DbContextOptions<AppDbContext> Options = null!;
     public IHost Host = null!;
+    public string ConnectionString = null!;
+    private bool _hub;
     private readonly List<HttpClient> _clients = [];
+
+    /// <summary>Stops the host and starts another on the same database (so the same Data Protection key ring) with other options.</summary>
+    public async Task RestartAsync(Action<QueryBuilderEditorOptions>? configure)
+    {
+        await Host.StopAsync();
+        Host.Dispose();
+        Host = await StartHostAsync(configure);
+    }
 
     public Browser NewBrowser()
     {
@@ -118,7 +145,7 @@ internal sealed class HubApiHost : IAsyncDisposable
     public static Task RunAsync(Func<HubApiHost, Task> body, bool hub = true, Action<QueryBuilderEditorOptions>? configure = null) =>
         MetadataDb.WithDatabaseAsync(async (options, connectionString) =>
         {
-            var env = new HubApiHost { Options = options };
+            var env = new HubApiHost { Options = options, ConnectionString = connectionString, _hub = hub };
             await using (var db = env.HubWideDb())
             {
                 db.MetadataSettings.Add(new MetadataSetting { Key = "Mode", Value = hub ? "Hub" : "Embedded" });
@@ -131,7 +158,21 @@ internal sealed class HubApiHost : IAsyncDisposable
                 await db.SaveChangesAsync();
             }
 
-            env.Host = await new HostBuilder().ConfigureWebHost(web =>
+            env.Host = await env.StartHostAsync(configure);
+
+            await using (env)
+            {
+                await body(env);
+            }
+        });
+
+    private async Task<IHost> StartHostAsync(Action<QueryBuilderEditorOptions>? configure)
+    {
+        var env = this;
+        var hub = _hub;
+        var connectionString = ConnectionString;
+        {
+            return await new HostBuilder().ConfigureWebHost(web =>
             {
                 web.UseTestServer();
                 // A named connection string lets a test data source query the metadata database itself (see dbo.v in the matrix test).
@@ -167,7 +208,7 @@ internal sealed class HubApiHost : IAsyncDisposable
                             var q = ctx.Request.Query;
                             var now = clock.GetUtcNow();
                             var principal = q["kind"] == "super"
-                                ? HubSession.ForSuperAdmin(q["oid"]!, "Super", "s@x", q.ContainsKey("viewing") ? Guid.Parse(q["viewing"]!) : null, now)
+                                ? HubSession.ForSuperAdmin(q["oid"]!, "Super", "s@x", q.ContainsKey("viewing") ? Guid.Parse(q["viewing"]!) : null, now, Enum.Parse<SuperAdminMatchKind>(q["mkind"].FirstOrDefault() ?? "ObjectId"), q["mvalue"].FirstOrDefault() ?? q["oid"]!, q["tid"].FirstOrDefault() ?? "tenant-1")
                                 : HubSession.ForApp(Guid.Parse(q["app"]!), q["user"]!, "Name", "u@x", Enum.Parse<HubRole>(q["role"]!),
                                     QueryBuilder.Application.Abstractions.ResolvedDataScope.Unrestricted, "/back", now);
                             await Microsoft.AspNetCore.Authentication.AuthenticationHttpContextExtensions.SignInAsync(ctx, HubSession.Scheme, principal);
@@ -176,12 +217,8 @@ internal sealed class HubApiHost : IAsyncDisposable
                     });
                 });
             }).StartAsync();
-
-            await using (env)
-            {
-                await body(env);
-            }
-        });
+        }
+    }
 
     public async ValueTask DisposeAsync()
     {

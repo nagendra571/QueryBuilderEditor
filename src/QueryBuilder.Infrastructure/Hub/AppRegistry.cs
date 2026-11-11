@@ -50,6 +50,12 @@ internal sealed class AppRegistry(AppDbContext db, ICurrentUserService user, IHt
         var app = await FindAsync(id, ct, allowDefault: true);
         var before = new { name = app.Name, isEnabled = app.IsEnabled, scopeKeys = app.ScopeKeys.ToList() };
 
+        // Turning an app off ends its sessions for good: turning it back on must not revive them.
+        if (app.IsEnabled && !isEnabled)
+        {
+            app.SessionsValidAfterUtc = clock.GetUtcNow();
+        }
+
         app.Name = name;
         app.IsEnabled = isEnabled;
         app.ScopeKeys = scopeKeys;
@@ -90,6 +96,8 @@ internal sealed class AppRegistry(AppDbContext db, ICurrentUserService user, IHt
         }
 
         key.RevokedAtUtc = clock.GetUtcNow();
+        // A session does not record which key signed its launch, so every session of the app ends.
+        app.SessionsValidAfterUtc = key.RevokedAtUtc;
         Audit(app, $"Revoked signing key '{kid}' of '{app.Key}'",
             new { revoked = new { kid, key.Algorithm, fingerprint = RegistryRules.FingerprintOrNull(key.Algorithm, key.PublicKeyPem) } });
         await SaveAsync(ct);

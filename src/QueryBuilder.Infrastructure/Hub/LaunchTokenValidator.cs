@@ -25,6 +25,8 @@ public sealed class LaunchTokenValidator : ILaunchTokenValidator
     public const int MaxScopeKeys = 20;
     public const int MaxValuesPerKey = 1000;
     public const int MaxValueLength = 200;
+    /// <summary>The serialised scope must also fit <see cref="ResolvedDataScope.MaxSessionBytes"/> (6 KB, about 150 to 300 values).</summary>
+    public const int MaxScopeBytes = ResolvedDataScope.MaxSessionBytes;
     private const int MaxIdentityLength = 256;
     private const int MaxJtiLength = 200;
     private const int MaxNameLength = 200;
@@ -203,6 +205,13 @@ public sealed class LaunchTokenValidator : ILaunchTokenValidator
         if (scopeProblem is not null)
         {
             return Refuse(scopeProblem.Value);
+        }
+
+        // Measured as the session will store it, before anything is written: an oversized scope would make every
+        // request carry an oversized cookie.
+        if (System.Text.Encoding.UTF8.GetByteCount(dataScope!.SerializeForSession()) > ResolvedDataScope.MaxSessionBytes)
+        {
+            return Refuse(LaunchRefusalReason.ScopeTooLarge);
         }
 
         string? returnUrl = null;

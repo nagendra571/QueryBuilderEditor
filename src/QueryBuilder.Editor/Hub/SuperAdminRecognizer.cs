@@ -7,7 +7,7 @@ internal enum SuperAdminMatchKind { ObjectId, Email, Group }
 internal enum SuperAdminRefusalReason { NotAllowlisted, WrongTenant, GroupsOverage, WrongScheme, NoStableId }
 
 /// <summary>A signed-in host user who is on the allowlist. <see cref="ObjectId"/> is the stable id the session and audit rows carry.</summary>
-internal sealed record SuperAdminMatch(string ObjectId, string? Name, string? Email, SuperAdminMatchKind Kind);
+internal sealed record SuperAdminMatch(string ObjectId, string? Name, string? Email, SuperAdminMatchKind Kind, string MatchedValue = "", string? TenantId = null);
 
 /// <summary>
 /// The outcome of looking at a signed-in host principal. <see cref="ObjectId"/> and <see cref="TenantId"/> are kept
@@ -69,19 +69,23 @@ internal static class SuperAdminRecognizer
         var groups = Values(principal, GroupClaims);
 
         SuperAdminMatchKind? kind = null;
+        var matched = "";
         // Only a real object id claim may match the object id list. A subject claim can label the session but is an
         // identifier of another kind (per app, per client) and must never be compared with the allowlist.
         if (realObjectId && Listed(allowed.ObjectIds).Any(e => Same(e, objectId)))
         {
             kind = SuperAdminMatchKind.ObjectId;
+            matched = objectId;
         }
-        else if (emails.Any(v => Listed(allowed.Emails).Contains(v, StringComparer.OrdinalIgnoreCase)))
+        else if (emails.FirstOrDefault(v => Listed(allowed.Emails).Contains(v, StringComparer.OrdinalIgnoreCase)) is { } email)
         {
             kind = SuperAdminMatchKind.Email;
+            matched = email;
         }
-        else if (groups.Any(v => Listed(allowed.GroupIds).Any(g => Same(g, v))))
+        else if (groups.FirstOrDefault(v => Listed(allowed.GroupIds).Any(g => Same(g, v))) is { } group)
         {
             kind = SuperAdminMatchKind.Group;
+            matched = group;
         }
 
         if (kind is not { } k)
@@ -90,8 +94,28 @@ internal static class SuperAdminRecognizer
             return new SuperAdminRecognition(null, reason, objectId, tenantId);
         }
 
-        var match = new SuperAdminMatch(objectId, Values(principal, NameClaims).FirstOrDefault(), emails.FirstOrDefault(), k);
+        var match = new SuperAdminMatch(objectId, Values(principal, NameClaims).FirstOrDefault(), emails.FirstOrDefault(), k, matched, tenantId);
         return new SuperAdminRecognition(match, null, objectId, tenantId);
+    }
+
+    /// <summary>
+    /// The sign-in's own comparison run again against the current options, for a session that recorded what matched:
+    /// the tenant must still be allowed and the matched value must still be on its list.
+    /// </summary>
+    public static bool StillAllowed(SuperAdminMatchKind kind, string value, string tenantId, SuperAdminOptions allowed)
+    {
+        if (string.IsNullOrEmpty(value) || string.IsNullOrEmpty(tenantId) || !Listed(allowed.TenantIds).Any(t => Same(t, tenantId)))
+        {
+            return false;
+        }
+
+        return kind switch
+        {
+            SuperAdminMatchKind.ObjectId => Listed(allowed.ObjectIds).Any(e => Same(e, value)),
+            SuperAdminMatchKind.Email => Listed(allowed.Emails).Contains(value, StringComparer.OrdinalIgnoreCase),
+            SuperAdminMatchKind.Group => Listed(allowed.GroupIds).Any(g => Same(g, value)),
+            _ => false,
+        };
     }
 
     /// <summary>

@@ -117,6 +117,8 @@ public class HubLaunchEndpointTests
             Content = new FormUrlEncodedContent(new Dictionary<string, string> { ["token"] = token }),
         });
 
+        public int CookieHeaderLength => string.Join("; ", _jar.Select(p => $"{p.Key}={p.Value}")).Length + "Cookie: ".Length;
+
         public Task<HttpResponseMessage> GetAsync(string url) => SendAsync(new HttpRequestMessage(HttpMethod.Get, url));
 
         public async Task<string?> MeUserAsync()
@@ -271,6 +273,37 @@ public class HubLaunchEndpointTests
         Assert.Contains(await db.AuditLogEntries.ToListAsync(), a => a.Action == AuditAction.LaunchRefused && a.DetailsJson!.Contains("Replayed"));
         Assert.Empty(env.Logs.Errors);
         Assert.Single(await db.LaunchReplays.ToListAsync());
+    });
+
+    private static Dictionary<string, string[]> ScopeOf(int values) =>
+        new() { ["ProgramId"] = Enumerable.Range(0, values).Select(i => $"v{i:D19}").ToArray() };
+
+    [MetadataSqlFact]
+    public Task A_scope_just_under_the_budget_launches_and_one_just_over_is_refused() => RunAsync(async env =>
+    {
+        var fit = 1;
+        while (System.Text.Encoding.UTF8.GetByteCount(new QueryBuilder.Application.Abstractions.ResolvedDataScope(false,
+                   ScopeOf(fit + 1).ToDictionary(p => p.Key, p => (IReadOnlyList<string>)p.Value)).SerializeForSession())
+               <= QueryBuilder.Application.Abstractions.ResolvedDataScope.MaxSessionBytes)
+        {
+            fit++;
+        }
+
+        var ok = await env.LaunchAsync(env.TokenA("big", c => c["scope"] = ScopeOf(fit)));
+        Assert.Equal(HttpStatusCode.SeeOther, ok.StatusCode);
+        Assert.Equal("big", await env.MeUserAsync());
+        // Every request carries the cookie: it must stay well inside the 16 KB most servers accept for all headers.
+        Assert.True(env.CookieHeaderLength < 16 * 1024, $"cookie header was {env.CookieHeaderLength} bytes");
+
+        var over = await env.LaunchAsync(env.TokenA("huge", c => c["scope"] = ScopeOf(fit + 1)));
+        Assert.Equal(HttpStatusCode.BadRequest, over.StatusCode);
+        Assert.Null(await env.MeUserAsync());
+
+        await using var db = env.Db();
+        var refused = await db.AuditLogEntries.SingleAsync(a => a.Action == AuditAction.LaunchRefused);
+        Assert.Equal(env.AppA, refused.AppId);
+        Assert.Contains("ScopeTooLarge", refused.DetailsJson);
+        Assert.Single(await db.LaunchReplays.ToListAsync()); // the refused token never reached the replay store
     });
 
     [MetadataSqlFact]
