@@ -14,7 +14,7 @@ public static partial class RegistryRules
     public const int MaxReturnUrls = 20;
     public const int MaxReturnUrlLength = 800;
 
-    [GeneratedRegex("^[A-Za-z0-9._-]{1,64}$")]
+    [GeneratedRegex("^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")]
     private static partial Regex KidPattern();
 
     [GeneratedRegex("^[a-z0-9][a-z0-9-]{1,62}$")]
@@ -77,7 +77,7 @@ public static partial class RegistryRules
         // the revoke URL, and revoking is the incident-response path.
         if (kid is null || !KidPattern().IsMatch(kid))
         {
-            throw new CatalogValidationException($"A key id is 1 to {MaxKidLength} characters: letters, digits, '.', '_' and '-' only.");
+            throw new CatalogValidationException($"A key id is 1 to {MaxKidLength} characters: letters, digits, '.', '_' and '-' only, starting with a letter or digit.");
         }
 
         return kid;
@@ -207,11 +207,16 @@ public static partial class RegistryRules
     {
         if (string.IsNullOrEmpty(url) || url.Length > MaxReturnUrlLength || url != url.Trim() || url.Any(char.IsControl)
             || url.Contains('#') || !Uri.TryCreate(url, UriKind.Absolute, out var uri) || uri.UserInfo.Length != 0
-            // Must already be in the form a browser will follow ("https:evil.com" parses but is not "https://evil.com/"),
-            // so what is validated is what a launch can redirect to.
-            || !url.Contains("//", StringComparison.Ordinal) || !string.Equals(uri.AbsoluteUri, url, StringComparison.Ordinal))
+            || !url.Contains("//", StringComparison.Ordinal))
         {
             throw new CatalogValidationException($"A return URL must be an absolute https URL of at most {MaxReturnUrlLength} characters, without a fragment or credentials.");
+        }
+
+        // Must already be in the form a browser will follow ("https:evil.com" parses but is not "https://evil.com/"),
+        // so what is validated is what a launch can redirect to. Say what to type instead.
+        if (!string.Equals(uri.AbsoluteUri, url, StringComparison.Ordinal))
+        {
+            throw new CatalogValidationException($"Write the return URL exactly as `{uri.AbsoluteUri}` (lowercase host, `/` after the host, no default port).");
         }
 
         var local = uri.Scheme == Uri.UriSchemeHttp && uri.Host == "localhost";

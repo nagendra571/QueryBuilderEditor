@@ -107,6 +107,11 @@ public class HubRegistryTests
         Assert.Equal(HttpStatusCode.BadRequest, await AddKey("b", "ES256", TestTokens.Pem(p384)));
         Assert.Equal(HttpStatusCode.BadRequest, await AddKey("b2", "ES256", TestTokens.Pem(other256!)));
         Assert.Equal(HttpStatusCode.BadRequest, await AddKey("c", "ES256", TestTokens.Pem(good)));
+        foreach (var dotted in new[] { ".", "..", ".x", "-x", "_x" })
+        {
+            Assert.True(HttpStatusCode.BadRequest == await AddKey(dotted, "RS256", TestTokens.Pem(good)), $"kid '{dotted}'");
+        }
+
         Assert.Equal(HttpStatusCode.BadRequest, await AddKey("a/b", "RS256", TestTokens.Pem(good)));
         Assert.Equal(HttpStatusCode.BadRequest, await AddKey("a b", "RS256", TestTokens.Pem(good)));
         Assert.Equal(HttpStatusCode.BadRequest, await AddKey("a%2Fb", "RS256", TestTokens.Pem(good)));
@@ -141,6 +146,9 @@ public class HubRegistryTests
         Assert.Equal(HttpStatusCode.BadRequest, await SetUrls("https:/evil.com/x"));
         Assert.Equal(HttpStatusCode.BadRequest, await SetUrls("https://A.example/x"));
         Assert.Equal(HttpStatusCode.BadRequest, await SetUrls("https://a.example"));
+        var hint = await super.PutAsync($"{Apps}/{id}/return-urls", new { urls = new[] { "https://a.example" } });
+        Assert.Equal(HttpStatusCode.BadRequest, hint.StatusCode);
+        Assert.Contains("`https://a.example/`", await hint.Content.ReadAsStringAsync());
         Assert.Equal(HttpStatusCode.BadRequest, await SetUrls("https://a.example/a b"));
         Assert.Equal(HttpStatusCode.BadRequest, await SetUrls("https://a.example:443/x"));
         Assert.Equal(HttpStatusCode.BadRequest, await SetUrls("javascript:alert(1)"));
@@ -186,6 +194,10 @@ public class HubRegistryTests
         using var two = RSA.Create(2048);
         Assert.Equal(HttpStatusCode.Created, (await super.PostAsync($"{Apps}/{id}/keys", new { kid = "Key.2026_11-a", algorithm = "RS256", publicKeyPem = TestTokens.Pem(one) })).StatusCode);
         Assert.Equal(HttpStatusCode.Created, (await super.PostAsync($"{Apps}/{id}/keys", new { kid = "key.2026_11-b", algorithm = "RS256", publicKeyPem = TestTokens.Pem(two) })).StatusCode);
+
+        using var three = RSA.Create(2048);
+        Assert.Equal(HttpStatusCode.Created, (await super.PostAsync($"{Apps}/{id}/keys", new { kid = "x.y", algorithm = "RS256", publicKeyPem = TestTokens.Pem(three) })).StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, (await super.SendAsync(HttpMethod.Delete, $"{Apps}/{id}/keys/x.y")).StatusCode);
 
         // A case variant of an existing kid names no key, and must not revoke the other one.
         Assert.Equal(HttpStatusCode.NotFound, (await super.SendAsync(HttpMethod.Delete, $"{Apps}/{id}/keys/KEY.2026_11-A")).StatusCode);
