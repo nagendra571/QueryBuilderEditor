@@ -30,6 +30,7 @@ public static class DependencyInjection
         services.AddScoped<IAppContextScope>(sp => sp.GetRequiredService<AppContextAccessor>());
 
         services.AddSingleton<IHubWideScopeFactory, HubWideScopeFactory>();
+        services.AddScoped<ICurrentAppReader, CurrentAppReader>();
         if (hubMode)
         {
             // Needs LaunchValidationSettings, which only hub mode registers; build-time validation would fail embedded hosts otherwise.
@@ -37,6 +38,7 @@ public static class DependencyInjection
             services.AddSingleton<LaunchReplayStore>();
             services.AddScoped<QueryBuilder.Application.Hub.ILaunchRecorder, LaunchRecorder>();
             services.AddScoped<QueryBuilder.Application.Hub.Registry.IAppRegistry, AppRegistry>();
+            services.AddScoped<QueryBuilder.Application.DataSourceManagement.IDataSourceMover, DataSourceMover>();
         }
 
         services.AddDbContext<AppDbContext>(db =>

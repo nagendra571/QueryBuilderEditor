@@ -381,6 +381,11 @@ public class DataSourceManagementTests
         public Task LogAsync(AuditEntry entry, CancellationToken cancellationToken) { Entries.Add(entry); return Task.CompletedTask; }
     }
 
+    internal sealed class NoApp : ICurrentAppReader
+    {
+        public Task<App?> GetCurrentAsync(CancellationToken ct) => Task.FromResult<App?>(null);
+    }
+
     internal sealed class User : ICurrentUserService
     {
         public string UserId => "admin@example.com";
@@ -437,11 +442,11 @@ public class DataSourceManagementTests
             Settings = new DataSourceManagementSettings(enabled);
         }
 
-        public CreateDataSourceCommandHandler Create() => new(Repo, Protector, Settings, new User(), Audit);
-        public UpdateDataSourceCommandHandler Update() => new(Repo, Protector, Catalog, Pools, Settings, new User(), Audit);
-        public SetDataSourceActiveCommandHandler SetActive() => new(Repo, Catalog, Pools, Settings, new User(), Audit);
-        public TestConnectionCommandHandler Test() => new(Repo, Protector, Tester, Settings);
-        public TestStoredConnectionCommandHandler TestStored() => new(Repo, Tester, Settings);
+        public CreateDataSourceCommandHandler Create() => new(Repo, Protector, Settings, new User(), new NoApp(), Audit);
+        public UpdateDataSourceCommandHandler Update() => new(Repo, Protector, Catalog, Pools, Settings, new User(), new NoApp(), Audit);
+        public SetDataSourceActiveCommandHandler SetActive() => new(Repo, Catalog, Pools, Settings, new User(), new NoApp(), Audit);
+        public TestConnectionCommandHandler Test() => new(Repo, Protector, Tester, Settings, new User(), new NoApp());
+        public TestStoredConnectionCommandHandler TestStored() => new(Repo, Tester, Settings, new User(), new NoApp());
 
         public DataSource AddManaged(string name = "Warehouse", DataSourceProvider provider = DataSourceProvider.PostgreSql, ManagedConnectionDetails? details = null)
         {
@@ -873,7 +878,7 @@ public class DataSourceManagementTests
     // ---- detail query -------------------------------------------------------------------------------------
 
     private static GetAdminDataSourceDetailQueryHandler DetailHandler(Rig rig, CatalogStub? catalog = null, IConnectionSecretProtector? protector = null) =>
-        new(rig.Repo, catalog ?? rig.Catalog, new RecordLimitSettings(null), protector ?? rig.Protector);
+        new(rig.Repo, catalog ?? rig.Catalog, new RecordLimitSettings(null), protector ?? rig.Protector, new User(), new NoApp());
 
     [Fact]
     public async Task Detail_returns_the_connection_without_the_password_and_without_the_sentinel()

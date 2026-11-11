@@ -4,7 +4,12 @@ using QueryBuilder.Domain.Model;
 
 namespace QueryBuilder.Application.Dtos;
 
-public sealed record AdminDataSourceSummaryDto(Guid Id, string Name, DataSourceProvider Provider, bool IsActive);
+/// <param name="Locked">Hub mode: a super admin locked it, so app admins can only read it.</param>
+/// <param name="CanEdit">False for an app admin on a locked source.</param>
+/// <param name="CanManageConnection">Whether the caller may add, edit, test and turn on or off connections.</param>
+public sealed record AdminDataSourceSummaryDto(
+    Guid Id, string Name, DataSourceProvider Provider, bool IsActive,
+    bool Locked = false, bool CanEdit = true, bool CanManageConnection = true);
 
 /// <param name="Connection">Null unless the source is managed and its details can be read. Never carries the password.</param>
 /// <param name="ConnectionUnreadable">A managed source whose details can't be decrypted with the current key.</param>
@@ -27,7 +32,10 @@ public sealed record AdminDataSourceDetailDto(
     bool ConnectionUnreadable,
     string? ConnectionStringName,
     string? CatalogError,
-    bool UsesMetadataDatabase);
+    bool UsesMetadataDatabase,
+    bool Locked = false,
+    bool CanEdit = true,
+    bool CanManageConnection = true);
 
 public sealed record CreateDataSourceRequest(string? Name, string? Description, DataSourceProvider Provider, ConnectionInput? Connection);
 
@@ -68,3 +76,5 @@ public sealed record DataScopeObjectRuleDto(string ObjectName, DataScopeState St
 public sealed record UpdateScopeKeysRequest(List<string>? Keys);
 
 public sealed record UpdateDataScopeRequest(List<DataScopeObjectRuleDto> Objects);
+
+public sealed record SetDataSourceLockRequest(bool Locked);

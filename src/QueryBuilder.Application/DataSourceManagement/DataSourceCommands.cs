@@ -27,12 +27,15 @@ public sealed class CreateDataSourceCommandHandler(
     IConnectionSecretProtector protector,
     DataSourceManagementSettings settings,
     ICurrentUserService currentUser,
+    ICurrentAppReader apps,
     IAuditLogger auditLogger)
     : IRequestHandler<CreateDataSourceCommand, AdminDataSourceSummaryDto>
 {
     public async Task<AdminDataSourceSummaryDto> Handle(CreateDataSourceCommand request, CancellationToken cancellationToken)
     {
         ManagedConnections.RequireEnabled(settings);
+        var actor = AccessActor.From(currentUser);
+        await DataSourceLock.EnsureCanManageConnectionsAsync(apps, actor, cancellationToken);
 
         var details = ManagedConnections.Resolve(request.Provider, request.Connection!, stored: null);
         var dataSource = new DataSource
@@ -42,7 +45,9 @@ public sealed class CreateDataSourceCommandHandler(
             Provider = request.Provider,
             ConnectionStringName = DataSource.ManagedConnectionSentinel,
             CatalogScope = CatalogScope.Views,
-            CreatedBy = currentUser.UserId
+            CreatedBy = currentUser.UserId,
+            // A super admin's source is locked from the start; an app admin's stays in the app's own hands.
+            LockedBySuperAdmin = actor.InHub && actor.IsSuperAdmin
         };
         // The Id is part of what the blob is bound to, so it has to exist before encrypting.
         dataSource.EncryptedConnection = protector.Protect(dataSource.Id, ManagedConnections.Serialize(details));
@@ -57,7 +62,7 @@ public sealed class CreateDataSourceCommandHandler(
                 new { dataSource.Name, Provider = request.Provider.ToString(), details.Host, details.Port, details.Database }),
             cancellationToken);
 
-        return new AdminDataSourceSummaryDto(dataSource.Id, dataSource.Name, dataSource.Provider, dataSource.IsActive);
+        return new AdminDataSourceSummaryDto(dataSource.Id, dataSource.Name, dataSource.Provider, dataSource.IsActive, dataSource.LockedBySuperAdmin);
     }
 }
 
@@ -80,6 +85,7 @@ public sealed class UpdateDataSourceCommandHandler(
     IConnectionPoolCleaner pools,
     DataSourceManagementSettings settings,
     ICurrentUserService currentUser,
+    ICurrentAppReader apps,
     IAuditLogger auditLogger)
     : IRequestHandler<UpdateDataSourceCommand, Unit>
 {
@@ -89,6 +95,9 @@ public sealed class UpdateDataSourceCommandHandler(
 
         var dataSource = await repository.GetByIdAsync(request.Id, cancellationToken)
             ?? throw new NotFoundException(nameof(DataSource), request.Id);
+        var actor = AccessActor.From(currentUser);
+        DataSourceLock.EnsureCanChange(dataSource, actor);
+        await DataSourceLock.EnsureCanManageConnectionsAsync(apps, actor, cancellationToken);
 
         if (request.Connection is not null && !dataSource.IsManaged)
         {
@@ -163,6 +172,7 @@ public sealed class SetDataSourceActiveCommandHandler(
     IConnectionPoolCleaner pools,
     DataSourceManagementSettings settings,
     ICurrentUserService currentUser,
+    ICurrentAppReader apps,
     IAuditLogger auditLogger)
     : IRequestHandler<SetDataSourceActiveCommand, Unit>
 {
@@ -172,6 +182,9 @@ public sealed class SetDataSourceActiveCommandHandler(
 
         var dataSource = await repository.GetByIdAsync(request.Id, cancellationToken)
             ?? throw new NotFoundException(nameof(DataSource), request.Id);
+        var actor = AccessActor.From(currentUser);
+        DataSourceLock.EnsureCanChange(dataSource, actor);
+        await DataSourceLock.EnsureCanManageConnectionsAsync(apps, actor, cancellationToken);
 
         if (dataSource.IsActive == request.IsActive)
         {
@@ -218,12 +231,16 @@ public sealed class TestConnectionCommandHandler(
     IDataSourceRepository repository,
     IConnectionSecretProtector protector,
     IConnectionTester tester,
-    DataSourceManagementSettings settings)
+    DataSourceManagementSettings settings,
+    ICurrentUserService currentUser,
+    ICurrentAppReader apps)
     : IRequestHandler<TestConnectionCommand, ConnectionTestResult>
 {
     public async Task<ConnectionTestResult> Handle(TestConnectionCommand request, CancellationToken cancellationToken)
     {
         ManagedConnections.RequireEnabled(settings);
+        var actor = AccessActor.From(currentUser);
+        await DataSourceLock.EnsureCanManageConnectionsAsync(apps, actor, cancellationToken);
 
         ManagedConnectionDetails? stored = null;
         var unreadable = false;
@@ -231,6 +248,7 @@ public sealed class TestConnectionCommandHandler(
         {
             var existing = await repository.GetByIdAsync(id, cancellationToken)
                 ?? throw new NotFoundException(nameof(DataSource), id);
+            DataSourceLock.EnsureCanChange(existing, actor);
             if (existing.Provider != request.Provider)
             {
                 throw new CatalogValidationException("The provider of an existing data source can't change.");
@@ -250,7 +268,9 @@ public sealed record TestStoredConnectionCommand(Guid Id) : IRequest<ConnectionT
 public sealed class TestStoredConnectionCommandHandler(
     IDataSourceRepository repository,
     IConnectionTester tester,
-    DataSourceManagementSettings settings)
+    DataSourceManagementSettings settings,
+    ICurrentUserService currentUser,
+    ICurrentAppReader apps)
     : IRequestHandler<TestStoredConnectionCommand, ConnectionTestResult>
 {
     public async Task<ConnectionTestResult> Handle(TestStoredConnectionCommand request, CancellationToken cancellationToken)
@@ -259,6 +279,9 @@ public sealed class TestStoredConnectionCommandHandler(
 
         var dataSource = await repository.GetByIdAsync(request.Id, cancellationToken)
             ?? throw new NotFoundException(nameof(DataSource), request.Id);
+        var actor = AccessActor.From(currentUser);
+        DataSourceLock.EnsureCanChange(dataSource, actor);
+        await DataSourceLock.EnsureCanManageConnectionsAsync(apps, actor, cancellationToken);
         return await tester.TestStoredAsync(dataSource, cancellationToken);
     }
 }

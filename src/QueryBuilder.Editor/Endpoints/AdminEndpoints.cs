@@ -1,3 +1,4 @@
+using QueryBuilder.Application.Abstractions;
 using QueryBuilder.Application.Commands.Admin;
 using QueryBuilder.Application.Common;
 using QueryBuilder.Application.DataSourceManagement;
@@ -16,8 +17,17 @@ public static class AdminEndpoints
         // show the Admin nav item without needing a real admin payload.
         group.MapGet("/access", () => Results.NoContent());
 
-        group.MapGet("/data-source-management", (DataSourceManagementSettings settings) =>
-            Results.Json(new { enabled = settings.Enabled }, QueryBuilderJson.Options));
+        group.MapGet("/data-source-management", async (DataSourceManagementSettings settings, QueryBuilderEditorOptions options, ICurrentUserService user, ICurrentAppReader apps, CancellationToken ct) =>
+        {
+            if (!options.Hub.Enabled)
+            {
+                return Results.Json(new { enabled = settings.Enabled }, QueryBuilderJson.Options);
+            }
+
+            // Hub mode: the Add button depends on the caller, not on a host flag.
+            var canManage = await DataSourceLock.CanManageConnectionsAsync(apps, AccessActor.From(user), ct);
+            return Results.Json(new { enabled = settings.Enabled, canManageConnections = canManage }, QueryBuilderJson.Options);
+        });
 
         // Every mutating or testing route answers 404 while the feature is off, before it reads a body.
         group.MapPost("/data-sources", async (HttpContext http, DataSourceManagementSettings settings, ISender sender, CancellationToken ct) =>
@@ -66,15 +76,18 @@ public static class AdminEndpoints
 
         // Not gated on Enabled, unlike the routes above: a host may keep the add/edit form off and still rotate its key.
         // Re-encrypting has its own gate (ReencryptAllowed), set at startup.
-        group.MapGet("/encryption-key", async (DataSourceManagementSettings settings, ISender sender, CancellationToken ct) =>
+        // Hub mode answers 404 here: the key is shared by every app, so its status and rotation live on the super-admin
+        // routes under /api/hub, which read every app's sources.
+        group.MapGet("/encryption-key", async (DataSourceManagementSettings settings, QueryBuilderEditorOptions options, ISender sender, CancellationToken ct) =>
         {
+            if (options.Hub.Enabled) return Results.NotFound();
             var status = await sender.Send(new GetEncryptionKeyStatusQuery(), ct);
             return Results.Json(status with { CanReencrypt = settings.ReencryptAllowed }, QueryBuilderJson.Options);
         });
 
-        group.MapPost("/encryption-key/reencrypt", async (DataSourceManagementSettings settings, ISender sender, CancellationToken ct) =>
+        group.MapPost("/encryption-key/reencrypt", async (DataSourceManagementSettings settings, QueryBuilderEditorOptions options, ISender sender, CancellationToken ct) =>
         {
-            if (!settings.ReencryptAllowed) return Results.NotFound();
+            if (options.Hub.Enabled || !settings.ReencryptAllowed) return Results.NotFound();
             return Results.Json(await sender.Send(new ReencryptDataSourcesCommand(), ct), QueryBuilderJson.Options);
         });
 
@@ -83,6 +96,14 @@ public static class AdminEndpoints
 
         group.MapGet("/data-sources/{id:guid}", async (Guid id, ISender sender, CancellationToken ct) =>
             Results.Json(await sender.Send(new GetAdminDataSourceDetailQuery(id), ct), QueryBuilderJson.Options));
+
+        group.MapPut("/data-sources/{id:guid}/lock", async (Guid id, HttpContext http, ISender sender, CancellationToken ct) =>
+        {
+            var request = await http.Request.ReadFromJsonAsync<SetDataSourceLockRequest>(QueryBuilderJson.Options, ct)
+                ?? throw new BadHttpRequestException("Request body is required.");
+            await sender.Send(new SetDataSourceLockCommand(id, request.Locked), ct);
+            return Results.NoContent();
+        });
 
         group.MapPut("/data-sources/{id:guid}/catalog-policy", async (Guid id, HttpContext http, ISender sender, CancellationToken ct) =>
         {

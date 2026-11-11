@@ -14,7 +14,9 @@ public sealed class GetAdminDataSourceDetailQueryHandler(
     IDataSourceRepository repository,
     IDataCatalogService catalogService,
     RecordLimitSettings recordLimitSettings,
-    IConnectionSecretProtector protector)
+    IConnectionSecretProtector protector,
+    ICurrentUserService currentUser,
+    ICurrentAppReader apps)
     : IRequestHandler<GetAdminDataSourceDetailQuery, AdminDataSourceDetailDto>
 {
     public async Task<AdminDataSourceDetailDto> Handle(GetAdminDataSourceDetailQuery request, CancellationToken cancellationToken)
@@ -41,6 +43,7 @@ public sealed class GetAdminDataSourceDetailQueryHandler(
         }
 
         var details = ManagedConnections.TryRead(dataSource, protector);
+        var actor = AccessActor.From(currentUser);
         var usesMetadata = dataSource.ConnectionStringName == DataSource.DefaultConnectionStringSentinel;
 
         return new AdminDataSourceDetailDto(
@@ -60,6 +63,9 @@ public sealed class GetAdminDataSourceDetailQueryHandler(
             dataSource.IsManaged && details is null,
             dataSource.IsManaged || usesMetadata ? null : dataSource.ConnectionStringName,
             catalogError,
-            usesMetadata);
+            usesMetadata,
+            dataSource.LockedBySuperAdmin,
+            DataSourceLock.CanEdit(dataSource, actor),
+            await DataSourceLock.CanManageConnectionsAsync(apps, actor, cancellationToken) && DataSourceLock.CanEdit(dataSource, actor));
     }
 }

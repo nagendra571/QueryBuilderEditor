@@ -35,3 +35,9 @@ public sealed class CrossAppWriteException(string message, Guid? appId = null, s
     public string? EntityId { get; } = entityId;
     public Guid? RowAppId { get; } = rowAppId;
 }
+
+/// <summary>Something still uses the object, so it can't be moved or removed. Counts per kind of use, never names.</summary>
+public sealed class InUseException(string message, IReadOnlyDictionary<string, int> counts) : Exception(message)
+{
+    public IReadOnlyDictionary<string, int> Counts { get; } = counts;
+}

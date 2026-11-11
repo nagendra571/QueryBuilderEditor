@@ -1,6 +1,7 @@
 using QueryBuilder.Application.Abstractions;
 using QueryBuilder.Application.Common;
 using QueryBuilder.Application.DataScoping;
+using QueryBuilder.Application.DataSourceManagement;
 using QueryBuilder.Application.Exceptions;
 using QueryBuilder.Domain.Entities;
 using QueryBuilder.Domain.Enums;
@@ -22,6 +23,7 @@ public sealed class UpdateScopeKeysCommandHandler(
     {
         var dataSource = await repository.GetByIdAsync(request.DataSourceId, cancellationToken)
             ?? throw new NotFoundException(nameof(DataSource), request.DataSourceId);
+        DataSourceLock.EnsureCanChange(dataSource, AccessActor.From(currentUser));
 
         if (!currentScope.IsEnabled)
         {

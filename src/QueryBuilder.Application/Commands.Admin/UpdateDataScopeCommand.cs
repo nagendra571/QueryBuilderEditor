@@ -1,6 +1,7 @@
 using QueryBuilder.Application.Abstractions;
 using QueryBuilder.Application.Common;
 using QueryBuilder.Application.DataScoping;
+using QueryBuilder.Application.DataSourceManagement;
 using QueryBuilder.Application.Dtos;
 using QueryBuilder.Application.Exceptions;
 using QueryBuilder.Domain.Entities;
@@ -25,6 +26,7 @@ public sealed class UpdateDataScopeCommandHandler(
     {
         var dataSource = await dataSourceRepository.GetByIdAsync(request.DataSourceId, cancellationToken)
             ?? throw new NotFoundException(nameof(DataSource), request.DataSourceId);
+        DataSourceLock.EnsureCanChange(dataSource, AccessActor.From(currentUser));
 
         if (!currentScope.IsEnabled)
         {

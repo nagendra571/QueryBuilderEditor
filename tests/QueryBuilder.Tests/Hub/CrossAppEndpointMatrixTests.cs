@@ -56,7 +56,10 @@ public partial class CrossAppEndpointMatrixTests
         ["POST /api/hub/apps/{id}/keys"] = "super-admin-only registry of apps, not app-scoped; covered by HubRegistryTests",
         ["DELETE /api/hub/apps/{id}/keys/{kid}"] = "super-admin-only registry of apps, not app-scoped; covered by HubRegistryTests",
         ["PUT /api/hub/apps/{id}/return-urls"] = "super-admin-only registry of apps, not app-scoped; covered by HubRegistryTests",
-        ["POST /api/hub/view-app"] = "super-admin-only choice of the app to view; covered by SuperAdminTests"
+        ["POST /api/hub/view-app"] = "super-admin-only choice of the app to view; covered by SuperAdminTests",
+        ["POST /api/hub/apps/{appId}/data-sources/{id}/move"] = "super-admin-only move between apps, hub-wide by design; covered by DataSourceLockTests",
+        ["GET /api/hub/encryption-key"] = "super-admin-only and hub-wide by design (counts every app); covered by DataSourceLockTests",
+        ["POST /api/hub/encryption-key/reencrypt"] = "super-admin-only and hub-wide by design (re-encrypts every app); covered by DataSourceLockTests"
     };
 
     // Guid-routed endpoints: key is "METHOD pattern" with the ":guid" constraint dropped; value builds a valid JSON body.
@@ -64,6 +67,7 @@ public partial class CrossAppEndpointMatrixTests
     {
         ["PUT /api/admin/data-sources/{id}"] = _ => new { name = "renamed", description = "x" },
         ["PUT /api/admin/data-sources/{id}/active"] = _ => new { isActive = false },
+        ["PUT /api/admin/data-sources/{id}/lock"] = _ => new { locked = true },
         ["POST /api/admin/data-sources/{id}/test"] = _ => null,
         ["GET /api/admin/data-sources/{id}"] = _ => null,
         ["PUT /api/admin/data-sources/{id}/catalog-policy"] = _ => new { catalogScope = "TablesAndViews", allowedObjects = new[] { "dbo.v" } },
@@ -142,8 +146,9 @@ public partial class CrossAppEndpointMatrixTests
             Post("test-existing-A", "/api/admin/data-sources/test",
                 new { provider = "SqlServer", existingId = a.DataSource, connection = new { host = "localhost", database = "d", username = "u" } }, Expect.NotFound)
         ],
-        ["GET /api/admin/encryption-key"] = (_, _) => [Get("key", "/api/admin/encryption-key")],
-        ["POST /api/admin/encryption-key/reencrypt"] = (_, _) => [Post("reencrypt", "/api/admin/encryption-key/reencrypt", null)],
+        // Hub mode moved the key to super-admin routes that count every app, so these are not there for anyone.
+        ["GET /api/admin/encryption-key"] = (_, _) => [Get("key", "/api/admin/encryption-key", Expect.NotFound)],
+        ["POST /api/admin/encryption-key/reencrypt"] = (_, _) => [Post("reencrypt", "/api/admin/encryption-key/reencrypt", null, Expect.NotFound)],
         ["GET /api/admin/data-sources"] = (_, _) => [Get("admin list", "/api/admin/data-sources")],
         ["GET /api/audit"] = (a, _) =>
         [
@@ -497,6 +502,9 @@ public partial class CrossAppEndpointMatrixTests
         string before;
         await using (var db = env.HubWideDb())
         {
+            // B's admins may add connections, so the create call below reaches the cross-app checks instead of the switch.
+            (await db.Apps.FirstAsync(x => x.Id == env.AppB)).AppAdminsCanManageConnections = true;
+            await db.SaveChangesAsync();
             a = await SeedAsync(db, env.AppA, "alpha", "alpha-owner", oldKey);
             b = await SeedAsync(db, env.AppB, "bravo", callerId, oldKey);
             db.AppReturnUrls.Add(new AppReturnUrl { AppId = env.AppA, Url = "https://alpha.example/back" });
@@ -523,14 +531,13 @@ public partial class CrossAppEndpointMatrixTests
         Assert.Contains("bravo-source", listed);
         Assert.DoesNotContain("alpha-source", listed);
 
-        // Key rotation as B sees and moves only B's managed source; A's blob stays under the old key (the snapshot proves it).
-        var keyStatus = await HubApiHost.Browser.JsonAsync(await caller.GetAsync($"{Mount}/api/admin/encryption-key"));
-        Assert.Equal(1, keyStatus.GetProperty("managedCount").GetInt32());
-        Assert.Equal(1, keyStatus.GetProperty("onPreviousKey").GetInt32());
-        Assert.DoesNotContain(a.Managed.ToString(), keyStatus.ToString());
-        Assert.DoesNotContain("alpha-managed", keyStatus.ToString());
-        var reencrypt = await HubApiHost.Browser.JsonAsync(await caller.PostAsync($"{Mount}/api/admin/encryption-key/reencrypt", null));
-        Assert.Equal(1, reencrypt.GetProperty("reencrypted").GetInt32());
+        // The key is shared by every app, so in hub mode its status and rotation are hub-wide and super-admin-only (see
+        // DataSourceLockTests); the per-app routes are gone and an app admin is refused the hub ones.
+        Assert.Equal(HttpStatusCode.NotFound, await caller.StatusAsync($"{Mount}/api/admin/encryption-key"));
+        if (!superViewingB)
+        {
+            Assert.Equal(HttpStatusCode.Forbidden, await caller.StatusAsync($"{Mount}/api/hub/encryption-key"));
+        }
 
         async Task<Ids> NewBSet()
         {

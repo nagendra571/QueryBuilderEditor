@@ -28,6 +28,7 @@ public static class EndpointRouteBuilderExtensions
             endpoints.MapHubLaunchEndpoints();
             endpoints.MapHubSuperAdminEndpoints();
             endpoints.MapHubRegistryEndpoints();
+            endpoints.MapHubDataSourceEndpoints();
             // Any session, including a super admin who has not chosen an app yet: the shell needs this to offer the choice.
             endpoints.MapGroup(QueryBuilderRoutes.BasePath).RequireHubSession().MapMeEndpoints(options.Hub.Enabled);
         }

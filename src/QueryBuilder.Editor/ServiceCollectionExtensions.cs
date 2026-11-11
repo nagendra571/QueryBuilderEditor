@@ -139,7 +139,8 @@ public static class ServiceCollectionExtensions
         var anonymousAdmins = options.AdminAuthorization.Mode == QueryBuilderAuthorizationMode.Anonymous
             && string.IsNullOrWhiteSpace(options.AdminAuthorization.PolicyName);
         var reencryptAllowed = secretKey is not null && (!anonymousAdmins || management.AllowAnonymousAdmins);
-        services.AddSingleton(new DataSourceManagementSettings(management.Enabled, reencryptAllowed));
+        // Hub mode requires the key, and connections there are governed by role and the app switch rather than by this flag.
+        services.AddSingleton(new DataSourceManagementSettings(management.Enabled || options.Hub.Enabled, reencryptAllowed));
 
         if (options.Hub.Enabled)
         {

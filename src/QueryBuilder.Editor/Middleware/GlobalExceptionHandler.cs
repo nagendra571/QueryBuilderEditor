@@ -50,6 +50,11 @@ public sealed class GlobalExceptionHandler(ILogger<GlobalExceptionHandler> logge
             Instance = httpContext.Request.Path
         };
 
+        if (exception is InUseException inUse)
+        {
+            problemDetails.Extensions["counts"] = inUse.Counts;
+        }
+
         if (errors is not null)
         {
             problemDetails.Extensions["errors"] = errors;
@@ -71,6 +76,7 @@ public sealed class GlobalExceptionHandler(ILogger<GlobalExceptionHandler> logge
         QueryDisabledException => (StatusCodes.Status409Conflict, "Query disabled", null),
         ConcurrencyConflictException => (StatusCodes.Status409Conflict, "Conflict", null),
         RecordLimitExceededException => (StatusCodes.Status409Conflict, "Too many records", null),
+        InUseException => (StatusCodes.Status409Conflict, "In use", null),
         // Endpoints read bodies explicitly via ReadFromJsonAsync, so a malformed or wrongly-typed body
         // (e.g. 1.5 for an int) surfaces here rather than through minimal-API binding's own 400.
         System.Text.Json.JsonException => (StatusCodes.Status400BadRequest, "Invalid request body", null),

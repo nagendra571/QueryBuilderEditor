@@ -299,7 +299,7 @@ public class DataSourceManagementFixTests
         var source = rig.AddConfigNamed();
         var resolver = configured is null ? ConfigResolver() : ConfigResolver(("legacy", configured));
 
-        var dto = await new GetAdminDataSourceDetailQueryHandler(rig.Repo, RealCatalog(rig.Repo, resolver), new RecordLimitSettings(null), rig.Protector)
+        var dto = await new GetAdminDataSourceDetailQueryHandler(rig.Repo, RealCatalog(rig.Repo, resolver), new RecordLimitSettings(null), rig.Protector, new DataSourceManagementTests.User(), new DataSourceManagementTests.NoApp())
             .Handle(new GetAdminDataSourceDetailQuery(source.Id), default);
 
         Assert.False(string.IsNullOrWhiteSpace(dto.CatalogError));
@@ -315,7 +315,7 @@ public class DataSourceManagementFixTests
         var source = rig.AddConfigNamed();
         source.ConnectionStringName = DataSource.DefaultConnectionStringSentinel;
 
-        var dto = await new GetAdminDataSourceDetailQueryHandler(rig.Repo, rig.Catalog, new RecordLimitSettings(null), rig.Protector)
+        var dto = await new GetAdminDataSourceDetailQueryHandler(rig.Repo, rig.Catalog, new RecordLimitSettings(null), rig.Protector, new DataSourceManagementTests.User(), new DataSourceManagementTests.NoApp())
             .Handle(new GetAdminDataSourceDetailQuery(source.Id), default);
 
         Assert.Null(dto.ConnectionStringName);
