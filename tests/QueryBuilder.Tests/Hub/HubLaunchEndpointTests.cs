@@ -116,6 +116,12 @@ public class HubLaunchEndpointTests
         public async Task<string?> MeUserAsync()
         {
             var response = await GetAsync("/querybuilder/api/me");
+            // Hub mode answers 401 without a session; the tests read that as the anonymous caller they always meant.
+            if (response.StatusCode == HttpStatusCode.Unauthorized)
+            {
+                return "anonymous";
+            }
+
             response.EnsureSuccessStatusCode();
             return JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement.GetProperty("userId").GetString();
         }
@@ -123,6 +129,12 @@ public class HubLaunchEndpointTests
         public async Task<int> DataSourceCountAsync()
         {
             var response = await GetAsync("/querybuilder/api/data-sources");
+            // No session (401) sees nothing, as the app-less "none" context always did.
+            if (response.StatusCode == HttpStatusCode.Unauthorized)
+            {
+                return 0;
+            }
+
             response.EnsureSuccessStatusCode();
             return JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement.GetArrayLength();
         }
@@ -421,7 +433,7 @@ public class HubLaunchEndpointTests
         }
 
         // Reads never need it, and neither does the launch endpoint (it creates the session).
-        Assert.Equal(HttpStatusCode.OK, (await env.GetAsync("/querybuilder/api/me")).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await env.GetAsync("/querybuilder/api/me")).StatusCode);
         Assert.Equal(HttpStatusCode.SeeOther, (await env.LaunchAsync(env.TokenA())).StatusCode);
     });
 

@@ -102,8 +102,9 @@ internal static class HubSuperAdminEndpoints
                 logger.LogInformation("A host user was not recognised as a super admin; their token omitted the groups (too many), which are not looked up.");
             }
 
-            await RecordRefusalAsync(context, recognition, reason, ct);
+            // Signed out first: if the audit write fails, the visitor must not be left holding a session.
             await context.SignOutAsync(HubSession.Scheme);
+            await RecordRefusalAsync(context, recognition, reason, ct);
             return Results.Content(HubLaunchEndpoints.RefusalPage, "text/html; charset=utf-8", statusCode: StatusCodes.Status403Forbidden);
         }
 

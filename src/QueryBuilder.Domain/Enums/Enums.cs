@@ -134,7 +134,7 @@ public enum AuditAction
     LaunchSucceeded = 26,
     LaunchRefused = 27,
     SuperAdminSignedIn = 28,
-    // 29 is AppRegistryChanged (added with the registry endpoints).
+    AppRegistryChanged = 29,
     SuperAdminSignInRefused = 30
 }
 

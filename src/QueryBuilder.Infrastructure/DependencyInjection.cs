@@ -36,6 +36,7 @@ public static class DependencyInjection
             services.AddSingleton<ILaunchTokenValidator, LaunchTokenValidator>();
             services.AddSingleton<LaunchReplayStore>();
             services.AddScoped<QueryBuilder.Application.Hub.ILaunchRecorder, LaunchRecorder>();
+            services.AddScoped<QueryBuilder.Application.Hub.Registry.IAppRegistry, AppRegistry>();
         }
 
         services.AddDbContext<AppDbContext>(db =>

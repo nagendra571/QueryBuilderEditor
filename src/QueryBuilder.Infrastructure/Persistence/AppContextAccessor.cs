@@ -47,10 +47,21 @@ public sealed class AppContextAccessor(MetadataMode mode, IAppSessionSource? ses
         _appId = appId;
     }
 
-    // Task 6 will make this the only caller in hub mode; the public UseHubWide stays until then.
-    internal void UseHubWideForFactory() => UseHubWide();
+    // The factory is the only way to a hub-wide scope in hub mode: request code (which can reach the public
+    // method through IAppContextScope) must never be able to widen what a request sees.
+    internal void UseHubWideForFactory() => SetHubWide();
 
     public void UseHubWide()
+    {
+        if (mode.Hub)
+        {
+            throw new InvalidOperationException("A hub-wide scope is created only through IHubWideScopeFactory.");
+        }
+
+        SetHubWide();
+    }
+
+    private void SetHubWide()
     {
         if (_appId is not null && !_hubWide)
         {

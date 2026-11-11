@@ -23,6 +23,8 @@ internal sealed record SuperAdminRecognition(
 /// </summary>
 internal static class SuperAdminRecognizer
 {
+    private const int MaxIdLength = 200;
+
     private static readonly string[] ObjectIdClaims = ["oid", "http://schemas.microsoft.com/identity/claims/objectidentifier"];
     private static readonly string[] TenantClaims = ["tid", "http://schemas.microsoft.com/identity/claims/tenantid"];
     private static readonly string[] EmailClaims = ["email", "preferred_username", "upn", ClaimTypes.Email, ClaimTypes.Upn];
@@ -39,9 +41,11 @@ internal static class SuperAdminRecognizer
         // The session and its audit rows need exactly one stable id, so a principal without one, or with
         // conflicting ones, cannot be attributed.
         string? objectId = null;
+        var realObjectId = false;
         if (objectIds.Count == 1)
         {
             objectId = objectIds[0];
+            realObjectId = true;
         }
         else if (objectIds.Count == 0)
         {
@@ -49,7 +53,9 @@ internal static class SuperAdminRecognizer
             objectId = subjects.Count == 1 ? subjects[0] : null;
         }
 
-        if (objectId is null)
+        // The id becomes the audit row's EntityName (200) and part of its Actor, so one that cannot fit is refused,
+        // not truncated: a truncated id could collide with another person's.
+        if (objectId is null || objectId.Length > MaxIdLength)
         {
             return new SuperAdminRecognition(null, SuperAdminRefusalReason.NoStableId, null, tenantId);
         }
@@ -63,7 +69,9 @@ internal static class SuperAdminRecognizer
         var groups = Values(principal, GroupClaims);
 
         SuperAdminMatchKind? kind = null;
-        if (Listed(allowed.ObjectIds).Any(e => Same(e, objectId)))
+        // Only a real object id claim may match the object id list. A subject claim can label the session but is an
+        // identifier of another kind (per app, per client) and must never be compared with the allowlist.
+        if (realObjectId && Listed(allowed.ObjectIds).Any(e => Same(e, objectId)))
         {
             kind = SuperAdminMatchKind.ObjectId;
         }

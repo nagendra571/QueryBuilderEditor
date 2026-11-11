@@ -403,7 +403,6 @@ public class HubSessionTests
         await using var hub = await TestHub.StartAsync(cs, new FakeClock(T0));
         Assert.Equal(["k"], (await hub.CtxAsync($"useApp={seeded.AppA}")).GetProperty("hostKeys").EnumerateArray().Select(v => v.GetString()));
         Assert.Empty((await hub.CtxAsync($"useApp={seeded.AppB}")).GetProperty("hostKeys").EnumerateArray());
-        Assert.Empty((await hub.CtxAsync("hubWide=1")).GetProperty("hostKeys").EnumerateArray());
         Assert.Empty((await hub.CtxAsync()).GetProperty("hostKeys").EnumerateArray());
 
         await hub.SignInAsync($"app={seeded.AppA}&user=mary");

@@ -14,8 +14,6 @@ namespace QueryBuilder.Editor.Hub;
 /// <summary>The hub's session cookie: its settings and the per-request checks that end a session early.</summary>
 internal static class HubSessionCookie
 {
-    private static readonly PathString ApiPath = new(QueryBuilderRoutes.BasePath + "/api");
-
     public static void Configure(CookieAuthenticationOptions cookie, HubOptions hub)
     {
         cookie.Cookie.Name = hub.CookieName;
@@ -24,14 +22,17 @@ internal static class HubSessionCookie
         cookie.Cookie.SameSite = SameSiteMode.Lax;
         cookie.Cookie.Path = "/";
         cookie.Cookie.IsEssential = true;
+        // Never the host's /Account/Login: nothing here signs in through a form. Both events answer with a bare status.
+        cookie.LoginPath = QueryBuilderRoutes.BasePath + "/";
+        cookie.AccessDeniedPath = QueryBuilderRoutes.BasePath + "/";
         // The ticket's own expiry is the idle rule: it slides on activity. The 8 h cap cannot slide, so it is checked
         // from the issued claim in ValidateAsync.
         cookie.ExpireTimeSpan = hub.IdleTimeout;
         cookie.SlidingExpiration = true;
 
         cookie.Events.OnValidatePrincipal = context => ValidateAsync(context, hub);
-        cookie.Events.OnRedirectToLogin = context => ApiOrRedirect(context, StatusCodes.Status401Unauthorized);
-        cookie.Events.OnRedirectToAccessDenied = context => ApiOrRedirect(context, StatusCodes.Status403Forbidden);
+        cookie.Events.OnRedirectToLogin = context => AnswerWith(context, StatusCodes.Status401Unauthorized);
+        cookie.Events.OnRedirectToAccessDenied = context => AnswerWith(context, StatusCodes.Status403Forbidden);
     }
 
     /// <summary>
@@ -50,17 +51,9 @@ internal static class HubSessionCookie
         cookie.SlidingExpiration = false;
     }
 
-    private static Task ApiOrRedirect(RedirectContext<CookieAuthenticationOptions> context, int status)
+    private static Task AnswerWith(RedirectContext<CookieAuthenticationOptions> context, int status)
     {
-        if (context.Request.Path.StartsWithSegments(ApiPath))
-        {
-            context.Response.StatusCode = status;
-        }
-        else
-        {
-            context.Response.Redirect(context.RedirectUri);
-        }
-
+        context.Response.StatusCode = status;
         return Task.CompletedTask;
     }
 

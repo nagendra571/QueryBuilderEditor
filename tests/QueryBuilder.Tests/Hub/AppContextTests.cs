@@ -68,8 +68,8 @@ public class AppContextTests
         Assert.Throws<InvalidOperationException>(() => accessor.UseHubWide());
 
         var wide = new AppContextAccessor(new MetadataMode(true));
-        wide.UseHubWide();
-        wide.UseHubWide();
+        wide.UseHubWideForFactory();
+        wide.UseHubWideForFactory();
         Assert.Throws<InvalidOperationException>(() => wide.UseApp(first));
     }
 }

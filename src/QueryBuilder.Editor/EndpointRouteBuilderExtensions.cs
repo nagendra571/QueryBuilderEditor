@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.Extensions.DependencyInjection;
 using QueryBuilder.Editor.Authorization;
 using QueryBuilder.Editor.Endpoints;
+using QueryBuilder.Editor.Hub;
 
 namespace QueryBuilder.Editor;
 
@@ -26,21 +27,43 @@ public static class EndpointRouteBuilderExtensions
         {
             endpoints.MapHubLaunchEndpoints();
             endpoints.MapHubSuperAdminEndpoints();
+            endpoints.MapHubRegistryEndpoints();
+            // Any session, including a super admin who has not chosen an app yet: the shell needs this to offer the choice.
+            endpoints.MapGroup(QueryBuilderRoutes.BasePath).RequireHubSession().MapMeEndpoints(options.Hub.Enabled);
         }
 
         var group = endpoints.MapGroup(QueryBuilderRoutes.BasePath);
-        ApplyAuthorization(group, options.Authorization);
+        // Hub sessions replace the host's own gates; embedded mode keeps them exactly as before.
+        if (options.Hub.Enabled)
+        {
+            group.RequireHubApp();
+        }
+        else
+        {
+            ApplyAuthorization(group, options.Authorization);
+        }
 
         group.MapDataSourceEndpoints();
         group.MapSavedQueryEndpoints();
         group.MapParameterEndpoints();
         group.MapVisualizationEndpoints();
         group.MapDashboardEndpoints();
-        group.MapMeEndpoints();
+        if (!options.Hub.Enabled)
+        {
+            group.MapMeEndpoints(false);
+        }
+
         group.MapAuditEndpoints();
 
         var adminGroup = group.MapAdminEndpoints();
-        ApplyAuthorization(adminGroup, options.AdminAuthorization);
+        if (options.Hub.Enabled)
+        {
+            adminGroup.RequireHubAdmin();
+        }
+        else
+        {
+            ApplyAuthorization(adminGroup, options.AdminAuthorization);
+        }
 
         return endpoints;
     }
