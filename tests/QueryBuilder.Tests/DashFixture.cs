@@ -131,8 +131,8 @@ internal sealed class DashFixture
     {
         public Task<SavedQuery?> GetByIdAsync(Guid id, CancellationToken cancellationToken) =>
             Task.FromResult(items.FirstOrDefault(q => q.Id == id));
-        public Task<List<SavedQuery>> GetForUserAsync(string userId, CancellationToken cancellationToken) =>
-            Task.FromResult(items.Where(q => q.OwnerId == userId || q.Shares.Any(s => s.SharedWithUserId == userId)).ToList());
+        public Task<List<SavedQuery>> ListForUserAsync(QueryBuilder.Application.Common.AccessActor actor, CancellationToken cancellationToken) =>
+            Task.FromResult(items.Where(q => q.OwnerId == actor.UserId || q.Shares.Any(s => s.SharedWithUserId == actor.UserId)).ToList());
         public Task AddAsync(SavedQuery q, CancellationToken cancellationToken) => throw new NotSupportedException();
         public void Update(SavedQuery q) => throw new NotSupportedException();
         public void Remove(SavedQuery q) => throw new NotSupportedException();
@@ -163,8 +163,8 @@ internal sealed class DashFixture
             }
             return Task.FromResult(d);
         }
-        public Task<List<Dashboard>> GetForUserAsync(string userId, CancellationToken cancellationToken) =>
-            Task.FromResult(Items.Where(d => d.OwnerId == userId || d.Shares.Any(s => s.SharedWithUserId == userId)).ToList());
+        public Task<List<Dashboard>> ListForUserAsync(QueryBuilder.Application.Common.AccessActor actor, CancellationToken cancellationToken) =>
+            Task.FromResult(Items.Where(d => d.OwnerId == actor.UserId || d.Shares.Any(s => s.SharedWithUserId == actor.UserId)).ToList());
         public Task AddAsync(Dashboard dashboard, CancellationToken cancellationToken)
         {
             Items.Add(dashboard);

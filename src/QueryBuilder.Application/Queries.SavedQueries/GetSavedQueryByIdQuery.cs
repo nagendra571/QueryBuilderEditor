@@ -1,3 +1,4 @@
+using QueryBuilder.Application.Visualizations;
 using QueryBuilder.Application.Abstractions;
 using QueryBuilder.Application.Common;
 using QueryBuilder.Application.Dtos;
@@ -15,9 +16,8 @@ public sealed class GetSavedQueryByIdQueryHandler(ISavedQueryRepository reposito
         var query = await repository.GetByIdAsync(request.Id, cancellationToken)
             ?? throw new NotFoundException(nameof(Domain.Entities.SavedQuery), request.Id);
 
-        var isOwner = query.OwnerId == currentUser.UserId;
-        var isSharedWithMe = query.Shares.Any(s => s.SharedWithUserId == currentUser.UserId);
-        if (!isOwner && !isSharedWithMe)
+        var actor = AccessActor.From(currentUser);
+        if (!SavedQueryAccess.CanView(query, actor))
         {
             throw new ForbiddenException("You do not have access to this query.");
         }
@@ -30,8 +30,8 @@ public sealed class GetSavedQueryByIdQueryHandler(ISavedQueryRepository reposito
             query.DataSource?.Name ?? string.Empty,
             query.OwnerId,
             query.OwnerName,
-            isOwner,
-            GetSavedQueriesQueryHandler.AccessLevelFor(query, currentUser.UserId),
+            SavedQueryAccess.IsOwner(query, actor),
+            SavedQueryAccess.AccessLevelFor(query, actor),
             query.IsFavorite,
             query.IsDisabled,
             QueryDefinitionSerializer.Deserialize(query.DefinitionJson),

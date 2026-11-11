@@ -70,7 +70,7 @@ public sealed class ParameterOptionsService(
     {
         // Same answer for "missing" and "not yours": a caller must not learn which queries exist.
         var source = await savedQueries.GetByIdAsync(sourceId, ct);
-        if (source is null || !SavedQueryAccess.CanView(source, currentUser.UserId))
+        if (source is null || !SavedQueryAccess.CanView(source, AccessActor.From(currentUser)))
         {
             throw new ForbiddenException("You do not have access to the query that supplies these choices.");
         }

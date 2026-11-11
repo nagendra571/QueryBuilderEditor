@@ -20,7 +20,7 @@ public sealed class GetParameterOptionsQueryHandler(
     {
         var query = await savedQueries.GetByIdAsync(request.SavedQueryId, cancellationToken)
             ?? throw new NotFoundException(nameof(SavedQuery), request.SavedQueryId);
-        if (!SavedQueryAccess.CanView(query, currentUser.UserId))
+        if (!SavedQueryAccess.CanView(query, AccessActor.From(currentUser)))
         {
             throw new ForbiddenException("You do not have access to this query.");
         }

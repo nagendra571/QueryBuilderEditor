@@ -1,3 +1,4 @@
+using QueryBuilder.Application.Visualizations;
 using QueryBuilder.Application.Abstractions;
 using QueryBuilder.Application.Common;
 using QueryBuilder.Application.Exceptions;
@@ -17,7 +18,7 @@ public sealed class SetQueryDisabledCommandHandler(
         var existing = await repository.GetByIdAsync(request.Id, cancellationToken)
             ?? throw new NotFoundException(nameof(SavedQuery), request.Id);
 
-        if (existing.OwnerId != currentUser.UserId)
+        if (!SavedQueryAccess.CanManage(existing, AccessActor.From(currentUser)))
         {
             throw new ForbiddenException("Only the owner can disable or enable this query.");
         }

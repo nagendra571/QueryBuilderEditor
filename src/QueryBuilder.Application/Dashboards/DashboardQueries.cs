@@ -14,14 +14,14 @@ public sealed class GetDashboardsQueryHandler(IDashboardRepository dashboards, I
 {
     public async Task<List<DashboardSummaryDto>> Handle(GetDashboardsQuery request, CancellationToken cancellationToken)
     {
-        var userId = currentUser.UserId;
-        var items = await dashboards.GetForUserAsync(userId, cancellationToken);
+        var actor = AccessActor.From(currentUser);
+        var items = await dashboards.ListForUserAsync(actor, cancellationToken);
 
         // Re-checked here so the list stays correct even if a repository returns more than it should.
         return items
-            .Where(d => DashboardAccess.CanView(d, userId))
+            .Where(d => DashboardAccess.CanView(d, actor))
             .OrderByDescending(d => d.UpdatedAtUtc ?? d.CreatedAtUtc)
-            .Select(d => DashboardMapper.ToSummary(d, userId))
+            .Select(d => DashboardMapper.ToSummary(d, actor))
             .ToList();
     }
 }
@@ -38,12 +38,12 @@ public sealed class GetDashboardQueryHandler(IDashboardRepository dashboards, IC
         var dashboard = await dashboards.GetByIdAsync(request.DashboardId, cancellationToken)
             ?? throw new NotFoundException(nameof(Dashboard), request.DashboardId);
 
-        if (!DashboardAccess.CanView(dashboard, currentUser.UserId))
+        if (!DashboardAccess.CanView(dashboard, AccessActor.From(currentUser)))
         {
             throw new ForbiddenException("You do not have access to this dashboard.");
         }
 
-        return DashboardMapper.ToDetail(dashboard, currentUser.UserId);
+        return DashboardMapper.ToDetail(dashboard, AccessActor.From(currentUser));
     }
 }
 
@@ -56,9 +56,9 @@ public sealed class GetPickableVisualizationsQueryHandler(
 {
     public async Task<List<PickableVisualizationDto>> Handle(GetPickableVisualizationsQuery request, CancellationToken cancellationToken)
     {
-        var userId = currentUser.UserId;
-        var queries = (await savedQueries.GetForUserAsync(userId, cancellationToken))
-            .Where(q => SavedQueryAccess.CanView(q, userId))
+        var actor = AccessActor.From(currentUser);
+        var queries = (await savedQueries.ListForUserAsync(actor, cancellationToken))
+            .Where(q => SavedQueryAccess.CanView(q, actor))
             .ToDictionary(q => q.Id);
         if (queries.Count == 0)
         {

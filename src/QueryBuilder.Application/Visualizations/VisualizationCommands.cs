@@ -29,7 +29,7 @@ public sealed class GetVisualizationsQueryHandler(
         var query = await savedQueries.GetByIdAsync(request.SavedQueryId, cancellationToken)
             ?? throw new NotFoundException(nameof(SavedQuery), request.SavedQueryId);
 
-        if (!SavedQueryAccess.CanView(query, currentUser.UserId))
+        if (!SavedQueryAccess.CanView(query, AccessActor.From(currentUser)))
         {
             throw new ForbiddenException("You do not have access to this query.");
         }
@@ -68,7 +68,7 @@ public sealed class SaveVisualizationCommandHandler(
         var query = await savedQueries.GetByIdAsync(request.SavedQueryId, cancellationToken)
             ?? throw new NotFoundException(nameof(SavedQuery), request.SavedQueryId);
 
-        if (!SavedQueryAccess.CanEdit(query, currentUser.UserId))
+        if (!SavedQueryAccess.CanEdit(query, AccessActor.From(currentUser)))
         {
             throw new ForbiddenException("You have view-only access to this query — you cannot change its charts.");
         }
@@ -152,7 +152,7 @@ public sealed class DeleteVisualizationCommandHandler(
         var query = await savedQueries.GetByIdAsync(request.SavedQueryId, cancellationToken)
             ?? throw new NotFoundException(nameof(SavedQuery), request.SavedQueryId);
 
-        if (!SavedQueryAccess.CanEdit(query, currentUser.UserId))
+        if (!SavedQueryAccess.CanEdit(query, AccessActor.From(currentUser)))
         {
             throw new ForbiddenException("You have view-only access to this query — you cannot change its charts.");
         }

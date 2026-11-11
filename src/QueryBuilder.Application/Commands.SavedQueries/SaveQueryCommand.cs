@@ -57,9 +57,7 @@ public sealed class SaveQueryCommandHandler(
             var existing = await repository.GetByIdAsync(id, cancellationToken)
                 ?? throw new NotFoundException(nameof(SavedQuery), id);
 
-            var isOwner = existing.OwnerId == currentUser.UserId;
-            var canEdit = existing.Shares.Any(s => s.SharedWithUserId == currentUser.UserId && s.AccessLevel == QueryAccessLevel.Editor);
-            if (!isOwner && !canEdit)
+            if (!SavedQueryAccess.CanEdit(existing, AccessActor.From(currentUser)))
             {
                 throw new ForbiddenException("You have view-only access to this query — save it as a new query instead.");
             }
@@ -114,7 +112,7 @@ public sealed class SaveQueryCommandHandler(
         {
             var sourceId = parameter.OptionsQueryId!.Value;
             var source = sourceId == request.Id ? null : await repository.GetByIdAsync(sourceId, cancellationToken);
-            if (source is null || !SavedQueryAccess.CanView(source, currentUser.UserId))
+            if (source is null || !SavedQueryAccess.CanView(source, AccessActor.From(currentUser)))
             {
                 errors.Add($"{ParameterTypes.Title(parameter)}: the source query is not available to you.");
             }

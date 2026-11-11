@@ -1,3 +1,4 @@
+using QueryBuilder.Application.Visualizations;
 using QueryBuilder.Application.Abstractions;
 using QueryBuilder.Application.Common;
 using QueryBuilder.Application.Dtos;
@@ -22,7 +23,7 @@ public sealed class GetAuditLogQueryHandler(
             var savedQuery = await savedQueryRepository.GetByIdAsync(queryId, cancellationToken)
                 ?? throw new NotFoundException(nameof(SavedQuery), queryId);
 
-            var hasAccess = savedQuery.OwnerId == currentUser.UserId || savedQuery.Shares.Any(s => s.SharedWithUserId == currentUser.UserId);
+            var hasAccess = SavedQueryAccess.CanView(savedQuery, AccessActor.From(currentUser));
             if (!hasAccess)
             {
                 throw new ForbiddenException("You do not have access to this query's history.");

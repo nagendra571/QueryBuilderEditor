@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using QueryBuilder.Application.Abstractions;
+using QueryBuilder.Application.Common;
 using QueryBuilder.Application.Exceptions;
 using QueryBuilder.Domain.Entities;
 using QueryBuilder.Infrastructure.Persistence;
@@ -15,14 +16,17 @@ public sealed class DashboardRepository(AppDbContext db) : IDashboardRepository
             .AsSplitQuery()
             .FirstOrDefaultAsync(d => d.Id == id, cancellationToken);
 
-    public Task<List<Dashboard>> GetForUserAsync(string userId, CancellationToken cancellationToken) =>
-        db.Dashboards
-            .AsNoTracking()
-            .Include(d => d.Shares)
-            .Include(d => d.Tiles)
-            .AsSplitQuery()
-            .Where(d => d.OwnerId == userId || d.Shares.Any(s => s.SharedWithUserId == userId))
-            .ToListAsync(cancellationToken);
+    public Task<List<Dashboard>> ListForUserAsync(AccessActor actor, CancellationToken cancellationToken)
+    {
+        var query = db.Dashboards.AsNoTracking().Include(d => d.Shares).Include(d => d.Tiles).AsSplitQuery().AsQueryable();
+        if (!actor.SeesWholeApp)
+        {
+            var userId = actor.UserId;
+            query = query.Where(d => d.OwnerId == userId || d.PublishedToApp || d.Shares.Any(s => s.SharedWithUserId == userId));
+        }
+
+        return query.ToListAsync(cancellationToken);
+    }
 
     public async Task AddAsync(Dashboard dashboard, CancellationToken cancellationToken) =>
         await db.Dashboards.AddAsync(dashboard, cancellationToken);

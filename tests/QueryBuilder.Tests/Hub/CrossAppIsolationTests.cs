@@ -87,10 +87,10 @@ public class CrossAppIsolationTests
 
         Assert.Equal([seed.B.DataSource], (await sources.GetAllAsync(ct)).Select(d => d.Id));
         Assert.Equal([seed.B.DataSource], (await sources.GetActiveAsync(ct)).Select(d => d.Id));
-        Assert.Equal([seed.B.Query], (await new SavedQueryRepository(db).GetForUserAsync(User, ct)).Select(q => q.Id));
-        Assert.Equal([seed.B.Dashboard], (await new DashboardRepository(db).GetForUserAsync(User, ct)).Select(d => d.Id));
-        Assert.Equal([seed.B.Query], (await new SavedQueryRepository(db).GetForUserAsync("other", ct)).Select(q => q.Id));
-        Assert.Equal([seed.B.Dashboard], (await new DashboardRepository(db).GetForUserAsync("other", ct)).Select(d => d.Id));
+        Assert.Equal([seed.B.Query], (await new SavedQueryRepository(db).ListForUserAsync(new QueryBuilder.Application.Common.AccessActor(User, false, false, false), ct)).Select(q => q.Id));
+        Assert.Equal([seed.B.Dashboard], (await new DashboardRepository(db).ListForUserAsync(new QueryBuilder.Application.Common.AccessActor(User, false, false, false), ct)).Select(d => d.Id));
+        Assert.Equal([seed.B.Query], (await new SavedQueryRepository(db).ListForUserAsync(new QueryBuilder.Application.Common.AccessActor("other", false, false, false), ct)).Select(q => q.Id));
+        Assert.Equal([seed.B.Dashboard], (await new DashboardRepository(db).ListForUserAsync(new QueryBuilder.Application.Common.AccessActor("other", false, false, false), ct)).Select(d => d.Id));
 
         var visualizations = new VisualizationRepository(db);
         Assert.Empty(await visualizations.GetForQueryAsync(seed.A.Query, ct));
@@ -174,10 +174,10 @@ public class CrossAppIsolationTests
     public Task Hub_wide_context_sees_both_apps_and_must_name_the_app_on_insert() => RunAsync(async (options, seed) =>
     {
         await using var db = Db(options, App.NoneId, hubWide: true);
-        var ids = (await new SavedQueryRepository(db).GetForUserAsync(User, CancellationToken.None)).Select(q => q.Id).ToHashSet();
+        var ids = (await new SavedQueryRepository(db).ListForUserAsync(new QueryBuilder.Application.Common.AccessActor(User, false, false, false), CancellationToken.None)).Select(q => q.Id).ToHashSet();
         Assert.Equal(new[] { seed.A.Query, seed.B.Query }.ToHashSet(), ids);
         Assert.Equal(2, (await new DataSourceRepository(db).GetAllAsync(CancellationToken.None)).Count);
-        Assert.Equal(2, (await new DashboardRepository(db).GetForUserAsync(User, CancellationToken.None)).Count);
+        Assert.Equal(2, (await new DashboardRepository(db).ListForUserAsync(new QueryBuilder.Application.Common.AccessActor(User, false, false, false), CancellationToken.None)).Count);
 
         await new SavedQueryRepository(db).AddAsync(
             new SavedQuery { Name = "n", DataSourceId = seed.A.DataSource, OwnerId = User, DefinitionJson = "{}", AppId = Guid.Empty },
@@ -192,8 +192,8 @@ public class CrossAppIsolationTests
         var ct = CancellationToken.None;
         Assert.Empty(await new DataSourceRepository(db).GetAllAsync(ct));
         Assert.Empty(await new DataSourceRepository(db).GetActiveAsync(ct));
-        Assert.Empty(await new SavedQueryRepository(db).GetForUserAsync(User, ct));
-        Assert.Empty(await new DashboardRepository(db).GetForUserAsync(User, ct));
+        Assert.Empty(await new SavedQueryRepository(db).ListForUserAsync(new QueryBuilder.Application.Common.AccessActor(User, false, false, false), ct));
+        Assert.Empty(await new DashboardRepository(db).ListForUserAsync(new QueryBuilder.Application.Common.AccessActor(User, false, false, false), ct));
         Assert.Empty(await new VisualizationRepository(db).GetForQueriesAsync([seed.A.Query, seed.B.Query], ct));
         Assert.Empty(await new DataScopeRuleRepository(db, new MemoryCache(new MemoryCacheOptions())).GetForDataSourceAsync(seed.B.DataSource, ct));
         Assert.Empty(await db.AuditLogEntries.ToListAsync());

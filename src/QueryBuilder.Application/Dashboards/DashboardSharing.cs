@@ -20,7 +20,7 @@ public sealed class GetDashboardSharesQueryHandler(IDashboardRepository dashboar
         var dashboard = await dashboards.GetByIdAsync(request.DashboardId, cancellationToken)
             ?? throw new NotFoundException(nameof(Dashboard), request.DashboardId);
 
-        if (!DashboardAccess.IsOwner(dashboard, currentUser.UserId))
+        if (!DashboardAccess.CanManage(dashboard, AccessActor.From(currentUser)))
         {
             throw new ForbiddenException("Only the owner can view sharing for this dashboard.");
         }
@@ -63,10 +63,11 @@ public sealed class ShareDashboardCommandHandler(
     public async Task<Guid> Handle(ShareDashboardCommand request, CancellationToken cancellationToken)
     {
         var userId = currentUser.UserId;
+        var actor = AccessActor.From(currentUser);
         var dashboard = await dashboards.GetByIdAsync(request.DashboardId, cancellationToken)
             ?? throw new NotFoundException(nameof(Dashboard), request.DashboardId);
 
-        if (!DashboardAccess.IsOwner(dashboard, userId))
+        if (!DashboardAccess.CanManage(dashboard, actor))
         {
             throw new ForbiddenException("Only the owner can share this dashboard.");
         }
@@ -91,7 +92,7 @@ public sealed class ShareDashboardCommandHandler(
 
             var query = await savedQueries.GetByIdAsync(queryId, cancellationToken)
                 ?? throw new NotFoundException(nameof(SavedQuery), queryId);
-            if (query.OwnerId != userId)
+            if (!SavedQueryAccess.CanManage(query, actor))
             {
                 throw new ForbiddenException("You can only share queries you own.");
             }
@@ -156,7 +157,7 @@ public sealed class RemoveDashboardShareCommandHandler(
         var dashboard = await dashboards.GetByIdAsync(request.DashboardId, cancellationToken)
             ?? throw new NotFoundException(nameof(Dashboard), request.DashboardId);
 
-        if (!DashboardAccess.IsOwner(dashboard, currentUser.UserId))
+        if (!DashboardAccess.CanManage(dashboard, AccessActor.From(currentUser)))
         {
             throw new ForbiddenException("Only the owner can manage sharing for this dashboard.");
         }
@@ -188,20 +189,20 @@ public sealed class GetDashboardSharePreviewQueryHandler(IDashboardRepository da
         var dashboard = await dashboards.GetByIdAsync(request.DashboardId, cancellationToken)
             ?? throw new NotFoundException(nameof(Dashboard), request.DashboardId);
 
-        if (!DashboardAccess.IsOwner(dashboard, currentUser.UserId))
+        if (!DashboardAccess.CanManage(dashboard, AccessActor.From(currentUser)))
         {
             throw new ForbiddenException("Only the owner can manage sharing for this dashboard.");
         }
 
         var inaccessible = dashboard.Tiles
             .Select(t => t.Visualization?.SavedQuery)
-            .Where(q => q is not null && !SavedQueryAccess.CanView(q, request.UserId))
+            .Where(q => q is not null && !SavedQueryAccess.CanView(q, new AccessActor(request.UserId, false, false, false)))
             .DistinctBy(q => q!.Id)
             .OrderBy(q => q!.Name, StringComparer.OrdinalIgnoreCase)
             // An Editor may have added a chart from a query the owner can't see; never reveal its
             // name or id to the owner through this preview.
-            .Select(q => SavedQueryAccess.CanView(q!, currentUser.UserId)
-                ? new InaccessibleQueryDto(q!.Id, q.Name, q.OwnerId == currentUser.UserId)
+            .Select(q => SavedQueryAccess.CanView(q!, AccessActor.From(currentUser))
+                ? new InaccessibleQueryDto(q!.Id, q.Name, SavedQueryAccess.CanManage(q, AccessActor.From(currentUser)))
                 : new InaccessibleQueryDto(Guid.Empty, "A chart you don't have access to", CanShare: false))
             .ToList();
 

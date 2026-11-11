@@ -1,3 +1,4 @@
+using QueryBuilder.Application.Common;
 using QueryBuilder.Application.Dtos;
 using QueryBuilder.Application.Visualizations;
 using QueryBuilder.Domain.Entities;
@@ -25,31 +26,39 @@ public static class DashboardAccess
     public const int DefaultTextWidth = 6;
     public const int DefaultTextHeight = 3;
 
-    public static bool IsOwner(Dashboard dashboard, string userId) => dashboard.OwnerId == userId;
+    public static bool IsOwner(Dashboard dashboard, AccessActor actor) => dashboard.OwnerId == actor.UserId;
 
-    public static bool CanView(Dashboard dashboard, string userId) =>
-        IsOwner(dashboard, userId) || dashboard.Shares.Any(s => s.SharedWithUserId == userId);
+    public static bool CanView(Dashboard dashboard, AccessActor actor) =>
+        actor.SeesWholeApp
+        || IsOwner(dashboard, actor)
+        || dashboard.Shares.Any(s => s.SharedWithUserId == actor.UserId)
+        || dashboard.PublishedToApp;
 
-    public static bool CanEdit(Dashboard dashboard, string userId) =>
-        IsOwner(dashboard, userId)
-        || dashboard.Shares.Any(s => s.SharedWithUserId == userId && s.AccessLevel == QueryAccessLevel.Editor);
+    public static bool CanEdit(Dashboard dashboard, AccessActor actor) =>
+        !actor.IsViewer
+        && (actor.SeesWholeApp
+            || IsOwner(dashboard, actor)
+            || dashboard.Shares.Any(s => s.SharedWithUserId == actor.UserId && s.AccessLevel == QueryAccessLevel.Editor));
 
-    public static QueryAccessLevel AccessLevelFor(Dashboard dashboard, string userId) =>
-        IsOwner(dashboard, userId)
+    public static bool CanManage(Dashboard dashboard, AccessActor actor) =>
+        !actor.IsViewer && (IsOwner(dashboard, actor) || actor.SeesWholeApp);
+
+    public static QueryAccessLevel AccessLevelFor(Dashboard dashboard, AccessActor actor) =>
+        actor.SeesWholeApp || IsOwner(dashboard, actor)
             ? QueryAccessLevel.Owner
-            : dashboard.Shares.FirstOrDefault(s => s.SharedWithUserId == userId)?.AccessLevel ?? QueryAccessLevel.Viewer;
+            : dashboard.Shares.FirstOrDefault(s => s.SharedWithUserId == actor.UserId)?.AccessLevel ?? QueryAccessLevel.Viewer;
 }
 
 public static class DashboardMapper
 {
-    public static DashboardSummaryDto ToSummary(Dashboard d, string userId) => new(
-        d.Id, d.Name, d.Description, d.OwnerId, d.OwnerName, DashboardAccess.IsOwner(d, userId),
-        DashboardAccess.AccessLevelFor(d, userId), d.Tiles.Count, d.CreatedAtUtc, d.UpdatedAtUtc);
+    public static DashboardSummaryDto ToSummary(Dashboard d, AccessActor actor) => new(
+        d.Id, d.Name, d.Description, d.OwnerId, d.OwnerName, DashboardAccess.IsOwner(d, actor),
+        DashboardAccess.AccessLevelFor(d, actor), d.Tiles.Count, d.CreatedAtUtc, d.UpdatedAtUtc);
 
-    public static DashboardDetailDto ToDetail(Dashboard d, string userId) => new(
-        d.Id, d.Name, d.Description, d.OwnerId, d.OwnerName, DashboardAccess.IsOwner(d, userId),
-        DashboardAccess.AccessLevelFor(d, userId), d.Version,
-        ResolveBoxes(d).Select(r => ToTile(r.Item, r.Box, userId)).ToList(),
+    public static DashboardDetailDto ToDetail(Dashboard d, AccessActor actor) => new(
+        d.Id, d.Name, d.Description, d.OwnerId, d.OwnerName, DashboardAccess.IsOwner(d, actor),
+        DashboardAccess.AccessLevelFor(d, actor), d.Version,
+        ResolveBoxes(d).Select(r => ToTile(r.Item, r.Box, actor)).ToList(),
         DashboardParameterStore.ReadParameters(d.ParametersJson));
 
     /// <summary>Stored boxes for a positioned dashboard; a converted flow for a legacy one. Never mutates.</summary>
@@ -64,7 +73,7 @@ public static class DashboardMapper
 
     /// <summary>The only place a tile's chart and query identity is exposed. A chart whose query the
     /// viewer can't see is reduced to its position and size, so no name or id of it can leak.</summary>
-    private static DashboardTileDto ToTile(DashboardTile tile, LayoutBox box, string userId)
+    private static DashboardTileDto ToTile(DashboardTile tile, LayoutBox box, AccessActor actor)
     {
         if (tile.Kind is DashboardTileKind.Text or DashboardTileKind.Section)
         {
@@ -80,7 +89,7 @@ public static class DashboardMapper
         }
 
         var query = viz.SavedQuery;
-        if (query is null || !SavedQueryAccess.CanView(query, userId))
+        if (query is null || !SavedQueryAccess.CanView(query, actor))
         {
             return new DashboardTileDto(tile.Id, tile.Kind, tile.Order, box.X, box.Y, box.W, box.H, tile.AutoHeight,
                 Restricted: true, Missing: false, Title: null, Text: null, Chart: null);

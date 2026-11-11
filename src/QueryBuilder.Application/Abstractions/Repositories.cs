@@ -5,7 +5,7 @@ namespace QueryBuilder.Application.Abstractions;
 public interface ISavedQueryRepository
 {
     Task<SavedQuery?> GetByIdAsync(Guid id, CancellationToken cancellationToken);
-    Task<List<SavedQuery>> GetForUserAsync(string userId, CancellationToken cancellationToken);
+    Task<List<SavedQuery>> ListForUserAsync(Common.AccessActor actor, CancellationToken cancellationToken);
     Task AddAsync(SavedQuery query, CancellationToken cancellationToken);
     void Update(SavedQuery query);
     void Remove(SavedQuery query);
@@ -44,7 +44,7 @@ public interface IDashboardRepository
 {
     /// <summary>Tracked, with tiles, shares, and each tile's visualization, query and query shares loaded.</summary>
     Task<Dashboard?> GetByIdAsync(Guid id, CancellationToken cancellationToken);
-    Task<List<Dashboard>> GetForUserAsync(string userId, CancellationToken cancellationToken);
+    Task<List<Dashboard>> ListForUserAsync(Common.AccessActor actor, CancellationToken cancellationToken);
     Task AddAsync(Dashboard dashboard, CancellationToken cancellationToken);
     void Remove(Dashboard dashboard);
     Task AddTileAsync(DashboardTile tile, CancellationToken cancellationToken);

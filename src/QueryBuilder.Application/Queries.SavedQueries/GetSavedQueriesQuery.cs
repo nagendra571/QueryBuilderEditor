@@ -1,3 +1,4 @@
+using QueryBuilder.Application.Visualizations;
 using QueryBuilder.Application.Common;
 using QueryBuilder.Application.Abstractions;
 using QueryBuilder.Application.Dtos;
@@ -12,7 +13,8 @@ public sealed class GetSavedQueriesQueryHandler(ISavedQueryRepository repository
 {
     public async Task<List<SavedQuerySummaryDto>> Handle(GetSavedQueriesQuery request, CancellationToken cancellationToken)
     {
-        var queries = await repository.GetForUserAsync(currentUser.UserId, cancellationToken);
+        var actor = AccessActor.From(currentUser);
+        var queries = await repository.ListForUserAsync(actor, cancellationToken);
 
         return queries
             .OrderByDescending(q => q.UpdatedAtUtc ?? q.CreatedAtUtc)
@@ -24,17 +26,12 @@ public sealed class GetSavedQueriesQueryHandler(ISavedQueryRepository repository
                 q.DataSource?.Name ?? string.Empty,
                 q.OwnerId,
                 q.OwnerName,
-                q.OwnerId == currentUser.UserId,
-                AccessLevelFor(q, currentUser.UserId),
+                SavedQueryAccess.IsOwner(q, actor),
+                SavedQueryAccess.AccessLevelFor(q, actor),
                 q.IsFavorite,
                 q.IsDisabled,
                 q.CreatedAtUtc,
                 q.UpdatedAtUtc))
             .ToList();
     }
-
-    internal static QueryAccessLevel AccessLevelFor(Domain.Entities.SavedQuery query, string userId) =>
-        query.OwnerId == userId
-            ? QueryAccessLevel.Owner
-            : query.Shares.FirstOrDefault(s => s.SharedWithUserId == userId)?.AccessLevel ?? QueryAccessLevel.Viewer;
 }

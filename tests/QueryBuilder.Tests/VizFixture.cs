@@ -120,7 +120,7 @@ internal sealed class VizFixture
     {
         public Task<SavedQuery?> GetByIdAsync(Guid id, CancellationToken cancellationToken) =>
             Task.FromResult(id == query.Id ? query : null);
-        public Task<List<SavedQuery>> GetForUserAsync(string userId, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<List<SavedQuery>> ListForUserAsync(QueryBuilder.Application.Common.AccessActor actor, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task AddAsync(SavedQuery q, CancellationToken cancellationToken) => throw new NotSupportedException();
         public void Update(SavedQuery q) => throw new NotSupportedException();
         public void Remove(SavedQuery q) => throw new NotSupportedException();

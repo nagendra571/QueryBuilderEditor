@@ -1,3 +1,4 @@
+using QueryBuilder.Application.Visualizations;
 using QueryBuilder.Application.Abstractions;
 using QueryBuilder.Application.Common;
 using QueryBuilder.Application.Exceptions;
@@ -19,7 +20,7 @@ public sealed class RemoveShareCommandHandler(
         var query = await repository.GetByIdAsync(request.SavedQueryId, cancellationToken)
             ?? throw new NotFoundException(nameof(SavedQuery), request.SavedQueryId);
 
-        if (query.OwnerId != currentUser.UserId)
+        if (!SavedQueryAccess.CanManage(query, AccessActor.From(currentUser)))
         {
             throw new ForbiddenException("Only the owner can manage sharing for this query.");
         }

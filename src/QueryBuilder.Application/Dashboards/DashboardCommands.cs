@@ -46,7 +46,7 @@ public sealed class CreateDashboardCommandHandler(
                 $"Created dashboard '{dashboard.Name}'"),
             cancellationToken);
 
-        return DashboardMapper.ToDetail(dashboard, currentUser.UserId);
+        return DashboardMapper.ToDetail(dashboard, AccessActor.From(currentUser));
     }
 }
 
@@ -72,7 +72,7 @@ public sealed class RenameDashboardCommandHandler(
         var dashboard = await dashboards.GetByIdAsync(request.DashboardId, cancellationToken)
             ?? throw new NotFoundException(nameof(Dashboard), request.DashboardId);
 
-        if (!DashboardAccess.CanEdit(dashboard, currentUser.UserId))
+        if (!DashboardAccess.CanEdit(dashboard, AccessActor.From(currentUser)))
         {
             throw new ForbiddenException("You do not have permission to edit this dashboard.");
         }
@@ -99,7 +99,7 @@ public sealed class RenameDashboardCommandHandler(
                 $"Renamed dashboard '{dashboard.Name}'"),
             cancellationToken);
 
-        return DashboardMapper.ToDetail(dashboard, currentUser.UserId);
+        return DashboardMapper.ToDetail(dashboard, AccessActor.From(currentUser));
     }
 
     internal static void Touch(Dashboard dashboard, string userId)
@@ -137,10 +137,11 @@ public sealed class SaveDashboardTilesCommandHandler(
     public async Task<DashboardDetailDto> Handle(SaveDashboardTilesCommand request, CancellationToken cancellationToken)
     {
         var userId = currentUser.UserId;
+        var actor = AccessActor.From(currentUser);
         var dashboard = await dashboards.GetByIdAsync(request.DashboardId, cancellationToken)
             ?? throw new NotFoundException(nameof(Dashboard), request.DashboardId);
 
-        if (!DashboardAccess.CanEdit(dashboard, userId))
+        if (!DashboardAccess.CanEdit(dashboard, actor))
         {
             throw new ForbiddenException("You do not have permission to edit this dashboard.");
         }
@@ -158,7 +159,7 @@ public sealed class SaveDashboardTilesCommandHandler(
             : DashboardParameterValidator.NormalizeParameters(request.Parameters);
         if (request.Parameters is not null)
         {
-            await EnsureCanUseOptionQueries(parameters, storedParameters, userId, cancellationToken);
+            await EnsureCanUseOptionQueries(parameters, storedParameters, actor, cancellationToken);
         }
 
         var existingById = dashboard.Tiles.ToDictionary(t => t.Id);
@@ -178,7 +179,7 @@ public sealed class SaveDashboardTilesCommandHandler(
             {
                 DashboardTileKind.Text => new Planned(existing, tile, null, Clean(tile.Title), tile.Text!.Trim()),
                 DashboardTileKind.Section => new Planned(existing, tile, null, tile.Title!.Trim(), Clean(tile.Text)),
-                _ => await PlanChart(existing, tile, userId, cancellationToken)
+                _ => await PlanChart(existing, tile, actor, cancellationToken)
             });
         }
 
@@ -242,13 +243,13 @@ public sealed class SaveDashboardTilesCommandHandler(
             cancellationToken);
 
         var saved = await dashboards.GetByIdAsync(dashboard.Id, cancellationToken) ?? dashboard;
-        return DashboardMapper.ToDetail(saved, userId);
+        return DashboardMapper.ToDetail(saved, actor);
     }
 
-    private async Task<Planned> PlanChart(DashboardTile? existing, SaveDashboardTileRequest tile, string userId, CancellationToken ct)
+    private async Task<Planned> PlanChart(DashboardTile? existing, SaveDashboardTileRequest tile, AccessActor actor, CancellationToken ct)
     {
         if (existing is { Kind: DashboardTileKind.Chart, VisualizationId: not null }
-            && !CanViewTarget(existing, userId))
+            && !CanViewTarget(existing, actor))
         {
             return new Planned(existing, tile, existing.VisualizationId, existing.Title, null, Restricted: true);
         }
@@ -275,7 +276,7 @@ public sealed class SaveDashboardTilesCommandHandler(
         var query = await savedQueries.GetByIdAsync(viz.SavedQueryId, ct)
             ?? throw new NotFoundException(nameof(SavedQuery), viz.SavedQueryId);
 
-        if (!SavedQueryAccess.CanView(query, userId))
+        if (!SavedQueryAccess.CanView(query, actor))
         {
             throw new ForbiddenException("You do not have access to the query behind that chart.");
         }
@@ -362,7 +363,7 @@ public sealed class SaveDashboardTilesCommandHandler(
 
     /// <summary>A new or changed source query for a dashboard dropdown must be one the editor can see.</summary>
     private async Task EnsureCanUseOptionQueries(
-        IReadOnlyList<DashboardParameterDto> parameters, IReadOnlyList<DashboardParameterDto> stored, string userId, CancellationToken ct)
+        IReadOnlyList<DashboardParameterDto> parameters, IReadOnlyList<DashboardParameterDto> stored, AccessActor actor, CancellationToken ct)
     {
         foreach (var parameter in parameters.Where(p => p.OptionsQueryId is not null))
         {
@@ -374,15 +375,15 @@ public sealed class SaveDashboardTilesCommandHandler(
             }
 
             var source = await savedQueries.GetByIdAsync(parameter.OptionsQueryId!.Value, ct);
-            if (source is null || !SavedQueryAccess.CanView(source, userId))
+            if (source is null || !SavedQueryAccess.CanView(source, actor))
             {
                 throw new ForbiddenException("You do not have access to the query that supplies a parameter's choices.");
             }
         }
     }
 
-    private static bool CanViewTarget(DashboardTile existing, string userId) =>
-        existing.Visualization?.SavedQuery is { } q && SavedQueryAccess.CanView(q, userId);
+    private static bool CanViewTarget(DashboardTile existing, AccessActor actor) =>
+        existing.Visualization?.SavedQuery is { } q && SavedQueryAccess.CanView(q, actor);
 
     private static string? Clean(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
@@ -497,10 +498,11 @@ public sealed class AddChartToDashboardCommandHandler(
     public async Task<DashboardSummaryDto> Handle(AddChartToDashboardCommand request, CancellationToken cancellationToken)
     {
         var userId = currentUser.UserId;
+        var actor = AccessActor.From(currentUser);
         var dashboard = await dashboards.GetByIdAsync(request.DashboardId, cancellationToken)
             ?? throw new NotFoundException(nameof(Dashboard), request.DashboardId);
 
-        if (!DashboardAccess.CanEdit(dashboard, userId))
+        if (!DashboardAccess.CanEdit(dashboard, actor))
         {
             throw new ForbiddenException("You do not have permission to edit this dashboard.");
         }
@@ -510,7 +512,7 @@ public sealed class AddChartToDashboardCommandHandler(
         var query = await savedQueries.GetByIdAsync(viz.SavedQueryId, cancellationToken)
             ?? throw new NotFoundException(nameof(SavedQuery), viz.SavedQueryId);
 
-        if (!SavedQueryAccess.CanView(query, userId))
+        if (!SavedQueryAccess.CanView(query, actor))
         {
             throw new ForbiddenException("You do not have access to the query behind that chart.");
         }
@@ -558,7 +560,7 @@ public sealed class AddChartToDashboardCommandHandler(
             cancellationToken);
 
         var saved = await dashboards.GetByIdAsync(dashboard.Id, cancellationToken) ?? dashboard;
-        return DashboardMapper.ToSummary(saved, userId);
+        return DashboardMapper.ToSummary(saved, actor);
     }
 }
 
@@ -573,7 +575,7 @@ public sealed class DeleteDashboardCommandHandler(
         var dashboard = await dashboards.GetByIdAsync(request.DashboardId, cancellationToken)
             ?? throw new NotFoundException(nameof(Dashboard), request.DashboardId);
 
-        if (!DashboardAccess.IsOwner(dashboard, currentUser.UserId))
+        if (!DashboardAccess.CanManage(dashboard, AccessActor.From(currentUser)))
         {
             throw new ForbiddenException("Only the owner can delete this dashboard.");
         }

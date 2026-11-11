@@ -42,7 +42,7 @@ public sealed class RenderVisualizationCommandHandler(
             ?? throw new NotFoundException(nameof(SavedQuery), request.SavedQueryId);
 
         // Checked against the share table on every request, so a revoked share takes effect at once.
-        if (!SavedQueryAccess.CanView(savedQuery, currentUser.UserId))
+        if (!SavedQueryAccess.CanView(savedQuery, AccessActor.From(currentUser)))
         {
             throw new ForbiddenException("You do not have access to this query.");
         }
