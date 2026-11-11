@@ -57,4 +57,7 @@ public sealed class DataSource : AuditableEntity, IAppOwned
     public int? MaxRecords { get; set; }
 
     public bool IsActive { get; set; } = true;
+
+    /// <summary>Hub mode: set on sources a super admin added; app admins may then only read them.</summary>
+    public bool LockedBySuperAdmin { get; set; }
 }

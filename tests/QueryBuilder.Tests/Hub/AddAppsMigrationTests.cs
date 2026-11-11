@@ -110,7 +110,7 @@ WHERE d.parent_object_id = OBJECT_ID('{table}') AND c.name = 'AppId' AND d.name 
         Assert.Equal(0, await ScalarAsync(connectionString, "SELECT COUNT(*) FROM sys.columns WHERE name = 'AppId'"));
     });
 
-    private static async Task<Guid> InsertSampleRowAsync(string connectionString, string table, Dictionary<string, Guid> parents, bool includeAppId = true)
+    internal static async Task<Guid> InsertSampleRowAsync(string connectionString, string table, Dictionary<string, Guid> parents, bool includeAppId = true)
     {
         await using var connection = new SqlConnection(connectionString);
         await connection.OpenAsync();

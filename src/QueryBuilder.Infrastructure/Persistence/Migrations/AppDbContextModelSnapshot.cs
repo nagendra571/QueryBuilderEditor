@@ -28,6 +28,9 @@ namespace QueryBuilder.Infrastructure.Persistence.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<bool>("AppAdminsCanManageConnections")
+                        .HasColumnType("bit");
+
                     b.Property<DateTimeOffset>("CreatedAtUtc")
                         .HasColumnType("datetimeoffset");
 
@@ -38,6 +41,9 @@ namespace QueryBuilder.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasMaxLength(64)
                         .HasColumnType("nvarchar(64)");
+
+                    b.Property<int?>("MaxRecords")
+                        .HasColumnType("int");
 
                     b.Property<string>("Name")
                         .IsRequired()
@@ -50,6 +56,12 @@ namespace QueryBuilder.Infrastructure.Persistence.Migrations
 
                     b.Property<DateTimeOffset?>("SessionsValidAfterUtc")
                         .HasColumnType("datetimeoffset");
+
+                    b.Property<int>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(1);
 
                     b.HasKey("Id");
 
@@ -222,6 +234,16 @@ namespace QueryBuilder.Infrastructure.Persistence.Migrations
 
                     b.Property<string>("ParametersJson")
                         .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTimeOffset?>("PublishedAtUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("PublishedBy")
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<bool>("PublishedToApp")
+                        .HasColumnType("bit");
 
                     b.Property<DateTimeOffset?>("UpdatedAtUtc")
                         .HasColumnType("datetimeoffset");
@@ -488,6 +510,9 @@ namespace QueryBuilder.Infrastructure.Persistence.Migrations
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("LockedBySuperAdmin")
                         .HasColumnType("bit");
 
                     b.Property<int?>("MaxRecords")

@@ -17,6 +17,11 @@ public sealed class Dashboard : AuditableEntity, IAppOwned
     public string OwnerName { get; set; } = string.Empty;
     public int Version { get; set; } = 1;
 
+    /// <summary>Hub mode: visible read-only to every Viewer and Author of the app. Only Admins and super admins change it.</summary>
+    public bool PublishedToApp { get; set; }
+    public string? PublishedBy { get; set; }
+    public DateTimeOffset? PublishedAtUtc { get; set; }
+
     /// <summary>1 = pre-grid (width preset, height 1-3, positions derived from Order); 2 = positioned
     /// tiles in a 12-column grid. Legacy rows are converted on read and rewritten on the next save.</summary>
     public int GridVersion { get; set; } = 2;

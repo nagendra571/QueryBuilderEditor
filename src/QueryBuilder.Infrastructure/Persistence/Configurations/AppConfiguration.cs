@@ -15,6 +15,8 @@ public sealed class AppConfiguration : IEntityTypeConfiguration<App>
         builder.Property(x => x.Key).HasMaxLength(64).IsRequired();
         builder.Property(x => x.Name).HasMaxLength(200).IsRequired();
 
+        builder.Property(x => x.Version).IsConcurrencyToken().HasDefaultValue(1);
+
         builder.HasIndex(x => x.Key).IsUnique();
 
         builder.Property(x => x.ScopeKeys)

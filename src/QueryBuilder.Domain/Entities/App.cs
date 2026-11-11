@@ -20,6 +20,15 @@ public sealed class App : IHubRegistryRecord
     /// <summary>Set when the app is turned off or one of its signing keys is revoked: sessions issued before it end.</summary>
     public DateTimeOffset? SessionsValidAfterUtc { get; set; }
 
+    /// <summary>Ceiling on records per query for this app (1-100,000); null = none. The lowest of this, the data source's and the host's limit applies.</summary>
+    public int? MaxRecords { get; set; }
+
+    /// <summary>When on, app admins may add, edit, test and turn on or off data source connections.</summary>
+    public bool AppAdminsCanManageConnections { get; set; }
+
+    /// <summary>Concurrency token for registry updates.</summary>
+    public int Version { get; set; } = 1;
+
     public DateTimeOffset CreatedAtUtc { get; set; } = DateTimeOffset.UtcNow;
 
     /// <summary>Scope keys the app declares itself (hub mode has no host options); a data source may add its own.</summary>

@@ -44,6 +44,36 @@ public class MetadataModeGuardTests
         Assert.Equal("Hub", await StoredModeAsync(options));
     });
 
+    private static async Task<bool> DefaultEnabledAsync(string cs)
+    {
+        await using var connection = new Microsoft.Data.SqlClient.SqlConnection(cs);
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = $"SELECT IsEnabled FROM Apps WHERE Id = '{App.DefaultId}'";
+        return (bool)(await command.ExecuteScalarAsync())!;
+    }
+
+    [MetadataSqlFact]
+    public Task Hub_claiming_an_empty_database_turns_Default_off() => MetadataDb.WithDatabaseAsync(async (options, cs) =>
+    {
+        Assert.True(await DefaultEnabledAsync(cs));
+
+        using var provider = Build(cs, hub: true);
+        await StartAsync<MetadataModeGuard>(provider);
+
+        Assert.False(await DefaultEnabledAsync(cs));
+        Assert.Equal("Hub", await StoredModeAsync(options));
+    });
+
+    [MetadataSqlFact]
+    public Task Embedded_claim_leaves_Default_on() => MetadataDb.WithDatabaseAsync(async (options, cs) =>
+    {
+        using var provider = Build(cs, hub: false);
+        await StartAsync<MetadataModeGuard>(provider);
+
+        Assert.True(await DefaultEnabledAsync(cs));
+    });
+
     [MetadataSqlFact]
     public Task Embedded_refuses_a_hub_database() => MetadataDb.WithDatabaseAsync(async (options, cs) =>
     {
@@ -101,7 +131,7 @@ public class MetadataModeGuardTests
     });
 
     private static MetadataModeGuard NewGuard(ServiceProvider provider, bool hub) =>
-        new(provider.GetRequiredService<IServiceScopeFactory>(), new MetadataMode(hub), NullLogger<MetadataModeGuard>.Instance);
+        new(provider.GetRequiredService<IServiceScopeFactory>(), provider.GetRequiredService<QueryBuilder.Application.Abstractions.IHubWideScopeFactory>(), new MetadataMode(hub), NullLogger<MetadataModeGuard>.Instance);
 
     private static async Task MigrateToAsync(DbContextOptions<AppDbContext> options, string target)
     {

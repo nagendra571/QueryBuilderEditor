@@ -135,7 +135,12 @@ public enum AuditAction
     LaunchRefused = 27,
     SuperAdminSignedIn = 28,
     AppRegistryChanged = 29,
-    SuperAdminSignInRefused = 30
+    SuperAdminSignInRefused = 30,
+    SuperAdminViewedApp = 31,
+    DashboardPublished = 32,
+    DashboardUnpublished = 33,
+    DataSourceLockChanged = 34,
+    DataSourceMoved = 35
 }
 
 /// <summary>How a managed data source's connection is encrypted in transit.</summary>

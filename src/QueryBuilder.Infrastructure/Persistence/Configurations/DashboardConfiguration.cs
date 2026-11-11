@@ -24,6 +24,7 @@ public sealed class DashboardConfiguration : IEntityTypeConfiguration<Dashboard>
         // Rows that predate the grid get 1 from the column default, so they are converted on read.
         builder.Property(x => x.GridVersion).HasDefaultValue(1);
         builder.Property(x => x.ParametersJson);
+        builder.Property(x => x.PublishedBy).HasMaxLength(450);
 
         builder.HasMany(x => x.Tiles).WithOne(t => t.Dashboard).HasForeignKey(t => t.DashboardId).OnDelete(DeleteBehavior.Cascade);
         builder.HasMany(x => x.Shares).WithOne(s => s.Dashboard).HasForeignKey(s => s.DashboardId).OnDelete(DeleteBehavior.Cascade);

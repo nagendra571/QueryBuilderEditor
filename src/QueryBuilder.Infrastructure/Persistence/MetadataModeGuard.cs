@@ -16,6 +16,7 @@ namespace QueryBuilder.Infrastructure.Persistence;
 /// </summary>
 internal sealed class MetadataModeGuard(
     IServiceScopeFactory scopeFactory,
+    IHubWideScopeFactory hubWide,
     MetadataMode mode,
     ILogger<MetadataModeGuard> logger) : IHostedService
 {
@@ -53,9 +54,19 @@ internal sealed class MetadataModeGuard(
 
             try
             {
-                using var scope = CreateScope();
+                // The hub is claiming the database: the migration's Default app has no launching host, so it goes off in the same save.
+                await using var scope = mode.Hub ? hubWide.Create() : new AsyncServiceScope(CreateScope());
                 var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
                 db.MetadataSettings.Add(new MetadataSetting { Key = Key, Value = mode.Name });
+                if (mode.Hub)
+                {
+                    var fallback = await db.Apps.FirstOrDefaultAsync(a => a.Id == App.DefaultId, cancellationToken);
+                    if (fallback is not null)
+                    {
+                        fallback.IsEnabled = false;
+                    }
+                }
+
                 await db.SaveChangesAsync(cancellationToken);
                 return;
             }
