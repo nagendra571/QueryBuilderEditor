@@ -442,10 +442,10 @@ public class DataSourceManagementTests
             Settings = new DataSourceManagementSettings(enabled);
         }
 
-        public CreateDataSourceCommandHandler Create() => new(Repo, Protector, Settings, new User(), new NoApp(), Audit);
-        public UpdateDataSourceCommandHandler Update() => new(Repo, Protector, Catalog, Pools, Settings, new User(), new NoApp(), Audit);
+        public CreateDataSourceCommandHandler Create() => new(Repo, Protector, Settings, new User(), new NoApp(), Audit, new FakeMetadataIdentity());
+        public UpdateDataSourceCommandHandler Update() => new(Repo, Protector, Catalog, Pools, Settings, new User(), new NoApp(), Audit, new FakeMetadataIdentity());
         public SetDataSourceActiveCommandHandler SetActive() => new(Repo, Catalog, Pools, Settings, new User(), new NoApp(), Audit);
-        public TestConnectionCommandHandler Test() => new(Repo, Protector, Tester, Settings, new User(), new NoApp());
+        public TestConnectionCommandHandler Test() => new(Repo, Protector, Tester, Settings, new User(), new NoApp(), new FakeMetadataIdentity());
         public TestStoredConnectionCommandHandler TestStored() => new(Repo, Tester, Settings, new User(), new NoApp());
 
         public DataSource AddManaged(string name = "Warehouse", DataSourceProvider provider = DataSourceProvider.PostgreSql, ManagedConnectionDetails? details = null)

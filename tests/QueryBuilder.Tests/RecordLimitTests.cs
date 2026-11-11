@@ -13,12 +13,37 @@ namespace QueryBuilder.Tests;
 public class RecordLimitTests
 {
     [Theory]
-    [InlineData(500, 2000, 500)]
-    [InlineData(null, 2000, 2000)]
-    [InlineData(500, null, 500)]
-    [InlineData(null, null, null)]
-    public void Data_source_limit_wins_over_host_default(int? dataSource, int? hostDefault, int? expected) =>
-        Assert.Equal(expected, RecordLimits.Effective(dataSource, new RecordLimitSettings(hostDefault)));
+    [InlineData(500, 2000, null, 500)]
+    [InlineData(null, 2000, null, 2000)]
+    [InlineData(500, null, null, 500)]
+    [InlineData(null, null, null, null)]
+    [InlineData(500, 2000, 100, 100)]
+    [InlineData(null, null, 100, 100)]
+    [InlineData(5000, 300, 2000, 300)]
+    public void Effective_is_the_lowest_set_limit(int? dataSource, int? hostDefault, int? appCeiling, int? expected) =>
+        Assert.Equal(expected, RecordLimits.Effective(dataSource, appCeiling, new RecordLimitSettings(hostDefault)));
+
+    [Fact]
+    public async Task App_ceiling_caps_run_and_export()
+    {
+        var execution = new FakeExecution(truncated: true);
+        var run = new RunQueryCommandHandler(
+            new FakeDataSources(maxRecords: 50), null!, new NoopCatalog(), new FakeBuilders(), execution,
+            new NoScopeGuard(), new UnrestrictedScope(), new RecordLimitSettings(null), new FakeAppSettings(5), new NoopAudit(),
+            new QueryBuilder.Application.Parameters.ParameterBinder(null!, TimeProvider.System));
+
+        var result = await run.Handle(new RunQueryCommand(TestData.DataSourceId, TestData.Definition(), [], 1000, null), default);
+
+        Assert.Equal(5, execution.RequestedMaxRows);
+        Assert.Equal(5, result.RowLimit);
+        Assert.True(result.Truncated);
+
+        var export = new ExportQueryCommandHandler(
+            new FakeDataSources(maxRecords: 50), null!, new NoopCatalog(), new FakeBuilders(), execution, new NoopExport(),
+            new NoScopeGuard(), new UnrestrictedScope(), new RecordLimitSettings(null), new FakeAppSettings(5), new NoopAudit(),
+            new QueryBuilder.Application.Parameters.ParameterBinder(null!, TimeProvider.System));
+        await Assert.ThrowsAsync<RecordLimitExceededException>(() => export.Handle(ExportCommand(), default));
+    }
 
     [Theory]
     [InlineData(5000, 1000, 5000)]     // limit set: the browser's requested rows are ignored
@@ -54,7 +79,7 @@ public class RecordLimitTests
         var execution = new FakeExecution(truncated: true);
         var handler = new RunQueryCommandHandler(
             new FakeDataSources(maxRecords: 5), null!, new NoopCatalog(), new FakeBuilders(), execution,
-            new NoScopeGuard(), new UnrestrictedScope(), new RecordLimitSettings(null), new NoopAudit(),
+            new NoScopeGuard(), new UnrestrictedScope(), new RecordLimitSettings(null), new FakeAppSettings(), new NoopAudit(),
             new QueryBuilder.Application.Parameters.ParameterBinder(null!, TimeProvider.System));
 
         var result = await handler.Handle(new RunQueryCommand(TestData.DataSourceId, TestData.Definition(), [], 1000, null), default);
@@ -101,7 +126,7 @@ public class RecordLimitTests
 
     private static ExportQueryCommandHandler ExportHandler(FakeDataSources dataSources, FakeExecution execution, int? hostDefault) =>
         new(dataSources, null!, new NoopCatalog(), new FakeBuilders(), execution, new NoopExport(),
-            new NoScopeGuard(), new UnrestrictedScope(), new RecordLimitSettings(hostDefault), new NoopAudit(),
+            new NoScopeGuard(), new UnrestrictedScope(), new RecordLimitSettings(hostDefault), new FakeAppSettings(), new NoopAudit(),
             new QueryBuilder.Application.Parameters.ParameterBinder(null!, TimeProvider.System));
 
     private sealed class FakeDataSources(int? maxRecords) : IDataSourceRepository

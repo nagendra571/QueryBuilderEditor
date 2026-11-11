@@ -28,6 +28,7 @@ public sealed class ExportQueryCommandHandler(
     IDataScopeGuard dataScopeGuard,
     ICurrentDataScope currentScope,
     RecordLimitSettings recordLimitSettings,
+    ICurrentAppSettings appSettings,
     IAuditLogger auditLogger,
     IParameterBinder parameterBinder)
     : IRequestHandler<ExportQueryCommand, ExportResult>
@@ -56,7 +57,7 @@ public sealed class ExportQueryCommandHandler(
 
         // With a record limit, an oversized export is refused rather than cut off: a truncated file
         // looks complete to whoever opens it. Without one, the legacy silent 100,000 cap applies.
-        var limit = RecordLimits.Effective(dataSource.MaxRecords, recordLimitSettings);
+        var limit = RecordLimits.Effective(dataSource.MaxRecords, await appSettings.MaxRecordsAsync(cancellationToken), recordLimitSettings);
         var result = await executionService.ExecuteAsync(
             dataSource, generated, new Dictionary<string, string?>(), maxRows: limit ?? RecordLimits.LegacyExportRows, cancellationToken);
 

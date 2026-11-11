@@ -9,14 +9,14 @@ using QueryBuilder.Domain.Enums;
 
 namespace QueryBuilder.Infrastructure.Persistence;
 
-public sealed class ConnectionTester(IConnectionStringResolver resolver, ILogger<ConnectionTester> logger) : IConnectionTester
+public sealed class ConnectionTester(IConnectionStringResolver resolver, ILogger<ConnectionTester> logger, IMetadataDatabaseIdentity? metadataIdentity = null) : IConnectionTester
 {
     private const int LimitSeconds = 10;
     public const string Unreachable = "Couldn't reach the server.";
     public const string Succeeded = "Connected.";
 
     public Task<ConnectionTestResult> TestAsync(DataSourceProvider provider, ManagedConnectionDetails details, CancellationToken cancellationToken) =>
-        RunAsync(provider, () => ManagedConnectionStringBuilder.Build(provider, details), cancellationToken);
+        RunAsync(provider, () => ManagedConnectionStringBuilder.Build(provider, details), cancellationToken, refuseMetadataDatabase: false);
 
     public async Task<ConnectionTestResult> TestStoredAsync(DataSource dataSource, CancellationToken cancellationToken)
     {
@@ -35,10 +35,11 @@ public sealed class ConnectionTester(IConnectionStringResolver resolver, ILogger
                 // Only resolving the configured name can mean "no such connection string".
                 throw new ConnectionSecretException("No connection string with the configured name was found in the host's configuration.");
             }
-        }, cancellationToken);
+        }, cancellationToken, refuseMetadataDatabase: true);
     }
 
-    private async Task<ConnectionTestResult> RunAsync(DataSourceProvider provider, Func<string> buildConnectionString, CancellationToken cancellationToken)
+    // Unsaved details are checked by the handler before any connection; a stored row only has its string here.
+    private async Task<ConnectionTestResult> RunAsync(DataSourceProvider provider, Func<string> buildConnectionString, CancellationToken cancellationToken, bool refuseMetadataDatabase)
     {
         using var limit = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         limit.CancelAfter(TimeSpan.FromSeconds(LimitSeconds));
@@ -62,6 +63,10 @@ public sealed class ConnectionTester(IConnectionStringResolver resolver, ILogger
                 await connection.OpenAsync(limit.Token);
                 await using var command = new SqlCommand("SELECT 1", connection) { CommandTimeout = LimitSeconds };
                 await command.ExecuteScalarAsync(limit.Token);
+                if (refuseMetadataDatabase && metadataIdentity is not null && await metadataIdentity.IsSameAsync(connection, limit.Token))
+                {
+                    throw new CatalogValidationException(MetadataDatabaseMessages.Refused);
+                }
             }
 
             return new ConnectionTestResult(true, Succeeded);
@@ -73,6 +78,10 @@ public sealed class ConnectionTester(IConnectionStringResolver resolver, ILogger
         catch (OperationCanceledException)
         {
             return new ConnectionTestResult(false, Unreachable);
+        }
+        catch (CatalogValidationException)
+        {
+            throw;
         }
         catch (ConnectionSecretException ex)
         {

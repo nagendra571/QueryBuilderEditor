@@ -194,6 +194,8 @@ internal sealed class HubApiHost : IAsyncDisposable
                         configure?.Invoke(o);
                     });
                     services.AddSingleton<TimeProvider>(env.Clock);
+                    // Test sources use the "biz" string, which points back at the metadata database on purpose.
+                    services.AddSingleton<QueryBuilder.Application.Abstractions.IMetadataDatabaseIdentity>(new FakeMetadataIdentity());
                 });
                 web.Configure(app =>
                 {

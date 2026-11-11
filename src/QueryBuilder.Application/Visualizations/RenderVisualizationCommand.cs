@@ -33,6 +33,7 @@ public sealed class RenderVisualizationCommandHandler(
     IDataScopeGuard dataScopeGuard,
     ICurrentDataScope currentScope,
     RecordLimitSettings recordLimitSettings,
+    ICurrentAppSettings appSettings,
     IAuditLogger auditLogger,
     ICurrentUserService currentUser,
     IParameterBinder parameterBinder,
@@ -84,7 +85,7 @@ public sealed class RenderVisualizationCommandHandler(
         var builder = sqlBuilderFactory.GetBuilder(dataSource.Provider);
         var generated = builder.Build(bound, scopePredicates);
 
-        var effectiveLimit = RecordLimits.Effective(dataSource.MaxRecords, recordLimitSettings);
+        var effectiveLimit = RecordLimits.Effective(dataSource.MaxRecords, await appSettings.MaxRecordsAsync(cancellationToken), recordLimitSettings);
         var cap = RecordLimits.ChartRows(effectiveLimit);
 
         var result = await executionService.ExecuteAsync(

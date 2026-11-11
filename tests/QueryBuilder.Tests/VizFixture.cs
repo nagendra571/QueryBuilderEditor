@@ -45,6 +45,7 @@ internal sealed class VizFixture
     public DataSource DataSource { get; } = new() { Name = "Sales" };
     public FakeDataSources DataSources { get; }
     public RecordLimitSettings Limits { get; set; } = new(null);
+    public int? AppCeiling { get; set; }
 
     public VizFixture()
     {

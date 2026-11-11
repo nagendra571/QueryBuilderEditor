@@ -24,6 +24,7 @@ public sealed class ParameterOptionsService(
     IQueryExecutionService executionService,
     IDataScopeGuard dataScopeGuard,
     RecordLimitSettings recordLimitSettings,
+    ICurrentAppSettings appSettings,
     ICurrentUserService currentUser,
     Dashboards.IDashboardGrant dashboardGrant,
     IServiceProvider services) : IParameterOptionsService
@@ -92,7 +93,7 @@ public sealed class ParameterOptionsService(
         var scope = await dataScopeGuard.AuthorizeAsync(source.DataSourceId, definition, ct);
         var generated = sqlBuilderFactory.GetBuilder(dataSource.Provider).Build(definition, scope);
 
-        var limit = RecordLimits.Effective(dataSource.MaxRecords, recordLimitSettings);
+        var limit = RecordLimits.Effective(dataSource.MaxRecords, await appSettings.MaxRecordsAsync(ct), recordLimitSettings);
         var fetch = limit is { } l ? Math.Min(l, MaxFetchRows) : MaxFetchRows;
         var result = await executionService.ExecuteAsync(dataSource, generated, new Dictionary<string, string?>(), fetch, ct);
 

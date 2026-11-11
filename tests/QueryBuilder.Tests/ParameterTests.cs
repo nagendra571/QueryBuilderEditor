@@ -520,7 +520,7 @@ public class ParameterOptionsServiceTests
             .AddSingleton<IParameterBinder>(new ParameterBinder(new FakeOptions(), TimeProvider.System))
             .BuildServiceProvider();
         var service = new ParameterOptionsService(
-            f.Queries, f.DataSources, f.Catalog, f.Builders, f.Executor, f.Guard, f.Limits, f.User, new QueryBuilder.Application.Dashboards.DashboardGrant(), provider);
+            f.Queries, f.DataSources, f.Catalog, f.Builders, f.Executor, f.Guard, f.Limits, new FakeAppSettings(), f.User, new QueryBuilder.Application.Dashboards.DashboardGrant(), provider);
         return (service, f);
     }
 

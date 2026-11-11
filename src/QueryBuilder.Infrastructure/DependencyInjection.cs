@@ -31,6 +31,8 @@ public static class DependencyInjection
 
         services.AddSingleton<IHubWideScopeFactory, HubWideScopeFactory>();
         services.AddScoped<ICurrentAppReader, CurrentAppReader>();
+        services.AddScoped<ICurrentAppSettings, CurrentAppSettings>();
+        services.AddSingleton<IMetadataDatabaseIdentity, MetadataDatabaseIdentity>();
         if (hubMode)
         {
             // Needs LaunchValidationSettings, which only hub mode registers; build-time validation would fail embedded hosts otherwise.

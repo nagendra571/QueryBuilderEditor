@@ -18,7 +18,7 @@ public class RenderVisualizationCommandTests
         var grant = new QueryBuilder.Application.Dashboards.DashboardGrant();
         return new(
             f.Queries, f.Visualizations, f.DataSources, f.Catalog, f.Builders, f.Executor, f.Guard,
-            new VizFixture.FakeScope(), f.Limits, f.Audit, f.User,
+            new VizFixture.FakeScope(), f.Limits, new FakeAppSettings(f.AppCeiling), f.Audit, f.User,
             new QueryBuilder.Application.Parameters.ParameterBinder(null!, TimeProvider.System),
             grant, new QueryBuilder.Application.Dashboards.DashboardGrantResolver(null!, grant));
     }
@@ -122,6 +122,20 @@ public class RenderVisualizationCommandTests
         await Render(f, viz);
 
         Assert.DoesNotContain("@__scope", f.Builders.Generated!.Sql);
+    }
+
+    [Fact]
+    public async Task App_ceiling_caps_the_chart_and_names_itself_as_the_limit()
+    {
+        var (f, viz) = Arrange();
+        f.AppCeiling = 2;
+        f.Limits = new RecordLimitSettings(500);
+        f.Executor.Result = VizFixture.Result([Row("A", 1), Row("B", 2)], truncated: true);
+
+        var ex = await Assert.ThrowsAsync<RecordLimitExceededException>(() => Render(f, viz));
+
+        Assert.Contains("more than 2 records", ex.Message);
+        Assert.Equal(2, f.Executor.ReceivedMaxRows);
     }
 
     [Fact]

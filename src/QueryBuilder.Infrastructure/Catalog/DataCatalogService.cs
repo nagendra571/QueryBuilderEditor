@@ -16,7 +16,8 @@ public sealed class DataCatalogService(
     IConnectionStringResolver connectionStringResolver,
     IEnumerable<ICatalogReader> readers,
     IMemoryCache cache,
-    ILogger<DataCatalogService> logger) : IDataCatalogService
+    ILogger<DataCatalogService> logger,
+    IMetadataDatabaseIdentity? metadataIdentity = null) : IDataCatalogService
 {
     public async Task<DataSourceCatalog> GetCatalogAsync(Guid dataSourceId, CancellationToken cancellationToken)
     {
@@ -195,10 +196,10 @@ public sealed class DataCatalogService(
 
     private async Task<DataSourceCatalog> BuildCatalogAsync(DataSource dataSource, CancellationToken cancellationToken)
     {
-        var reader = ReaderFor(dataSource.Provider);
         var connectionString = connectionStringResolver.Resolve(dataSource);
 
         var (usable, unavailable) = await ReadPartitionedAsync(dataSource, cancellationToken);
+        var reader = ReaderFor(dataSource.Provider);
         var objects = usable.Where(o => Passes(dataSource, o.SchemaName, o.Name, o.Kind)).ToList();
 
         var columnsByObject = await GuardManaged(dataSource, () => reader.ReadColumnsAsync(connectionString, cancellationToken));
@@ -233,6 +234,13 @@ public sealed class DataCatalogService(
     private async Task<(List<SchemaObjectMetadata> Usable, List<AdminUnavailableObject> Unavailable)> ReadPartitionedAsync(
         DataSource dataSource, CancellationToken cancellationToken)
     {
+        // Also stops a source that reached the table by raw SQL: its catalog never loads, so it can't be browsed or queried.
+        if (metadataIdentity is not null &&
+            await metadataIdentity.IsSameAsync(dataSource.Provider, connectionStringResolver.Resolve(dataSource), cancellationToken))
+        {
+            throw new CatalogValidationException(MetadataDatabaseMessages.Refused);
+        }
+
         var reader = ReaderFor(dataSource.Provider);
         var objects = await GuardManaged(dataSource, () => reader.ReadObjectsAsync(connectionStringResolver.Resolve(dataSource), cancellationToken));
         if (dataSource.Provider != DataSourceProvider.PostgreSql)

@@ -25,6 +25,7 @@ public sealed class RunQueryCommandHandler(
     IDataScopeGuard dataScopeGuard,
     ICurrentDataScope currentScope,
     RecordLimitSettings recordLimitSettings,
+    ICurrentAppSettings appSettings,
     IAuditLogger auditLogger,
     IParameterBinder parameterBinder)
     : IRequestHandler<RunQueryCommand, QueryResultDto>
@@ -54,7 +55,7 @@ public sealed class RunQueryCommandHandler(
         var builder = sqlBuilderFactory.GetBuilder(dataSource.Provider);
         var generated = builder.Build(definition, scopePredicates);
 
-        var maxRows = RecordLimits.GridRows(RecordLimits.Effective(dataSource.MaxRecords, recordLimitSettings), request.MaxRows);
+        var maxRows = RecordLimits.GridRows(RecordLimits.Effective(dataSource.MaxRecords, await appSettings.MaxRecordsAsync(cancellationToken), recordLimitSettings), request.MaxRows);
 
         var result = await executionService.ExecuteAsync(
             dataSource, generated, NoRuntimeValues, maxRows, cancellationToken);
