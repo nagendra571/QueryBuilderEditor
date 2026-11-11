@@ -210,10 +210,14 @@ public class HubRegistryTests
     });
 
     [MetadataSqlFact]
-    public Task The_default_app_can_be_renamed_and_there_is_no_delete() => HubApiHost.RunAsync(async env =>
+    public Task The_default_app_can_be_renamed_and_turned_off_but_not_enabled_or_given_keys_or_urls() => HubApiHost.RunAsync(async env =>
     {
         var super = await SuperAsync(env);
-        var rename = await super.PutAsync($"{Apps}/{App.DefaultId}", new { name = "Renamed default", isEnabled = true, scopeKeys = Array.Empty<string>() });
+        Assert.Equal(HttpStatusCode.NotFound, (await super.PutAsync($"{Apps}/{App.DefaultId}", new { name = "x", isEnabled = true, scopeKeys = Array.Empty<string>() })).StatusCode);
+        using var rsa = RSA.Create(2048);
+        Assert.Equal(HttpStatusCode.NotFound, (await super.PostAsync($"{Apps}/{App.DefaultId}/keys", new { kid = "k1", algorithm = "RS256", publicKeyPem = TestTokens.Pem(rsa) })).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await super.PutAsync($"{Apps}/{App.DefaultId}/return-urls", new { urls = new[] { "https://a.example/x" } })).StatusCode);
+        var rename = await super.PutAsync($"{Apps}/{App.DefaultId}", new { name = "Renamed default", isEnabled = false, scopeKeys = Array.Empty<string>() });
         Assert.Equal(HttpStatusCode.OK, rename.StatusCode);
 
         var delete = await super.SendAsync(HttpMethod.Delete, $"{Apps}/{App.DefaultId}");

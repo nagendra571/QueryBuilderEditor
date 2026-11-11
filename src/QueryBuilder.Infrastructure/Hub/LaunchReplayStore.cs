@@ -18,19 +18,19 @@ public sealed class LaunchReplayStore
     /// <summary>True when the id was new. A duplicate (app, jti) means the token was already used.</summary>
     internal async Task<bool> TryRecordAsync(AppDbContext db, Guid appId, string jti, DateTimeOffset expiresUtc, CancellationToken ct)
     {
-        db.LaunchReplays.Add(new LaunchReplay { AppId = appId, Jti = jti, ExpiresUtc = expiresUtc });
+        // A conditional insert, not insert-and-catch: a replay is expected traffic, and a thrown key violation is logged
+        // by EF at error level every time. HOLDLOCK keeps two concurrent copies of one id from both passing the check.
         try
         {
-            await db.SaveChangesAsync(ct);
-            return true;
+            var inserted = await db.Database.ExecuteSqlInterpolatedAsync(
+                $@"INSERT INTO LaunchReplays (AppId, Jti, ExpiresUtc)
+                   SELECT {appId}, {jti}, {expiresUtc}
+                   WHERE NOT EXISTS (SELECT 1 FROM LaunchReplays WITH (UPDLOCK, HOLDLOCK) WHERE AppId = {appId} AND Jti = {jti})", ct);
+            return inserted == 1;
         }
-        catch (DbUpdateException ex) when (IsDuplicateKey(ex))
+        catch (SqlException ex) when (ex.Number is 2627 or 2601)
         {
             return false;
-        }
-        finally
-        {
-            db.ChangeTracker.Clear();
         }
     }
 
@@ -54,7 +54,4 @@ public sealed class LaunchReplayStore
             Interlocked.Exchange(ref _lastCleanupTicks, last);
         }
     }
-
-    private static bool IsDuplicateKey(DbUpdateException ex) =>
-        ex.InnerException is SqlException { Number: 2627 or 2601 };
 }

@@ -23,9 +23,15 @@ public sealed class SaveQueryCommandValidator : AbstractValidator<SaveQueryComma
     {
         RuleFor(x => x.Name).NotEmpty().MaximumLength(200);
         RuleFor(x => x.DataSourceId).NotEmpty();
+        RuleFor(x => x.Definition).NotNull()
+            .WithMessage("The query definition is required.");
+        RuleFor(x => x.Definition.Source).NotNull().When(x => x.Definition is not null)
+            .WithMessage("Select a table or view to build the query from.");
         RuleFor(x => x.Definition.Source.ObjectName).NotEmpty()
+            .When(x => x.Definition?.Source is not null)
             .WithMessage("Select a table or view to build the query from.");
         RuleFor(x => x.Definition.Columns).NotEmpty()
+            .When(x => x.Definition is not null)
             .WithMessage("Select at least one column for the query.");
     }
 }

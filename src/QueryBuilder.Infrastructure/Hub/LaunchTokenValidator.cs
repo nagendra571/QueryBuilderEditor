@@ -91,7 +91,7 @@ public sealed class LaunchTokenValidator : ILaunchTokenValidator
 
         var app = (await db.Apps.AsNoTracking().Where(a => a.Key == iss).ToListAsync(ct))
             .FirstOrDefault(a => string.Equals(a.Key, iss, StringComparison.Ordinal));
-        if (app is null)
+        if (app is null || app.Id == QueryBuilder.Domain.Entities.App.DefaultId)
         {
             return LaunchResult.Refused(LaunchRefusalReason.UnknownApp);
         }

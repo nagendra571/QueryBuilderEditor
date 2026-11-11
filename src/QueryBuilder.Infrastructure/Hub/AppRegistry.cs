@@ -41,7 +41,13 @@ internal sealed class AppRegistry(AppDbContext db, ICurrentUserService user, IHt
 
     public async Task<AppDto> UpdateAsync(Guid id, string name, bool isEnabled, List<string> scopeKeys, CancellationToken ct)
     {
-        var app = await FindAsync(id, ct);
+        // Default may be renamed or turned off, never turned on.
+        if (id == App.DefaultId && isEnabled)
+        {
+            throw new NotFoundException(nameof(App), id);
+        }
+
+        var app = await FindAsync(id, ct, allowDefault: true);
         var before = new { name = app.Name, isEnabled = app.IsEnabled, scopeKeys = app.ScopeKeys.ToList() };
 
         app.Name = name;
@@ -109,8 +115,9 @@ internal sealed class AppRegistry(AppDbContext db, ICurrentUserService user, IHt
         return new ReturnUrlsDto(urls);
     }
 
-    private async Task<App> FindAsync(Guid id, CancellationToken ct) =>
-        id != App.NoneId && await db.Apps.FirstOrDefaultAsync(a => a.Id == id, ct) is { } app
+    private async Task<App> FindAsync(Guid id, CancellationToken ct, bool allowDefault = false) =>
+        // Default is the embedded-mode app and is never used in hub mode: it gets no keys, URLs or enabling, like None.
+        id != App.NoneId && (allowDefault || id != App.DefaultId) && await db.Apps.FirstOrDefaultAsync(a => a.Id == id, ct) is { } app
             ? app
             : throw new NotFoundException(nameof(App), id);
 

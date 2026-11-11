@@ -190,7 +190,8 @@ but grants nothing a Viewer can use beyond dashboards (Viewer role wins).
 - Sources added by a super admin are **locked**: app admins and users can use them, app admins see their settings
   read-only; only super admins change anything (connection, on/off, catalog, scope mappings, record limit,
   scope keys). A super admin can **unlock** (hand over) and **re-lock**; both audited.
-- Config-defined sources (`ConnectionStringName` from appsettings) belong to Default, locked.
+- Config-defined sources (`ConnectionStringName` from appsettings) belong to Default, which is never used in hub mode;
+  a hub has none.
 - Per-app maximum record limit set by super admins; the effective limit is the lowest of app ceiling, data source
   limit, host default.
 - The data-source encryption key and rotation are hub-wide and super-admin-only.
@@ -262,8 +263,9 @@ apps. Never handles a private key it didn't receive from the caller.
   the old app. No cascading re-tenanting.
 - **The hub has its own metadata database.** The package records the mode in the database the first time it runs
   (hub or embedded) and refuses to start if the other mode points at it, naming the reason.
-- **"Default" in hub mode** holds the upgraded rows and config-defined sources; it has no signing keys until a super
-  admin adds some, so nobody can launch into it until then; super admins can see it like any app.
+- **"Default" is never used in hub mode**: a hub database starts empty (embedded-owned databases are refused). The
+  registry may list it but refuses to add keys or return URLs to it or to enable it, a launch with `iss` = "default" is
+  refused as an unknown app, and super admins cannot view it.
 - **The "App admins can add data sources" switch governs connections only**: adding, editing connection details,
   testing and turning on/off. Catalog, scope mappings and record limits on an unlocked source depend only on the
   lock. A handed-over source's connection stays read-only to the app admin while the switch is off.

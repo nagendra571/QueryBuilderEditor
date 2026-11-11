@@ -48,14 +48,30 @@ public static class DependencyInjection
         services.AddHttpContextAccessor();
         services.AddSingleton(new MetadataConnectionStringAccessor(connectionString));
 
-        if (applyMigrations)
+        if (hubMode)
         {
-            services.AddHostedService<DatabaseMigrationHostedService>();
+            // Data Protection's own hosted service (registered by the first AddAuthentication/AddDataProtection call, which
+            // may be the host's, earlier than this one) reads the key table at startup. Inserting at the front makes the
+            // migration and the mode guard run before it whatever the host registered first; migration stays ahead of the guard.
+            services.Insert(0, ServiceDescriptor.Singleton<Microsoft.Extensions.Hosting.IHostedService, MetadataModeGuard>());
+            if (applyMigrations)
+            {
+                services.Insert(0, ServiceDescriptor.Singleton<Microsoft.Extensions.Hosting.IHostedService, DatabaseMigrationHostedService>());
+            }
+        }
+        else
+        {
+            if (applyMigrations)
+            {
+                services.AddHostedService<DatabaseMigrationHostedService>();
+            }
+
+            // Registered after the migration hosted service (registration order = startup order) so
+            // that when migrations are enabled, the schema is guaranteed to exist by the time these run.
+            services.AddHostedService<MetadataModeGuard>();
         }
 
-        // Registered after the migration hosted service (registration order = startup order) so
-        // that when migrations are enabled, the schema is guaranteed to exist by the time these run.
-        services.AddHostedService<MetadataModeGuard>();
+
         services.AddHostedService<DefaultDataSourceSeeder>();
 
         services.AddScoped<ISavedQueryRepository, SavedQueryRepository>();

@@ -10,8 +10,8 @@ namespace QueryBuilder.Editor.Hub;
 /// <summary>
 /// Keeps the Data Protection key ring in the metadata database so every hub instance reads each other's session cookies.
 /// Insert-only on purpose: nothing here updates or deletes a key, so a bug or a second instance cannot damage the ring.
-/// Keys are stored as Data Protection hands them over (unencrypted XML): protect them at rest in the host, for example
-/// with ProtectKeysWith... on the host's own Data Protection configuration.
+/// Keys arrive already encrypted by <see cref="HubKeyEncryptor"/> (keyed from the data source encryption key), so the
+/// stored XML never holds a key in clear.
 /// </summary>
 internal sealed class MetadataXmlRepository(IServiceScopeFactory scopes) : IXmlRepository
 {

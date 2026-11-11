@@ -29,6 +29,7 @@ public class HubLaunchEndpointTests
     private sealed class CapturingLogs : ILoggerProvider
     {
         public List<string> Lines { get; } = [];
+        public List<string> Errors { get; } = [];
         public ILogger CreateLogger(string categoryName) => new Logger(this);
         public void Dispose() { }
 
@@ -41,7 +42,12 @@ public class HubLaunchEndpointTests
             {
                 lock (owner.Lines)
                 {
-                    owner.Lines.Add(formatter(state, exception) + (exception?.ToString() ?? ""));
+                    var line = formatter(state, exception) + (exception?.ToString() ?? "");
+                    owner.Lines.Add(line);
+                    if (logLevel >= LogLevel.Error)
+                    {
+                        owner.Errors.Add(line);
+                    }
                 }
             }
         }
@@ -252,6 +258,33 @@ public class HubLaunchEndpointTests
         Assert.Equal(2, details.RootElement.GetProperty("scopeValueCounts").GetProperty("ProgramId").GetInt32());
         Assert.True(details.RootElement.GetProperty("returnUrlPresent").ValueKind == JsonValueKind.False);
         Assert.DoesNotContain("\"10\"", audit.DetailsJson);
+    });
+
+    [MetadataSqlFact]
+    public Task A_replayed_launch_is_refused_without_an_error_in_the_log() => RunAsync(async env =>
+    {
+        var token = env.TokenA();
+        Assert.Equal(HttpStatusCode.SeeOther, (await env.LaunchAsync(token)).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await env.LaunchAsync(token)).StatusCode);
+
+        await using var db = env.Db();
+        Assert.Contains(await db.AuditLogEntries.ToListAsync(), a => a.Action == AuditAction.LaunchRefused && a.DetailsJson!.Contains("Replayed"));
+        Assert.Empty(env.Logs.Errors);
+        Assert.Single(await db.LaunchReplays.ToListAsync());
+    });
+
+    [MetadataSqlFact]
+    public Task A_launch_naming_the_default_app_is_refused_even_with_a_key_on_it() => RunAsync(async env =>
+    {
+        await using (var db = env.Db())
+        {
+            db.AppSigningKeys.Add(new AppSigningKey { AppId = App.DefaultId, Kid = "rsa-d", Algorithm = "RS256", PublicKeyPem = TestTokens.Pem(env.RsaA) });
+            await db.SaveChangesAsync();
+        }
+
+        var token = TestTokens.Rs256(env.RsaA, env.Claims("default", "user-d"), "rsa-d");
+        Assert.Equal(HttpStatusCode.BadRequest, (await env.LaunchAsync(token)).StatusCode);
+        Assert.Null(await env.MeUserAsync());
     });
 
     [MetadataSqlFact]
