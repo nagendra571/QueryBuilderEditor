@@ -114,7 +114,7 @@ internal sealed class HubApiHost : IAsyncDisposable
 
     public AppDbContext HubWideDb() => new(Options, new FixedAppContext(App.NoneId, hubWide: true));
 
-    public static Task RunAsync(Func<HubApiHost, Task> body, bool hub = true) =>
+    public static Task RunAsync(Func<HubApiHost, Task> body, bool hub = true, Action<QueryBuilderEditorOptions>? configure = null) =>
         MetadataDb.WithDatabaseAsync(async (options, connectionString) =>
         {
             var env = new HubApiHost { Options = options };
@@ -147,6 +147,7 @@ internal sealed class HubApiHost : IAsyncDisposable
                         o.Hub.SuperAdmins.ObjectIds = ["admin-oid"];
                         o.Hub.SuperAdmins.TenantIds = ["tenant-1"];
                         o.DataSourceManagement.EncryptionKey = Key;
+                        configure?.Invoke(o);
                     });
                     services.AddSingleton<TimeProvider>(env.Clock);
                 });

@@ -96,7 +96,7 @@ public sealed class AppDbContext : DbContext
                 {
                     if (entry.State == EntityState.Added && owned.AppId == Guid.Empty)
                     {
-                        throw new CrossAppWriteException("A hub-wide write must name its app.");
+                        throw Refuse("A hub-wide write must name its app.", entry);
                     }
 
                     continue;
@@ -109,14 +109,14 @@ public sealed class AppDbContext : DbContext
                 }
                 else if (owned.AppId != CurrentAppId)
                 {
-                    throw new CrossAppWriteException("That row belongs to another app.");
+                    throw Refuse("That row belongs to another app.", entry);
                 }
             }
             else if (entry.Entity is IHubRegistryRecord)
             {
                 if (!IsHubWide)
                 {
-                    throw new CrossAppWriteException("Only a hub-wide context may change apps.");
+                    throw Refuse("Only a hub-wide context may change apps.", entry);
                 }
             }
             else if (entry.Entity is IHubSystemRecord)
@@ -137,17 +137,21 @@ public sealed class AppDbContext : DbContext
                 }
                 else if (audit.AppId != CurrentAppId)
                 {
-                    throw new CrossAppWriteException("That row belongs to another app.");
+                    throw Refuse("That row belongs to another app.", entry);
                 }
             }
         }
     }
 
+    private CrossAppWriteException Refuse(string message, Microsoft.EntityFrameworkCore.ChangeTracking.EntityEntry entry) =>
+        new(message, CurrentAppId, entry.Metadata.ClrType.Name,
+            entry.Metadata.FindPrimaryKey()?.Properties.Select(p => entry.Property(p.Name).CurrentValue?.ToString()).FirstOrDefault());
+
     private void RequireWritableApp()
     {
         if (CurrentAppId == App.NoneId)
         {
-            throw new CrossAppWriteException("No app is selected, so nothing can be written.");
+            throw new CrossAppWriteException("No app is selected, so nothing can be written.", CurrentAppId);
         }
     }
 

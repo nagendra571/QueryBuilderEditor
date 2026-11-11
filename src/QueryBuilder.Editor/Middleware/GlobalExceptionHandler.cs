@@ -20,6 +20,16 @@ public sealed class GlobalExceptionHandler(ILogger<GlobalExceptionHandler> logge
             logger.LogError(exception, "Unhandled exception processing {Method} {Path}", httpContext.Request.Method, httpContext.Request.Path);
         }
 
+        if (exception is CrossAppWriteException crossApp)
+        {
+            // The caller sees a plain 404; operators need to know someone reached for another app's row.
+            var actor = httpContext.RequestServices is { } services
+                ? Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetService<Application.Abstractions.ICurrentUserService>(services)?.UserId
+                : null;
+            logger.LogWarning("Refused a write across apps: app {AppId}, actor {Actor}, {EntityType} {EntityId}",
+                crossApp.AppId, actor, crossApp.EntityType, crossApp.EntityId);
+        }
+
         var problemDetails = new ProblemDetails
         {
             Status = statusCode,
