@@ -184,6 +184,13 @@ public static class ServiceCollectionExtensions
                     $"{nameof(SuperAdminOptions.Emails)} or {nameof(SuperAdminOptions.GroupIds)}: a hub nobody can administer is refused.");
             }
 
+            if (SuperAdminRecognizer.ConfiguredTenantCount(options.Hub.SuperAdmins) == 0)
+            {
+                throw new InvalidOperationException(
+                    $"{nameof(HubOptions)}.{nameof(HubOptions.SuperAdmins)}.{nameof(SuperAdminOptions.TenantIds)} needs at least one tenant id: " +
+                    "an object id or email is only meaningful inside the tenant that issued it.");
+            }
+
             AddHubSession(services, options.Hub);
         }
 

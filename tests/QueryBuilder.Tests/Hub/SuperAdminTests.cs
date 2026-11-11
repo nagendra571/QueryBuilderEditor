@@ -16,6 +16,7 @@ using Microsoft.Extensions.Logging;
 using QueryBuilder.Domain.Entities;
 using QueryBuilder.Domain.Enums;
 using QueryBuilder.Editor;
+using QueryBuilder.Editor.Hub;
 using QueryBuilder.Infrastructure.Persistence;
 using Xunit;
 
@@ -26,6 +27,8 @@ public class SuperAdminTests
 {
     private const string Audience = "https://hub.test";
     private const string AdminOid = "11111111-aaaa-bbbb-cccc-000000000001";
+    private const string TenantId = "aaaaaaaa-1111-2222-3333-444444444444";
+    private const string OtherTenantId = "bbbbbbbb-1111-2222-3333-444444444444";
     private static readonly string Key = Convert.ToBase64String(Enumerable.Range(1, 32).Select(i => (byte)i).ToArray());
 
     private sealed class OffsetClock : TimeProvider
@@ -62,10 +65,12 @@ public class SuperAdminTests
     private sealed class FakeHostScheme : IAuthenticationHandler
     {
         private HttpContext _context = null!;
+        private string _scheme = "";
 
         public Task InitializeAsync(AuthenticationScheme scheme, HttpContext context)
         {
             _context = context;
+            _scheme = scheme.Name;
             return Task.CompletedTask;
         }
 
@@ -82,7 +87,10 @@ public class SuperAdminTests
                 }
             }
 
-            await _context.SignInAsync("QueryBuilder.HubExternal", new ClaimsPrincipal(new ClaimsIdentity(claims, "host")));
+            // What RemoteAuthenticationHandler does: the ticket carries the challenge's own properties and the scheme that made it.
+            var ticketProperties = new AuthenticationProperties(new Dictionary<string, string?>(properties!.Items)) { RedirectUri = properties.RedirectUri };
+            ticketProperties.Items[".AuthScheme"] = _scheme;
+            await _context.SignInAsync("QueryBuilder.HubExternal", new ClaimsPrincipal(new ClaimsIdentity(claims, "host")), ticketProperties);
             _context.Response.Redirect(properties!.RedirectUri!);
         }
 
@@ -144,7 +152,10 @@ public class SuperAdminTests
         }
 
         /// <summary>The whole round trip the host's OIDC handler would make; returns the response of the complete step.</summary>
-        public async Task<HttpResponseMessage> SignInAsync(params (string Type, string Value)[] claims)
+        public Task<HttpResponseMessage> SignInAsync(params (string Type, string Value)[] claims) =>
+            SignInRawAsync(claims.Any(c => c.Type == "tid") ? claims : [.. claims, ("tid", TenantId)]);
+
+        public async Task<HttpResponseMessage> SignInRawAsync(params (string Type, string Value)[] claims)
         {
             var query = string.Join("&", claims.Select(c => $"{Uri.EscapeDataString(c.Type)}={Uri.EscapeDataString(c.Value)}"));
             var challenge = await GetAsync("/querybuilder/signin?" + query);
@@ -230,6 +241,7 @@ public class SuperAdminTests
                         o.Hub.Enabled = true;
                         o.Hub.Audience = Audience;
                         o.Hub.SuperAdminSignInScheme = "host";
+                        o.Hub.SuperAdmins.TenantIds = [TenantId];
                         o.Hub.SuperAdmins.ObjectIds = [AdminOid];
                         o.Hub.SuperAdmins.Emails = ["Boss@Example.com"];
                         o.Hub.SuperAdmins.GroupIds = ["group-1"];
@@ -239,7 +251,19 @@ public class SuperAdminTests
                 web.Configure(app =>
                 {
                     app.UseRouting();
-                    app.UseEndpoints(e => e.MapQueryBuilderEditor());
+                    app.UseEndpoints(e =>
+                    {
+                        e.MapQueryBuilderEditor();
+                        // Another handler of the host leaving a ticket in the external cookie: no marker, or another scheme's stamp.
+                        e.MapGet("/test/ext", async ctx =>
+                        {
+                            var items = new Dictionary<string, string?>();
+                            if (ctx.Request.Query["marker"] == "1") items["qb:superadmin"] = "1";
+                            if (ctx.Request.Query.ContainsKey("stamp")) items[".AuthScheme"] = ctx.Request.Query["stamp"];
+                            var claims = new[] { new Claim("oid", AdminOid), new Claim("tid", TenantId), new Claim("email", "secret.person@example.com"), new Claim("name", "Secret Person") };
+                            await ctx.SignInAsync("QueryBuilder.HubExternal", new ClaimsPrincipal(new ClaimsIdentity(claims, "x")), new AuthenticationProperties(items));
+                        });
+                    });
                 });
             }).StartAsync();
             env.Client = env.Host.GetTestClient();
@@ -411,28 +435,145 @@ public class SuperAdminTests
         Assert.Equal("anonymous", await env.MeUserAsync());
     });
 
-    [Fact]
-    public void Recognizer_matches_exactly_and_ignores_blank_entries()
+    [MetadataSqlFact]
+    public Task A_ticket_not_started_by_signin_or_stamped_by_another_scheme_is_refused_and_audited() => RunAsync(async env =>
     {
-        var allowed = new SuperAdminOptions { ObjectIds = ["Oid-1", " "], Emails = ["A@B.com", ""], GroupIds = ["g1"] };
-        static ClaimsPrincipal P(params (string, string)[] c) => new(new ClaimsIdentity(c.Select(x => new Claim(x.Item1, x.Item2)), "host"));
+        foreach (var query in new[] { "?stamp=host", "?marker=1&stamp=other", "?marker=1" })
+        {
+            env.Jar.Clear();
+            Assert.Equal(HttpStatusCode.OK, (await env.GetAsync("/test/ext" + query)).StatusCode);
+            var response = await env.GetAsync("/querybuilder/signin/complete");
 
-        Assert.Equal(QueryBuilder.Editor.Hub.SuperAdminMatchKind.ObjectId, QueryBuilder.Editor.Hub.SuperAdminRecognizer.Recognize(P(("oid", "Oid-1")), allowed)!.Kind);
-        Assert.Null(QueryBuilder.Editor.Hub.SuperAdminRecognizer.Recognize(P(("oid", "oid-1")), allowed));
-        Assert.Equal(QueryBuilder.Editor.Hub.SuperAdminMatchKind.Email, QueryBuilder.Editor.Hub.SuperAdminRecognizer.Recognize(P(("oid", "x"), ("upn", "a@b.COM")), allowed)!.Kind);
-        Assert.Null(QueryBuilder.Editor.Hub.SuperAdminRecognizer.Recognize(P(("oid", "x"), ("email", " a@b.com")), allowed));
-        Assert.Null(QueryBuilder.Editor.Hub.SuperAdminRecognizer.Recognize(P(("oid", "x"), ("email", "")), allowed));
-        Assert.Null(QueryBuilder.Editor.Hub.SuperAdminRecognizer.Recognize(P(("oid", "x"), ("groups", "G1")), allowed));
+            Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+            Assert.False(env.Jar.ContainsKey("__Host-qb-hub"));
+            Assert.False(env.Jar.ContainsKey("__Host-qb-hub-ext"));
+        }
+
+        await using var db = env.Db();
+        var audits = await db.AuditLogEntries.Where(a => a.Action == AuditAction.SuperAdminSignInRefused).ToListAsync();
+        Assert.Equal(3, audits.Count);
+        Assert.All(audits, a =>
+        {
+            Assert.Null(a.AppId);
+            Assert.Equal("anonymous", a.Actor);
+            Assert.Contains("WrongScheme", a.DetailsJson);
+            Assert.DoesNotContain("secret", a.DetailsJson + a.Summary, StringComparison.OrdinalIgnoreCase);
+        });
+        Assert.False(await db.AuditLogEntries.AnyAsync(a => a.Action == AuditAction.SuperAdminSignedIn));
+    });
+
+    [MetadataSqlFact]
+    public Task Only_an_allowed_tenant_can_match_even_with_an_allowlisted_email() => RunAsync(async env =>
+    {
+        var wrong = await env.SignInRawAsync(("oid", "55555555-0000-0000-0000-000000000005"), ("email", "boss@example.com"), ("tid", OtherTenantId));
+        Assert.Equal(HttpStatusCode.Forbidden, wrong.StatusCode);
+        var missing = await env.SignInRawAsync(("oid", "55555555-0000-0000-0000-000000000005"), ("email", "boss@example.com"));
+        Assert.Equal(HttpStatusCode.Forbidden, missing.StatusCode);
+        var two = await env.SignInRawAsync(("oid", "55555555-0000-0000-0000-000000000005"), ("email", "boss@example.com"), ("tid", TenantId), ("tid", OtherTenantId));
+        Assert.Equal(HttpStatusCode.Forbidden, two.StatusCode);
+        Assert.False(env.Jar.ContainsKey("__Host-qb-hub"));
+
+        await using (var db = env.Db())
+        {
+            var refused = await db.AuditLogEntries.Where(a => a.Action == AuditAction.SuperAdminSignInRefused).ToListAsync();
+            Assert.Equal(3, refused.Count);
+            Assert.All(refused, a => Assert.Contains("WrongTenant", a.DetailsJson));
+            Assert.Contains(refused, a => a.DetailsJson!.Contains(OtherTenantId));
+            Assert.DoesNotContain(refused, a => a.DetailsJson!.Contains("example.com"));
+        }
+
+        var ok = await env.SignInAsync(("oid", "55555555-0000-0000-0000-000000000005"), ("email", "boss@example.com"));
+        Assert.Equal(HttpStatusCode.Redirect, ok.StatusCode);
+    });
+
+    [MetadataSqlFact]
+    public Task Refusing_a_real_sign_in_ends_a_session_but_a_bare_visit_does_not() => RunAsync(async env =>
+    {
+        await env.SignInAsync(("oid", AdminOid));
+        Assert.Equal($"super:{AdminOid}", await env.MeUserAsync());
+
+        Assert.Equal(HttpStatusCode.Forbidden, (await env.GetAsync("/querybuilder/signin/complete")).StatusCode);
+        Assert.Equal($"super:{AdminOid}", await env.MeUserAsync());
+        await using (var db = env.Db())
+        {
+            Assert.False(await db.AuditLogEntries.AnyAsync(a => a.Action == AuditAction.SuperAdminSignInRefused));
+        }
+
+        await env.SignInAsync(("oid", "66666666-0000-0000-0000-000000000006"));
+        Assert.Equal("anonymous", await env.MeUserAsync());
+        await using (var db = env.Db())
+        {
+            var audit = await db.AuditLogEntries.SingleAsync(a => a.Action == AuditAction.SuperAdminSignInRefused);
+            Assert.Contains("NotAllowlisted", audit.DetailsJson);
+        }
+    });
+
+    [MetadataSqlFact]
+    public Task Object_ids_compare_as_guids_and_conflicting_ids_are_refused() => RunAsync(async env =>
+    {
+        var upper = await env.SignInAsync(("oid", AdminOid.ToUpperInvariant()));
+        Assert.Equal(HttpStatusCode.Redirect, upper.StatusCode);
+
+        env.Jar.Clear();
+        var two = await env.SignInAsync(("oid", AdminOid), ("http://schemas.microsoft.com/identity/claims/objectidentifier", "77777777-0000-0000-0000-000000000007"));
+        Assert.Equal(HttpStatusCode.Forbidden, two.StatusCode);
+        await using (var db = env.Db())
+        {
+            Assert.Contains("NoStableId", (await db.AuditLogEntries.SingleAsync(a => a.Action == AuditAction.SuperAdminSignInRefused)).DetailsJson);
+        }
+
+        // The same id in both claim forms is one id.
+        env.Jar.Clear();
+        var same = await env.SignInAsync(("oid", AdminOid), ("http://schemas.microsoft.com/identity/claims/objectidentifier", AdminOid.ToUpperInvariant()));
+        Assert.Equal(HttpStatusCode.Redirect, same.StatusCode);
+    });
+
+    [MetadataSqlFact]
+    public Task View_app_refuses_the_default_and_none_apps() => RunAsync(async env =>
+    {
+        await env.SignInAsync(("oid", AdminOid));
+        Assert.Equal(HttpStatusCode.NotFound, (await env.PostAsync("/querybuilder/api/hub/view-app", new { appId = App.DefaultId })).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await env.PostAsync("/querybuilder/api/hub/view-app", new { appId = App.NoneId })).StatusCode);
+        Assert.Equal(0, await env.DataSourceCountAsync());
+    });
+
+    [Fact]
+    public void Recognizer_requires_the_tenant_then_matches_exactly_and_ignores_blank_entries()
+    {
+        var oid1 = "11111111-1111-1111-1111-111111111111";
+        var allowed = new SuperAdminOptions
+        {
+            TenantIds = [TenantId, " "], ObjectIds = [oid1, " "], Emails = ["A@B.com", ""], GroupIds = ["{22222222-2222-2222-2222-222222222222}", "plain-group"],
+        };
+        static ClaimsPrincipal P(params (string, string)[] c) => new(new ClaimsIdentity(c.Select(x => new Claim(x.Item1, x.Item2)), "host"));
+        static SuperAdminRecognition R(SuperAdminOptions o, params (string, string)[] c) =>
+            QueryBuilder.Editor.Hub.SuperAdminRecognizer.Recognize(P([.. c, ("tid", TenantId.ToUpperInvariant())]), o);
+
+        Assert.Equal(QueryBuilder.Editor.Hub.SuperAdminMatchKind.ObjectId, R(allowed, ("oid", oid1.ToUpperInvariant())).Match!.Kind);
+        Assert.Equal(QueryBuilder.Editor.Hub.SuperAdminMatchKind.Email, R(allowed, ("oid", "x"), ("upn", "a@b.COM")).Match!.Kind);
+        Assert.Equal(QueryBuilder.Editor.Hub.SuperAdminMatchKind.Group, R(allowed, ("oid", "x"), ("groups", "22222222-2222-2222-2222-222222222222")).Match!.Kind);
+        Assert.Equal(QueryBuilder.Editor.Hub.SuperAdminMatchKind.Group, R(allowed, ("oid", "x"), ("groups", "plain-group")).Match!.Kind);
+        Assert.Null(R(allowed, ("oid", "x"), ("groups", "PLAIN-GROUP")).Match);
+        Assert.Null(R(allowed, ("oid", "x"), ("email", " a@b.com")).Match);
+        Assert.Null(R(allowed, ("oid", "x"), ("email", "")).Match);
+        Assert.Equal(SuperAdminRefusalReason.NotAllowlisted, R(allowed, ("oid", "x"), ("groups", "g")).Refusal);
+        Assert.Equal(SuperAdminRefusalReason.GroupsOverage, R(allowed, ("oid", "x"), ("_claim_names", "{\"groups\":\"s\"}")).Refusal);
         // No stable id to attribute the session to.
-        Assert.Null(QueryBuilder.Editor.Hub.SuperAdminRecognizer.Recognize(P(("email", "a@b.com")), allowed));
-        Assert.Equal("sub-1", QueryBuilder.Editor.Hub.SuperAdminRecognizer.Recognize(P(("sub", "sub-1"), ("groups", "g1")), allowed)!.ObjectId);
+        Assert.Equal(SuperAdminRefusalReason.NoStableId, R(allowed, ("email", "a@b.com")).Refusal);
+        Assert.Equal("sub-1", R(allowed, ("sub", "sub-1"), ("groups", "plain-group")).Match!.ObjectId);
+        // Tenant first: an allowlisted object id from another tenant, or with none, never matches.
+        var other = QueryBuilder.Editor.Hub.SuperAdminRecognizer.Recognize(P(("oid", oid1), ("tid", OtherTenantId)), allowed);
+        Assert.Equal(SuperAdminRefusalReason.WrongTenant, other.Refusal);
+        Assert.Equal(OtherTenantId, other.TenantId);
+        Assert.Equal(SuperAdminRefusalReason.WrongTenant, QueryBuilder.Editor.Hub.SuperAdminRecognizer.Recognize(P(("oid", oid1)), allowed).Refusal);
     }
 
     [Theory]
     [InlineData("Audience")]
     [InlineData("SuperAdminSignInScheme")]
     [InlineData("SuperAdmins")]
-    public void Hub_mode_refuses_to_start_without_audience_scheme_or_allowlist(string missing)
+    [InlineData("TenantIds")]
+    public void Hub_mode_refuses_to_start_without_audience_scheme_allowlist_or_tenant(string missing)
     {
         var ex = Assert.Throws<InvalidOperationException>(() => new ServiceCollection().AddQueryBuilderEditor(o =>
         {
@@ -441,9 +582,11 @@ public class SuperAdminTests
             o.DataSourceManagement.EncryptionKey = Key;
             o.Hub.Audience = missing == "Audience" ? " " : "https://secret-audience.test";
             o.Hub.SuperAdminSignInScheme = missing == "SuperAdminSignInScheme" ? "" : "host-scheme-secret";
-            o.Hub.SuperAdmins = missing == "SuperAdmins"
-                ? new SuperAdminOptions { Emails = [" "] }
-                : new SuperAdminOptions { Emails = ["secret@example.com"] };
+            o.Hub.SuperAdmins = new SuperAdminOptions
+            {
+                Emails = missing == "SuperAdmins" ? [" "] : ["secret@example.com"],
+                TenantIds = missing == "TenantIds" ? [" "] : ["tenant-secret"],
+            };
         }));
 
         Assert.Contains(missing, ex.Message);

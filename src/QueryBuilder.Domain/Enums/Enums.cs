@@ -133,7 +133,9 @@ public enum AuditAction
     DataSourceScopeKeysUpdated = 25,
     LaunchSucceeded = 26,
     LaunchRefused = 27,
-    SuperAdminSignedIn = 28
+    SuperAdminSignedIn = 28,
+    // 29 is AppRegistryChanged (added with the registry endpoints).
+    SuperAdminSignInRefused = 30
 }
 
 /// <summary>How a managed data source's connection is encrypted in transit.</summary>

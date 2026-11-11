@@ -184,6 +184,7 @@ public class HubLaunchEndpointTests
                         o.Hub.Audience = Audience;
                         o.Hub.SuperAdminSignInScheme = "host";
                         o.Hub.SuperAdmins.ObjectIds = ["admin-oid"];
+                        o.Hub.SuperAdmins.TenantIds = ["tenant-1"];
                         o.DataSourceManagement.EncryptionKey = Key;
                     });
                 });
@@ -497,6 +498,7 @@ public class HubLaunchEndpointTests
             o.Hub.Audience = Audience;
             o.Hub.SuperAdminSignInScheme = "host";
             o.Hub.SuperAdmins.ObjectIds = ["admin-oid"];
+            o.Hub.SuperAdmins.TenantIds = ["tenant-1"];
             o.DataSourceManagement.EncryptionKey = Key;
         });
         return services.BuildServiceProvider(new ServiceProviderOptions { ValidateOnBuild = true, ValidateScopes = true });

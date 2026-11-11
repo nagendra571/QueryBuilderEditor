@@ -22,10 +22,12 @@ public sealed class HubOptions
 
     /// <summary>
     /// The host's authentication scheme that signs a super admin in (typically its OpenID Connect handler). Required in hub mode.
-    /// Set that handler's <c>SignInScheme</c> to <c>"QueryBuilder.HubExternal"</c>, a short-lived cookie scheme the package
-    /// registers: a remote handler cannot be read back on demand, so the package reads the user it leaves there, checks
-    /// the allowlist, and deletes it. Entra group claims are only honoured when the token carries them; when it omits
-    /// them for being too many, such a user can only match by object id or email.
+    /// Use a dedicated OpenID Connect registration for this, whose <c>SignInScheme</c> is <c>"QueryBuilder.HubExternal"</c>, a
+    /// short-lived cookie scheme the package registers: a remote handler cannot be read back on demand, so the package
+    /// reads the user it leaves there, checks the tenant and the allowlist, and deletes it. The ticket is accepted only
+    /// if it was started by <c>/querybuilder/signin</c> and stamped by this very scheme, so another handler of the host
+    /// that also signs into that cookie cannot create a super admin. Entra group claims are only honoured when the
+    /// token carries them; when it omits them for being too many, such a user can only match by object id or email.
     /// </summary>
     public string? SuperAdminSignInScheme { get; set; }
 }
@@ -33,6 +35,12 @@ public sealed class HubOptions
 /// <summary>The allowlist for super admin sign-in: Entra object ids, emails or group ids.</summary>
 public sealed class SuperAdminOptions
 {
+    /// <summary>
+    /// Entra tenant ids (the <c>tid</c> claim) a super admin may sign in from. Required: an email or object id means
+    /// nothing outside the tenant that issued it, and a multi-tenant app registration lets any tenant's users in.
+    /// </summary>
+    public List<string> TenantIds { get; set; } = [];
+
     public List<string> ObjectIds { get; set; } = [];
     public List<string> Emails { get; set; } = [];
     public List<string> GroupIds { get; set; } = [];

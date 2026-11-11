@@ -36,9 +36,38 @@ internal static class HubSuperAdminEndpoints
     {
         context.Response.Headers.CacheControl = "no-store";
         return Results.Challenge(
-            new AuthenticationProperties { RedirectUri = CompletePath },
+            // The marker travels with the host handler's ticket, so a ticket someone else's handler left in the
+            // external cookie is recognisable as not ours.
+            new AuthenticationProperties(new Dictionary<string, string?> { [StartedMarker] = "1" }) { RedirectUri = CompletePath },
             [options.Hub.SuperAdminSignInScheme!]);
     }
+
+    private const string StartedMarker = "qb:superadmin";
+    // Set by ASP.NET Core's remote authentication handlers on the ticket they create.
+    private const string AuthSchemeItem = ".AuthScheme";
+
+    private static async Task RecordRefusalAsync(HttpContext context, SuperAdminRecognition recognition, SuperAdminRefusalReason reason, CancellationToken ct)
+    {
+        await using var scope = context.RequestServices.GetRequiredService<IHubWideScopeFactory>().Create();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        db.AuditLogEntries.Add(new AuditLogEntry
+        {
+            Actor = "anonymous",
+            Action = AuditAction.SuperAdminSignInRefused,
+            EntityType = "SuperAdmin",
+            Summary = $"Super admin sign-in refused: {reason}",
+            // Ids only, capped because they come from a token; never an email or a name.
+            DetailsJson = JsonSerializer.Serialize(new
+            {
+                objectId = Cap(recognition.ObjectId), tenantId = Cap(recognition.TenantId), reason = reason.ToString(),
+            }, QueryDefinitionSerializer.Options),
+            IpAddress = context.Connection.RemoteIpAddress?.ToString(),
+            TimestampUtc = context.RequestServices.GetRequiredService<TimeProvider>().GetUtcNow(),
+        });
+        await db.SaveChangesAsync(ct);
+    }
+
+    private static string? Cap(string? value) => value is { Length: > 100 } ? value[..100] : value;
 
     private static async Task<IResult> CompleteAsync(HttpContext context, QueryBuilderEditorOptions options, CancellationToken ct)
     {
@@ -50,17 +79,30 @@ internal static class HubSuperAdminEndpoints
         // Always, match or not: the external ticket exists only to be read once here.
         await context.SignOutAsync(HubSession.ExternalScheme);
 
-        var match = external.Succeeded && external.Principal is { } principal
-            ? SuperAdminRecognizer.Recognize(principal, options.Hub.SuperAdmins)
-            : null;
+        // A bare GET with no external ticket (a cross-site link, say) is refused quietly: no audit, and the
+        // visitor's existing session is left alone.
+        if (!external.Succeeded || external.Principal is not { } principal)
+        {
+            return Results.Content(HubLaunchEndpoints.RefusalPage, "text/html; charset=utf-8", statusCode: StatusCodes.Status403Forbidden);
+        }
 
+        var recognition = SuperAdminRecognizer.Recognize(principal, options.Hub.SuperAdmins);
+        var items = external.Properties?.Items;
+        var ours = items is not null
+            && items.TryGetValue(StartedMarker, out var marker) && marker == "1"
+            && items.TryGetValue(AuthSchemeItem, out var stampedBy)
+            && string.Equals(stampedBy, options.Hub.SuperAdminSignInScheme, StringComparison.Ordinal);
+
+        var match = ours ? recognition.Match : null;
         if (match is null)
         {
-            if (external.Succeeded && external.Principal is { } refused && SuperAdminRecognizer.HasGroupsOverage(refused))
+            var reason = ours ? recognition.Refusal ?? SuperAdminRefusalReason.NotAllowlisted : SuperAdminRefusalReason.WrongScheme;
+            if (reason == SuperAdminRefusalReason.GroupsOverage)
             {
                 logger.LogInformation("A host user was not recognised as a super admin; their token omitted the groups (too many), which are not looked up.");
             }
 
+            await RecordRefusalAsync(context, recognition, reason, ct);
             await context.SignOutAsync(HubSession.Scheme);
             return Results.Content(HubLaunchEndpoints.RefusalPage, "text/html; charset=utf-8", statusCode: StatusCodes.Status403Forbidden);
         }
@@ -79,7 +121,7 @@ internal static class HubSuperAdminEndpoints
                 EntityName = match.ObjectId,
                 Summary = "Super admin signed in",
                 // The kind of entry that matched, never the matching value: an email or group id is not needed to explain it.
-                DetailsJson = JsonSerializer.Serialize(new { objectId = match.ObjectId, matchedBy = match.Kind.ToString() }, QueryDefinitionSerializer.Options),
+                DetailsJson = JsonSerializer.Serialize(new { objectId = match.ObjectId, tenantId = Cap(recognition.TenantId), matchedBy = match.Kind.ToString() }, QueryDefinitionSerializer.Options),
                 IpAddress = context.Connection.RemoteIpAddress?.ToString(),
                 TimestampUtc = now,
             });
@@ -132,7 +174,8 @@ internal static class HubSuperAdminEndpoints
         {
             await using var scope = context.RequestServices.GetRequiredService<IHubWideScopeFactory>().Create();
             var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-            if (!await db.Apps.AsNoTracking().AnyAsync(a => a.Id == appId, ct))
+            // Default is the embedded-mode app and None the "no session" marker: neither is something to look at in hub mode.
+            if (appId == App.DefaultId || appId == App.NoneId || !await db.Apps.AsNoTracking().AnyAsync(a => a.Id == appId, ct))
             {
                 return Results.NotFound();
             }
