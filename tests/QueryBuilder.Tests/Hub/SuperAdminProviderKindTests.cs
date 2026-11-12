@@ -127,39 +127,79 @@ public class SuperAdminProviderKindTests
         Assert.NotNull(SuperAdminRecognizer.Recognize(P(("oid", "oid-1"), ("tid", Tenant)), entra).Match);
     }
 
+    private static HubOptions Hub(SuperAdminOptions a, bool codes = false, string? scheme = "host") =>
+        new() { SuperAdmins = a, SuperAdminSignInScheme = scheme, SignInCodes = { Enabled = codes } };
+
+    private static bool Still(SuperAdminMatchKind kind, string value, string tenant, string? provider, HubOptions hub) =>
+        SuperAdminRecognizer.StillAllowed(kind, value, tenant, provider, hub);
+
+    private const string O = "OpenIdConnect";
+
     [Fact]
     public void StillAllowed_for_UserId_and_Code()
     {
-        var o = Oidc(x => x.CodeNames = ["ops"]);
-        Assert.True(SuperAdminRecognizer.StillAllowed(SuperAdminMatchKind.UserId, "user-1", "", o));
-        Assert.False(SuperAdminRecognizer.StillAllowed(SuperAdminMatchKind.UserId, "user-2", "", o));
-        Assert.True(SuperAdminRecognizer.StillAllowed(SuperAdminMatchKind.Code, "ops", "", o));
-        Assert.False(SuperAdminRecognizer.StillAllowed(SuperAdminMatchKind.Code, "OPS", "", o));
-        Assert.False(SuperAdminRecognizer.StillAllowed(SuperAdminMatchKind.Code, "gone", "", o));
+        var h = Hub(Oidc(x => x.CodeNames = ["ops"]), codes: true);
+        Assert.True(Still(SuperAdminMatchKind.UserId, "user-1", "", O, h));
+        Assert.False(Still(SuperAdminMatchKind.UserId, "user-2", "", O, h));
+        Assert.True(Still(SuperAdminMatchKind.Code, "ops", "", "Code", h));
+        Assert.False(Still(SuperAdminMatchKind.Code, "OPS", "", "Code", h));
+        Assert.False(Still(SuperAdminMatchKind.Code, "gone", "", "Code", h));
         // A UserId session is only valid while the provider kind is still OpenIdConnect.
-        Assert.False(SuperAdminRecognizer.StillAllowed(SuperAdminMatchKind.UserId, "user-1", "", new SuperAdminOptions { UserIds = ["user-1"] }));
+        Assert.False(Still(SuperAdminMatchKind.UserId, "user-1", "", "Entra", Hub(new SuperAdminOptions { UserIds = ["user-1"] })));
         // Codes do not depend on a provider or tenant.
-        Assert.True(SuperAdminRecognizer.StillAllowed(SuperAdminMatchKind.Code, "ops", "", new SuperAdminOptions { CodeNames = ["ops"] }));
+        Assert.True(Still(SuperAdminMatchKind.Code, "ops", "", "Code", Hub(new SuperAdminOptions { CodeNames = ["ops"] }, codes: true, scheme: null)));
+    }
+
+    [Fact]
+    public void Turning_a_sign_in_method_off_ends_its_sessions()
+    {
+        var a = Oidc(x => x.CodeNames = ["ops"]);
+        Assert.False(Still(SuperAdminMatchKind.Code, "ops", "", "Code", Hub(a, codes: false)));
+        Assert.False(Still(SuperAdminMatchKind.UserId, "user-1", "", O, Hub(a, codes: true, scheme: null)));
+        Assert.False(Still(SuperAdminMatchKind.Email, "boss@example.com", "", O, Hub(a, scheme: " ")));
+        Assert.False(Still(SuperAdminMatchKind.Group, "admins", "", O, Hub(a, scheme: null)));
+    }
+
+    [Fact]
+    public void A_session_must_name_the_current_provider_kind()
+    {
+        var entra = Hub(new SuperAdminOptions { TenantIds = [Tenant], Emails = ["a@b.com"] });
+        Assert.True(Still(SuperAdminMatchKind.Email, "a@b.com", Tenant, "Entra", entra));
+        Assert.False(Still(SuperAdminMatchKind.Email, "a@b.com", Tenant, null, entra));
+        Assert.False(Still(SuperAdminMatchKind.Email, "a@b.com", Tenant, O, entra));
+        // An Entra session does not survive a switch to OpenID Connect, even when the email is also listed.
+        Assert.False(Still(SuperAdminMatchKind.Email, "boss@example.com", Tenant, "Entra", Hub(Oidc())));
+        Assert.False(Still(SuperAdminMatchKind.Code, "ops", "", "Entra", Hub(new SuperAdminOptions { CodeNames = ["ops"] }, codes: true)));
     }
 
     [Fact]
     public void StillAllowed_needs_the_tenant_only_for_Entra()
     {
-        var entra = new SuperAdminOptions { TenantIds = [Tenant], Emails = ["a@b.com"] };
-        Assert.True(SuperAdminRecognizer.StillAllowed(SuperAdminMatchKind.Email, "a@b.com", Tenant, entra));
-        Assert.False(SuperAdminRecognizer.StillAllowed(SuperAdminMatchKind.Email, "a@b.com", "", entra));
-        Assert.True(SuperAdminRecognizer.StillAllowed(SuperAdminMatchKind.Email, "boss@example.com", "", Oidc()));
-        Assert.True(SuperAdminRecognizer.StillAllowed(SuperAdminMatchKind.Group, "admins", "", Oidc()));
+        var entra = Hub(new SuperAdminOptions { TenantIds = [Tenant], Emails = ["a@b.com"] });
+        Assert.True(Still(SuperAdminMatchKind.Email, "a@b.com", Tenant, "Entra", entra));
+        Assert.False(Still(SuperAdminMatchKind.Email, "a@b.com", "", "Entra", entra));
+        Assert.True(Still(SuperAdminMatchKind.Email, "boss@example.com", "", O, Hub(Oidc())));
+        Assert.True(Still(SuperAdminMatchKind.Group, "admins", "", O, Hub(Oidc())));
+    }
+
+    [Fact]
+    public void OpenIdConnect_match_email_is_the_verified_one_or_null()
+    {
+        var ok = SuperAdminRecognizer.Recognize(P(("sub", "user-1"), ("email", "x@y.com"), ("email_verified", "true")), Oidc());
+        Assert.Equal("x@y.com", ok.Match!.Email);
+        var unverified = SuperAdminRecognizer.Recognize(P(("sub", "user-1"), ("email", "x@y.com"), ("email_verified", "false")), Oidc());
+        Assert.Null(unverified.Match!.Email);
     }
 
     [Fact]
     public void A_session_without_a_tenant_can_be_read_back()
     {
-        var principal = HubSession.ForSuperAdmin("user-1", null, null, null, DateTimeOffset.UtcNow, SuperAdminMatchKind.UserId, "user-1", "");
+        var principal = HubSession.ForSuperAdmin("user-1", null, null, null, DateTimeOffset.UtcNow, SuperAdminMatchKind.UserId, "user-1", "", O);
         Assert.True(HubSession.TryReadSuperMatch(principal, out var kind, out var value, out var tenant));
         Assert.Equal(SuperAdminMatchKind.UserId, kind);
         Assert.Equal("user-1", value);
         Assert.Equal("", tenant);
+        Assert.Equal(O, HubSession.ReadProvider(principal));
     }
 
     private static InvalidOperationException StartupFailure(Action<QueryBuilderEditorOptions> configure) =>

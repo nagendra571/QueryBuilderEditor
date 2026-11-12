@@ -216,7 +216,7 @@ internal sealed class HubApiHost : IAsyncDisposable
                             var q = ctx.Request.Query;
                             var now = clock.GetUtcNow();
                             var principal = q["kind"] == "super"
-                                ? HubSession.ForSuperAdmin(q["oid"]!, "Super", "s@x", q.ContainsKey("viewing") ? Guid.Parse(q["viewing"]!) : null, now, Enum.Parse<SuperAdminMatchKind>(q["mkind"].FirstOrDefault() ?? "ObjectId"), q["mvalue"].FirstOrDefault() ?? q["oid"]!, q["tid"].FirstOrDefault() ?? "tenant-1")
+                                ? HubSession.ForSuperAdmin(q["oid"]!, "Super", "s@x", q.ContainsKey("viewing") ? Guid.Parse(q["viewing"]!) : null, now, Enum.Parse<SuperAdminMatchKind>(q["mkind"].FirstOrDefault() ?? "ObjectId"), q["mvalue"].FirstOrDefault() ?? q["oid"]!, q["tid"].FirstOrDefault() ?? "tenant-1", q["provider"].FirstOrDefault() ?? "Entra")
                                 : HubSession.ForApp(Guid.Parse(q["app"]!), q["user"]!, "Name", "u@x", Enum.Parse<HubRole>(q["role"]!),
                                     q.ContainsKey("scope") ? ScopeOf(q["scope"]!) : QueryBuilder.Application.Abstractions.ResolvedDataScope.Unrestricted, "/back", now);
                             await Microsoft.AspNetCore.Authentication.AuthenticationHttpContextExtensions.SignInAsync(ctx, HubSession.Scheme, principal);

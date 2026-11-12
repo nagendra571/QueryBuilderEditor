@@ -30,6 +30,7 @@ internal static class HubSession
     public const string MatchKind = "qb:match-kind";
     public const string MatchValue = "qb:match-value";
     public const string TenantId = "qb:tid";
+    public const string Provider = "qb:provider";
 
     public const string AppKind = "app";
     public const string SuperKind = "super";
@@ -54,7 +55,7 @@ internal static class HubSession
     }
 
     public static ClaimsPrincipal ForSuperAdmin(string objectId, string? name, string? email, Guid? viewingAppId, DateTimeOffset issuedAt,
-        SuperAdminMatchKind matchKind, string matchValue, string tenantId)
+        SuperAdminMatchKind matchKind, string matchValue, string tenantId, string provider)
     {
         var claims = new List<Claim>
         {
@@ -64,6 +65,8 @@ internal static class HubSession
             // What matched the allowlist, so every request can check it is still there.
             new(MatchKind, matchKind.ToString()),
             new(MatchValue, matchValue),
+            // Which sign-in method made the session, so a change of provider kind ends the sessions of the old one.
+            new(Provider, provider),
         };
         // Only Entra sessions have one; an OpenID Connect or code session carries none.
         AddIfPresent(claims, TenantId, tenantId);
@@ -132,6 +135,8 @@ internal static class HubSession
         return Enum.TryParse(principal.FindFirst(MatchKind)?.Value, out kind) && Enum.IsDefined(kind)
             && value.Length > 0;
     }
+
+    public static string? ReadProvider(ClaimsPrincipal principal) => principal.FindFirst(Provider)?.Value;
 
     public static bool TryReadIssued(ClaimsPrincipal principal, out DateTimeOffset issuedAt)
     {

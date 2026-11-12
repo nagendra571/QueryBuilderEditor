@@ -100,7 +100,7 @@ public class HubSessionTests
                 var q = ctx.Request.Query;
                 var now = clock.GetUtcNow();
                 var principal = q["kind"] == "super"
-                    ? HubSession.ForSuperAdmin(q["oid"]!, "Super", "s@x", q.ContainsKey("viewing") ? Guid.Parse(q["viewing"]!) : null, now, SuperAdminMatchKind.ObjectId, q["oid"]!, "tenant-1")
+                    ? HubSession.ForSuperAdmin(q["oid"]!, "Super", "s@x", q.ContainsKey("viewing") ? Guid.Parse(q["viewing"]!) : null, now, SuperAdminMatchKind.ObjectId, q["oid"]!, "tenant-1", "Entra")
                     : q.ContainsKey("raw")
                         ? new System.Security.Claims.ClaimsPrincipal(new System.Security.Claims.ClaimsIdentity(
                             [new System.Security.Claims.Claim(HubSession.Kind, HubSession.AppKind), new System.Security.Claims.Claim(HubSession.App, q["app"]!)],

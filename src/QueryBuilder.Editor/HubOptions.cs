@@ -73,7 +73,10 @@ public sealed class SuperAdminOptions
     /// <summary>OpenID Connect only: the provider's <c>sub</c> values that may sign in. Emails count only when the provider says they are verified.</summary>
     public List<string> UserIds { get; set; } = [];
 
-    /// <summary>OpenID Connect only: the claim that carries group ids.</summary>
+    /// <summary>
+    /// OpenID Connect only: the claim that carries group ids, matched by its raw name. If the host's handler renames
+    /// inbound claims (<c>MapInboundClaims</c> is true by default), set that to false so the raw name is what arrives.
+    /// </summary>
     public string GroupsClaim { get; set; } = "groups";
 
     /// <summary>Names a one-time sign-in code may be issued for (compared exactly, case-sensitive).</summary>

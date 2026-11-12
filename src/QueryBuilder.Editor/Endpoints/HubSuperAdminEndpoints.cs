@@ -129,7 +129,7 @@ internal static class HubSuperAdminEndpoints
             await db.SaveChangesAsync(ct);
         }
 
-        var session = HubSession.ForSuperAdmin(match.ObjectId, match.Name, match.Email, null, now, match.Kind, match.MatchedValue, match.TenantId ?? recognition.TenantId ?? "");
+        var session = HubSession.ForSuperAdmin(match.ObjectId, match.Name, match.Email, null, now, match.Kind, match.MatchedValue, match.TenantId ?? recognition.TenantId ?? "", options.Hub.SuperAdmins.ProviderKind.ToString());
         await context.SignOutAsync(HubSession.Scheme);
         await context.SignInAsync(HubSession.Scheme, session, new AuthenticationProperties { IsPersistent = false });
 
@@ -201,7 +201,7 @@ internal static class HubSuperAdminEndpoints
         }
 
         // The original issue time is kept: switching apps must not stretch the 8 h absolute lifetime.
-        var next = HubSession.ForSuperAdmin(objectId, principal.FindFirst(HubSession.Name)?.Value, session.Email, request.AppId, issuedAt, matchKind, matchValue, tenantId);
+        var next = HubSession.ForSuperAdmin(objectId, principal.FindFirst(HubSession.Name)?.Value, session.Email, request.AppId, issuedAt, matchKind, matchValue, tenantId, HubSession.ReadProvider(principal) ?? "");
         await context.SignInAsync(HubSession.Scheme, next, new AuthenticationProperties { IsPersistent = false });
         return Results.Json(new { viewingAppId = request.AppId }, QueryBuilderJson.Options);
     }

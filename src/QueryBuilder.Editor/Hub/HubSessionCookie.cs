@@ -85,7 +85,7 @@ internal static class HubSessionCookie
         else if (valid && session is { IsSuperAdmin: true })
         {
             valid = HubSession.TryReadSuperMatch(context.Principal!, out var kind, out var value, out var tenant)
-                && SuperAdminRecognizer.StillAllowed(kind, value, tenant, hub.SuperAdmins);
+                && SuperAdminRecognizer.StillAllowed(kind, value, tenant, HubSession.ReadProvider(context.Principal!), hub);
         }
 
         if (!valid)

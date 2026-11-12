@@ -25,6 +25,9 @@ internal static class SuperAdminRecognizer
 {
     private const int MaxIdLength = 200;
 
+    /// <summary>The value a code session records as its provider; the others record <see cref="SuperAdminOptions.ProviderKind"/>.</summary>
+    public const string CodeProvider = "Code";
+
     private static readonly string[] ObjectIdClaims = ["oid", "http://schemas.microsoft.com/identity/claims/objectidentifier"];
     private static readonly string[] TenantClaims = ["tid", "http://schemas.microsoft.com/identity/claims/tenantid"];
     private static readonly string[] EmailClaims = ["email", "preferred_username", "upn", ClaimTypes.Email, ClaimTypes.Upn];
@@ -51,6 +54,10 @@ internal static class SuperAdminRecognizer
         var verified = Values(principal, EmailVerifiedClaims);
         var emailsVerified = verified.Count > 0 && verified.All(v => string.Equals(v, "true", StringComparison.OrdinalIgnoreCase));
         var emails = emailsVerified ? Values(principal, OidcEmailClaims) : [];
+        // The stored email is only ever one the provider vouched for.
+        // The raw claim name, as the provider sends it. A host whose handler renames claims (MapInboundClaims defaults to
+        // true, which turns "roles" into ClaimTypes.Role) must set it to false; matching mapped names too would make
+        // the setting mean different things per provider.
         var groups = Values(principal, [allowed.GroupsClaim]);
 
         SuperAdminMatchKind? kind = null;
@@ -76,7 +83,7 @@ internal static class SuperAdminRecognizer
             return new SuperAdminRecognition(null, SuperAdminRefusalReason.NotAllowlisted, subject, null);
         }
 
-        var match = new SuperAdminMatch(subject, Values(principal, NameClaims).FirstOrDefault(), Values(principal, OidcEmailClaims).FirstOrDefault(), k, matched);
+        var match = new SuperAdminMatch(subject, Values(principal, NameClaims).FirstOrDefault(), emails.FirstOrDefault(), k, matched);
         return new SuperAdminRecognition(match, null, subject, null);
     }
 
@@ -150,9 +157,18 @@ internal static class SuperAdminRecognizer
     /// The sign-in's own comparison run again against the current options, for a session that recorded what matched:
     /// the tenant must still be allowed and the matched value must still be on its list.
     /// </summary>
-    public static bool StillAllowed(SuperAdminMatchKind kind, string value, string tenantId, SuperAdminOptions allowed)
+    public static bool StillAllowed(SuperAdminMatchKind kind, string value, string tenantId, string? provider, HubOptions hub)
     {
+        var allowed = hub.SuperAdmins;
         if (string.IsNullOrEmpty(value))
+        {
+            return false;
+        }
+
+        // Turning a sign-in method off (and restarting) must end the sessions it made, not just stop new ones.
+        if (kind == SuperAdminMatchKind.Code
+            ? !hub.SignInCodes.Enabled || provider != CodeProvider
+            : string.IsNullOrWhiteSpace(hub.SuperAdminSignInScheme) || provider != allowed.ProviderKind.ToString())
         {
             return false;
         }

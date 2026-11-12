@@ -1,4 +1,6 @@
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.Extensions.Logging;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.DataProtection.KeyManagement;
 using Microsoft.AspNetCore.Hosting;
@@ -225,6 +227,8 @@ public static class ServiceCollectionExtensions
             }
 
             AddHubSession(services, options.Hub);
+            services.AddSingleton<IStartupFilter>(sp => new HubSettingsWarningStartupFilter(
+                sp.GetRequiredService<ILoggerFactory>().CreateLogger("QueryBuilder.Hub"), options.Hub));
         }
 
         services.AddApplication();
@@ -263,5 +267,34 @@ public static class ServiceCollectionExtensions
                 keys.XmlRepository = repository;
                 keys.XmlEncryptor = new HubKeyEncryptor(secret);
             });
+    }
+}
+
+/// <summary>Logs, once at startup, super admin settings that the chosen provider kind ignores.</summary>
+internal sealed class HubSettingsWarningStartupFilter(ILogger logger, HubOptions hub) : IStartupFilter
+{
+    public Action<IApplicationBuilder> Configure(Action<IApplicationBuilder> next)
+    {
+        var a = hub.SuperAdmins;
+        if (!string.IsNullOrWhiteSpace(hub.SuperAdminSignInScheme) && a.ProviderKind == SuperAdminProviderKind.OpenIdConnect)
+        {
+            var ignored = new List<string>();
+            if (SuperAdminRecognizer.ConfiguredTenantCount(a) > 0)
+            {
+                ignored.Add(nameof(SuperAdminOptions.TenantIds));
+            }
+
+            if (a.ObjectIds.Any(e => !string.IsNullOrWhiteSpace(e)))
+            {
+                ignored.Add(nameof(SuperAdminOptions.ObjectIds));
+            }
+
+            if (ignored.Count > 0)
+            {
+                logger.LogWarning("Hub:SuperAdmins:ProviderKind is OpenIdConnect, so {Ignored} are ignored; remove them or use ProviderKind Entra.", string.Join(", ", ignored));
+            }
+        }
+
+        return next;
     }
 }
