@@ -159,6 +159,45 @@ public class HubHostTests
         Assert.NotEqual(HttpStatusCode.TooManyRequests, (await client.SendAsync(Request(HttpMethod.Get, "/querybuilder/launch", "10.1.1.1"))).StatusCode);
     });
 
+    [MetadataSqlFact]
+    public Task Launch_limit_also_covers_trailing_slash_and_letter_case() => RunAsync(async (_, client) =>
+    {
+        async Task<HttpResponseMessage> Launch(string path, string ip)
+        {
+            var request = Request(HttpMethod.Post, path, ip);
+            request.Content = new FormUrlEncodedContent([]);
+            return await client.SendAsync(request);
+        }
+
+        foreach (var (path, ip) in new[] { ("/querybuilder/launch/", "10.3.3.3"), ("/QueryBuilder/Launch", "10.4.4.4") })
+        {
+            for (var i = 0; i < 30; i++)
+            {
+                Assert.NotEqual(HttpStatusCode.TooManyRequests, (await Launch(path, ip)).StatusCode);
+            }
+
+            Assert.Equal(HttpStatusCode.TooManyRequests, (await Launch(path, ip)).StatusCode);
+        }
+    });
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("http://hub.test")]
+    [InlineData("<set in environment>")]
+    public void Audience_must_be_an_https_url(string audience)
+    {
+        var settings = Settings("Server=unused");
+        settings["Hub:Audience"] = audience;
+
+        var ex = Assert.Throws<InvalidOperationException>(() => Build(settings));
+
+        Assert.Contains("Hub:Audience", ex.Message);
+        if (audience.Length > 0)
+        {
+            Assert.DoesNotContain(audience, ex.Message);
+        }
+    }
+
     [Theory]
     [InlineData("Hub:ConnectionString")]
     [InlineData("Hub:Entra:TenantId")]

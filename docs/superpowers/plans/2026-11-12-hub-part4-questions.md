@@ -39,3 +39,7 @@ it costs to change. Answer any you disagree with; nothing here is pushed or rele
 - Switching the viewed app reloads the page.
 - A 401 from `/api/me` shows "Your session has ended" in embedded mode too.
 - App admins see super admins as "Super admin" (actor, owner names, audit IP hidden).
+
+## Decided by me in Part 4 (review when convenient)
+
+- **`Hub:ApplyMigrations` (hub host, default true):** set false and the host never runs migrations, for DBA-run upgrades from the schema script. Undo cost: one setting.

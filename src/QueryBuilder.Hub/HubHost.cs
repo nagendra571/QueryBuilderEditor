@@ -2,6 +2,7 @@ using System.Net;
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.AspNetCore.Routing;
 using Microsoft.IdentityModel.Protocols.OpenIdConnect;
 using QueryBuilder.Editor;
 
@@ -11,7 +12,7 @@ public static class HubHost
 {
     public const string EntraScheme = "entra";
     private const string HubExternalScheme = "QueryBuilder.HubExternal";
-    private const string LaunchPath = "/querybuilder/launch";
+    private const string LaunchPattern = "/querybuilder/launch";
 
     /// <param name="configure">
     /// Runs first, before any setting is read, so a test can add configuration, swap the server for TestServer and
@@ -27,6 +28,10 @@ public static class HubHost
         Require(settings.Entra.TenantId, "Hub:Entra:TenantId");
         Require(settings.Entra.ClientId, "Hub:Entra:ClientId");
         Require(settings.Entra.ClientSecret, "Hub:Entra:ClientSecret");
+        if (!Uri.TryCreate(settings.Audience, UriKind.Absolute, out var audience) || audience.Scheme != Uri.UriSchemeHttps)
+        {
+            throw new InvalidOperationException("Hub:Audience must be the hub's public https:// URL.");
+        }
 
         builder.Services.AddQueryBuilderEditor(o =>
         {
@@ -122,6 +127,11 @@ public static class HubHost
             }
         });
 
+    // Routing has already run here (WebApplication puts it first), so the endpoint is known.
+    private static bool IsLaunch(HttpContext context) =>
+        HttpMethods.IsPost(context.Request.Method)
+        && context.GetEndpoint() is RouteEndpoint { RoutePattern.RawText: LaunchPattern };
+
     private static void ConfigureRateLimiter(IServiceCollection services, LaunchRateLimitOptions settings)
     {
         if (settings.PermitLimit < 1 || settings.WindowSeconds < 1)
@@ -133,9 +143,10 @@ public static class HubHost
         {
             options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
             // The package maps the launch endpoint, so a named policy can't be attached to it: one global limiter
-            // that limits that route and lets everything else through.
+            // that limits that route and lets everything else through. Matched by endpoint, not by path text:
+            // routing also serves /querybuilder/launch/ and any letter case, which a path comparison would miss.
             options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(context =>
-                HttpMethods.IsPost(context.Request.Method) && context.Request.Path.Equals(LaunchPath, StringComparison.OrdinalIgnoreCase)
+                IsLaunch(context)
                     ? RateLimitPartition.GetFixedWindowLimiter(
                         context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
                         _ => new FixedWindowRateLimiterOptions
