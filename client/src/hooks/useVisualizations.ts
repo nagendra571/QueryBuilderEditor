@@ -24,6 +24,8 @@ export function useSaveVisualization(queryId: string) {
     onSuccess: (saved, { id }) => {
       queryClient.invalidateQueries({ queryKey: visualizationsKey(queryId) })
       queryClient.invalidateQueries({ queryKey: visualizationDataPrefix(queryId) })
+      // Dashboard tiles under the hub read the chart and its parameters through the dashboard.
+      queryClient.invalidateQueries({ queryKey: ['tile-chart'] })
       queryClient.invalidateQueries({ queryKey: ['audit', queryId] })
       toast.success(id ? 'Chart updated.' : `Chart “${saved.name}” added.`)
     },
@@ -38,6 +40,8 @@ export function useDeleteVisualization(queryId: string) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: visualizationsKey(queryId) })
       queryClient.removeQueries({ queryKey: visualizationDataPrefix(queryId) })
+      // Dashboard tiles under the hub read the chart and its parameters through the dashboard.
+      queryClient.invalidateQueries({ queryKey: ['tile-chart'] })
       queryClient.invalidateQueries({ queryKey: ['audit', queryId] })
       toast.success('Chart deleted.')
     },

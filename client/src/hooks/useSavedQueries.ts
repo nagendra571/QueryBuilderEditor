@@ -24,7 +24,10 @@ export function useToggleDisabled() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: (id: string) => savedQueriesApi.toggleDisabled(id),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: savedQueriesKey }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: savedQueriesKey })
+      queryClient.invalidateQueries({ queryKey: ['tile-chart'] })
+    },
     onError: (error) => toast.error(error instanceof ApiError ? error.message : 'Could not update the query.'),
   })
 }
@@ -35,6 +38,7 @@ export function useDeleteSavedQuery() {
     mutationFn: (id: string) => savedQueriesApi.remove(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: savedQueriesKey })
+      queryClient.invalidateQueries({ queryKey: ['tile-chart'] })
       toast.success('Query deleted.')
     },
     onError: (error) => toast.error(error instanceof ApiError ? error.message : 'Could not delete query.'),

@@ -117,7 +117,7 @@ export const adminApi = {
   },
   encryptionKeyStatus: async (): Promise<EncryptionKeyStatusDto> => (await apiClient.get('/admin/encryption-key')).data,
   reencrypt: async (): Promise<ReencryptResultDto> => (await apiClient.post('/admin/encryption-key/reencrypt')).data,
-  dataSourceManagement: async (): Promise<{ enabled: boolean }> => (await apiClient.get('/admin/data-source-management')).data,
+  dataSourceManagement: async (): Promise<{ enabled: boolean; canManageConnections?: boolean }> => (await apiClient.get('/admin/data-source-management')).data,
   createDataSource: async (request: CreateDataSourceRequest): Promise<AdminDataSourceSummaryDto> =>
     (await apiClient.post('/admin/data-sources', request)).data,
   updateDataSource: async (id: string, request: UpdateDataSourceRequest): Promise<void> => {
@@ -157,12 +157,36 @@ export interface MeDto {
   displayName: string
   /** Null when the host configured no data scoping. */
   zone: { unrestricted: boolean; values: Record<string, string[]> } | null
+  app?: { id: string; key: string; name: string } | null
+  role?: 'Admin' | 'Author' | 'Viewer'
+  isSuperAdmin?: boolean
+  returnUrl?: string | null
+  /** A super admin's chosen app; null until they pick one. */
+  viewingApp?: { id: string; key: string; name: string } | null
   /** Present only in hub mode; its presence is how the client knows it is running under the hub. */
   permissions?: { canBuildQueries: boolean; canManageDashboards: boolean; canPublish: boolean; canAdmin: boolean; isViewer: boolean }
 }
 
 export const meApi = {
   get: async (): Promise<MeDto> => (await apiClient.get('/me')).data,
+}
+
+export interface HubAppDto {
+  id: string
+  key: string
+  name: string
+  isEnabled: boolean
+  version: number
+}
+
+export const hubApi = {
+  listApps: async (): Promise<HubAppDto[]> => (await apiClient.get('/hub/apps')).data,
+  viewApp: async (appId: string): Promise<void> => {
+    await apiClient.post('/hub/view-app', { appId })
+  },
+  // Outside /api on the server, so it can't use apiClient's base URL; same CSRF header.
+  logout: async (): Promise<{ redirectUrl: string }> =>
+    (await apiClient.post('/querybuilder/logout', undefined, { baseURL: '' })).data,
 }
 
 export const dashboardsApi = {
@@ -182,6 +206,9 @@ export const dashboardsApi = {
     (await apiClient.post(`/dashboards/${id}/tiles/chart`, { visualizationId })).data,
   remove: async (id: string): Promise<void> => {
     await apiClient.delete(`/dashboards/${id}`)
+  },
+  setPublished: async (id: string, published: boolean): Promise<void> => {
+    await apiClient.put(`/dashboards/${id}/published`, { published })
   },
   getShares: async (id: string): Promise<QueryShareDto[]> => (await apiClient.get(`/dashboards/${id}/shares`)).data,
   share: async (id: string, request: ShareDashboardRequest): Promise<{ id: string }> =>

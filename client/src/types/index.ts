@@ -390,6 +390,7 @@ export interface AdminDataSourceSummaryDto {
   name: string
   provider: DataSourceProvider
   isActive: boolean
+  locked?: boolean
 }
 
 export interface AdminDataSourceDetailDto {
@@ -418,6 +419,10 @@ export interface AdminDataSourceDetailDto {
   catalogError: string | null
   /** True for the data source that uses QueryBuilder's own database. */
   usesMetadataDatabase: boolean
+  /** Hub mode: added by a super admin, so app admins can only read it. */
+  locked?: boolean
+  canEdit?: boolean
+  canManageConnection?: boolean
 }
 
 export type ConnectionSslMode = 'disable' | 'require' | 'verifyFull'
@@ -648,6 +653,8 @@ export interface DashboardSummaryDto {
   isOwner: boolean
   accessLevel: QueryAccessLevel
   tileCount: number
+  /** Hub mode only: visible read-only to everyone in the app. */
+  published?: boolean
   createdAtUtc: string
   updatedAtUtc?: string | null
 }
@@ -711,6 +718,7 @@ export interface DashboardDetailDto {
   ownerName: string
   isOwner: boolean
   accessLevel: QueryAccessLevel
+  published?: boolean
   version: number
   tiles: DashboardTileDto[]
   parameters?: DashboardParameterDto[] | null

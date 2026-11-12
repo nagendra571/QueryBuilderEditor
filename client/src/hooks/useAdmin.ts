@@ -16,8 +16,9 @@ export const adminDataSourcesKey = ['admin-data-sources'] as const
 const adminDataSourceDetailKey = (id: string) => ['admin-data-source', id] as const
 const adminDataScopeKey = (id: string) => ['admin-data-scope', id] as const
 
-export function useAdminAccess() {
+export function useAdminAccess(enabled = true) {
   return useQuery({
+    enabled,
     queryKey: ['admin-access'],
     // queryFn must resolve to a defined value — TanStack Query v5 throws
     // "<queryHash> data is undefined" and forces the query into an error

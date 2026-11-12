@@ -183,6 +183,8 @@ export function QueryEditorPage() {
       // Charts are drawn from the saved definition, so a re-save changes what they show and which columns they can use.
       queryClient.invalidateQueries({ queryKey: ['saved-query', queryId ?? result.id] })
       queryClient.invalidateQueries({ queryKey: visualizationDataPrefix(queryId ?? result.id) })
+      // Dashboard tiles under the hub read the chart and its parameters through the dashboard.
+      queryClient.invalidateQueries({ queryKey: ['tile-chart'] })
       if (!queryId) navigate(`/queries/${result.id}`, { replace: true })
     },
     onError: (error) => toast.error(error instanceof ApiError ? error.message : 'Could not save the query.'),
@@ -198,6 +200,8 @@ export function QueryEditorPage() {
       queryClient.invalidateQueries({ queryKey: ['saved-query', queryId] })
       queryClient.invalidateQueries({ queryKey: savedQueriesKey })
       queryClient.invalidateQueries({ queryKey: visualizationDataPrefix(queryId!) })
+      // Dashboard tiles under the hub read the chart and its parameters through the dashboard.
+      queryClient.invalidateQueries({ queryKey: ['tile-chart'] })
     },
     onError: (error) => toast.error(error instanceof ApiError ? error.message : 'Could not update the query.'),
   })

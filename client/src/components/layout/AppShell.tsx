@@ -8,6 +8,8 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
+import { HubBanner } from '@/features/hub/HubBanner'
+import { isHub, navItemsFor, type NavItemSpec } from '@/features/hub/permissions'
 import { useAdminAccess } from '@/hooks/useAdmin'
 import { useMe, zoneLabel } from '@/hooks/useMe'
 import { cn } from '@/lib/utils'
@@ -131,6 +133,12 @@ function ThemeToggle() {
   )
 }
 
+const NAV_ICONS: Record<NavItemSpec['id'], ReactNode> = {
+  queries: <Table2 className="size-4" />,
+  dashboards: <LayoutDashboard className="size-4" />,
+  admin: <Settings2 className="size-4" />,
+}
+
 const NARROW = '(max-width: 767px)'
 
 function useIsNarrow() {
@@ -150,7 +158,10 @@ export function AppShell({ children }: { children: ReactNode }) {
   // Phones always get the icon rail; the user's own preference applies from tablet width up.
   const narrow = useIsNarrow()
   const collapsed = userCollapsed || narrow
-  const adminAccess = useAdminAccess()
+  const { data: me, isLoading: meLoading } = useMe()
+  // Embedded mode finds out about Admin by probing; under the hub the server says so in /api/me.
+  const adminAccess = useAdminAccess(!meLoading && !isHub(me))
+  const navItems = navItemsFor(me, adminAccess.isSuccess)
 
   return (
     <div className="flex h-dvh w-full overflow-hidden bg-background text-foreground">
@@ -166,11 +177,9 @@ export function AppShell({ children }: { children: ReactNode }) {
         </div>
 
         <nav aria-label="Main" className={cn('flex flex-1 flex-col gap-1', collapsed ? 'p-2' : 'p-3')}>
-          <NavItem to="/" label="Queries" icon={<Table2 className="size-4" />} collapsed={collapsed} />
-          <NavItem to="/dashboards" label="Dashboards" icon={<LayoutDashboard className="size-4" />} collapsed={collapsed} />
-          {adminAccess.isSuccess && (
-            <NavItem to="/admin" label="Admin" icon={<Settings2 className="size-4" />} collapsed={collapsed} />
-          )}
+          {navItems.map((item) => (
+            <NavItem key={item.id} to={item.to} label={item.label} icon={NAV_ICONS[item.id]} collapsed={collapsed} />
+          ))}
         </nav>
 
         <div className={cn('flex flex-col gap-2 border-t border-sidebar-border', collapsed ? 'p-2' : 'p-3')}>
@@ -199,6 +208,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex h-12 shrink-0 items-center justify-end gap-1 border-b border-border px-4">
+          <HubBanner me={me} />
           <DensityToggle />
           <ThemeToggle />
         </header>

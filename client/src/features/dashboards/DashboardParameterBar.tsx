@@ -5,6 +5,7 @@ import { Label } from '@/components/ui/label'
 import { dashboardParameterTitle, toQueryParameter } from '@/features/dashboards/dashboard-params'
 import { ParameterControl } from '@/features/parameters/controls/ParameterControl'
 import { valuesEqual, type ParameterValues } from '@/features/parameters/param-values'
+import { isHub } from '@/features/hub/permissions'
 import { useMe } from '@/hooks/useMe'
 import type { DashboardParameterDto } from '@/types'
 
@@ -35,8 +36,8 @@ export function DashboardParameterBar({
   /** In hub mode, a query-list parameter's choices come from the dashboard, so a viewer without access to the source query still gets them. */
   dashboardId?: string
 }) {
-  const { data: me } = useMe()
-  const hub = !!me?.permissions
+  const { data: me, isLoading: meLoading } = useMe()
+  const hub = isHub(me)
   const baseId = useId()
   const queryParameters = parameters.map(toQueryParameter)
   const unapplied = !valuesEqual(queryParameters, values, appliedValues)
@@ -81,7 +82,7 @@ export function DashboardParameterBar({
               value={values[parameter.name] ?? null}
               onChange={(v) => onChange(parameter.name, v)}
               optionsSource={
-                parameter.type === 'queryList'
+                parameter.type === 'queryList' && !meLoading
                   ? hub && !editing && dashboardId
                     ? { kind: 'dashboard', dashboardId, name: parameter.name }
                     : { kind: 'draft', parameter: queryParameters[index] }

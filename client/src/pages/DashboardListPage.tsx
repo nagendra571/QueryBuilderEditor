@@ -9,6 +9,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { ConfirmDeleteDialog } from '@/features/dashboards/ConfirmDeleteDialog'
 import { DashboardNameDialog } from '@/features/dashboards/DashboardNameDialog'
 import { AccessLevelBadge } from '@/features/builder/ShareDialog'
+import { PublishedChip } from '@/features/hub/PublishedChip'
+import { isHub } from '@/features/hub/permissions'
+import { useMe } from '@/hooks/useMe'
 import { useCreateDashboard, useDashboards, useDeleteDashboard } from '@/hooks/useDashboards'
 import type { DashboardSummaryDto } from '@/types'
 
@@ -18,6 +21,10 @@ export function DashboardListPage() {
   const [deleteTarget, setDeleteTarget] = useState<DashboardSummaryDto | null>(null)
   const navigate = useNavigate()
   const create = useCreateDashboard()
+  const { data: me } = useMe()
+  const hub = isHub(me)
+  const canCreate = !hub || !!me?.permissions?.canManageDashboards
+  const canManageAny = hub && !!me?.permissions?.canPublish
   const remove = useDeleteDashboard()
 
   return (
@@ -25,12 +32,16 @@ export function DashboardListPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-[1.75rem] leading-tight font-bold tracking-tight">Dashboards</h1>
-          <p className="text-sm text-muted-foreground">Put saved charts on one page and share it with colleagues.</p>
+          <p className="text-sm text-muted-foreground">
+            {canCreate ? 'Put saved charts on one page and share it with colleagues.' : 'Dashboards published to your app, and ones shared with you.'}
+          </p>
         </div>
-        <Button onClick={() => setCreateOpen(true)}>
-          <Plus className="size-4" />
-          New dashboard
-        </Button>
+        {canCreate && (
+          <Button onClick={() => setCreateOpen(true)}>
+            <Plus className="size-4" />
+            New dashboard
+          </Button>
+        )}
       </div>
 
       {isLoading && (
@@ -48,12 +59,16 @@ export function DashboardListPage() {
           <LayoutDashboard className="size-8 text-muted-foreground" />
           <div>
             <p className="text-sm font-medium">No dashboards yet</p>
-            <p className="text-xs text-muted-foreground">Create one, then add charts from your saved queries.</p>
+            <p className="text-xs text-muted-foreground">
+              {canCreate ? 'Create one, then add charts from your saved queries.' : 'Nothing has been published or shared with you yet.'}
+            </p>
           </div>
-          <Button size="sm" onClick={() => setCreateOpen(true)}>
-            <Plus className="size-3.5" />
-            New dashboard
-          </Button>
+          {canCreate && (
+            <Button size="sm" onClick={() => setCreateOpen(true)}>
+              <Plus className="size-3.5" />
+              New dashboard
+            </Button>
+          )}
         </div>
       )}
 
@@ -76,6 +91,7 @@ export function DashboardListPage() {
                     <span className="flex min-w-0 items-center gap-1.5 text-(length:--text-body) font-medium">
                       <span className="truncate">{d.name}</span>
                       <AccessLevelBadge level={d.accessLevel} />
+                      {d.published && <PublishedChip />}
                     </span>
                   </TableCell>
                   <TableCell className="text-xs text-muted-foreground">{d.isOwner ? 'You' : d.ownerName}</TableCell>
@@ -84,7 +100,7 @@ export function DashboardListPage() {
                     {formatDistanceToNow(new Date(d.updatedAtUtc ?? d.createdAtUtc), { addSuffix: true })}
                   </TableCell>
                   <TableCell onClick={(e) => e.stopPropagation()}>
-                    {d.isOwner && (
+                    {(d.isOwner || canManageAny) && (
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button variant="ghost" size="icon" className="size-6" aria-label={`Actions for ${d.name}`}>

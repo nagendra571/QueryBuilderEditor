@@ -13,6 +13,7 @@ import {
   useShareDashboard,
 } from '@/hooks/useDashboards'
 import { useAppUsers, useDataSources, usePeople } from '@/hooks/useDataSources'
+import { isHub } from '@/features/hub/permissions'
 import { useMe } from '@/hooks/useMe'
 import type { AppUserDto, QueryAccessLevel } from '@/types'
 
@@ -35,7 +36,7 @@ export function ShareDashboardDialog({
   // Under the hub people come from the app's launches; the server also accepts people from the AppUsers views of the
   // data sources behind the dashboard's charts, but this list does not offer them.
   const { data: me } = useMe()
-  const hub = !!me?.permissions
+  const hub = isHub(me)
   const directory = useAppUsers(hub ? undefined : dataSourceId)
   const people = usePeople(hub)
   const appUsers = hub ? (people.data ? { available: true, users: people.data } : undefined) : directory.data

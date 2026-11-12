@@ -1,4 +1,4 @@
-import { AlertTriangle, ArrowLeft, Loader2, Save, Search } from 'lucide-react'
+import { AlertTriangle, ArrowLeft, Loader2, Lock, Save, Search } from 'lucide-react'
 import { useId, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { Badge } from '@/components/ui/badge'
@@ -12,6 +12,7 @@ import { DataScopeSection } from '@/features/admin/DataScopeSection'
 import { RecordLimitSection } from '@/features/admin/RecordLimitSection'
 import { catalogControlsLocked } from '@/features/admin/connection-form'
 import { initialAllowlist, pruneAllowlist } from '@/features/catalog/allowlist'
+import { connectionReason, lockReason } from '@/features/hub/permissions'
 import { adminUnavailableReason, objectRowKey, qualifiedName } from '@/features/catalog/unavailable'
 import { useAdminDataSourceDetail, useUpdateCatalogPolicy } from '@/hooks/useAdmin'
 import type { CatalogScope } from '@/types'
@@ -68,6 +69,9 @@ export function AdminDataSourcePolicyPage() {
   // With the data source unreachable its object list is empty, and a scope change would prune the allowlist to
   // nothing; a later save would then lose it. Nothing here can be edited until the connection works.
   const locked = catalogControlsLocked(data.catalogError)
+  // Hub mode: a super admin's data source is read-only for app admins, and some admins may not touch connections at all.
+  const readOnlyReason = lockReason(data)
+  const connectionNote = readOnlyReason ?? connectionReason(data)
 
   // Switching scope must drop selections that are no longer valid for it — otherwise the
   // checklist shows one thing and the saved payload carries another (e.g. views saved under
@@ -123,6 +127,12 @@ export function AdminDataSourcePolicyPage() {
         <div>
           <h1 className="flex items-center gap-2 text-[1.75rem] leading-tight font-bold tracking-tight">
             {data.name}
+            {data.locked && (
+              <Badge variant="secondary" className="gap-1 text-xs font-normal">
+                <Lock className="size-3" aria-hidden />
+                Locked
+              </Badge>
+            )}
             {!data.isActive && (
               <Badge variant="outline" className="text-xs font-normal">
                 Inactive
@@ -133,11 +143,23 @@ export function AdminDataSourcePolicyPage() {
         </div>
       </div>
 
+      {readOnlyReason && (
+        <p role="status" className="flex items-center gap-2 rounded-md border border-border bg-muted/50 px-3 py-2 text-sm">
+          <Lock className="size-4 shrink-0" aria-hidden />
+          {readOnlyReason}. You can read everything here but not change it.
+        </p>
+      )}
+
+      {/* A disabled fieldset turns off every control inside it, so nothing has to be wired one by one. */}
+      <fieldset disabled={!!readOnlyReason} className="m-0 flex min-w-0 flex-col gap-(--space-section) border-0 p-0">
+      {connectionNote && !readOnlyReason && <p className="text-xs text-muted-foreground">{connectionNote}</p>}
       {/* Remounts whenever anything the section edits changes on the server, so its drafts (and the password) restart clean. */}
-      <ConnectionSection
-        key={`${data.id}|${data.name}|${data.description ?? ''}|${data.connectionUnreadable}|${JSON.stringify(data.connection)}`}
-        dataSource={data}
-      />
+      <fieldset disabled={!!connectionNote} className="m-0 min-w-0 border-0 p-0">
+        <ConnectionSection
+          key={`${data.id}|${data.name}|${data.description ?? ''}|${data.connectionUnreadable}|${JSON.stringify(data.connection)}`}
+          dataSource={data}
+        />
+      </fieldset>
 
       <div className="flex flex-col gap-2">
         <h2 className="text-sm font-semibold">Catalog scope</h2>
@@ -235,6 +257,7 @@ export function AdminDataSourcePolicyPage() {
       <RecordLimitSection key={`${data.id}:${data.maxRecords ?? ''}`} dataSource={data} />
 
       <DataScopeSection dataSourceId={data.id} />
+      </fieldset>
     </div>
   )
 }

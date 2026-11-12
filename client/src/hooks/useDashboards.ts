@@ -158,3 +158,16 @@ export function usePickableVisualizations(enabled: boolean) {
     staleTime: 0,
   })
 }
+
+export function useSetDashboardPublished(id: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (published: boolean) => dashboardsApi.setPublished(id, published).then(() => published),
+    onSuccess: (published) => {
+      queryClient.invalidateQueries({ queryKey: dashboardKey(id) })
+      queryClient.invalidateQueries({ queryKey: dashboardsKey })
+      toast.success(published ? 'Published to everyone in the app.' : 'Unpublished.')
+    },
+    onError: (error) => toast.error(message(error, 'Could not change whether this dashboard is published.')),
+  })
+}

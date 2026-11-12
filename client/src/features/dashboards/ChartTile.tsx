@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label'
 import { ParameterControl } from '@/features/parameters/controls/ParameterControl'
 import { isBlank, parameterTitle, valuesEqual, type ParameterValues } from '@/features/parameters/param-values'
 import { ChartRenderer } from '@/features/visualizations/ChartRenderer'
+import { isHub } from '@/features/hub/permissions'
 import { useMe, zoneLabel } from '@/hooks/useMe'
 import { useVisualizations, visualizationDataPrefix } from '@/hooks/useVisualizations'
 import { dashboardsApi, savedQueriesApi, visualizationsApi } from '@/lib/api'
@@ -78,7 +79,7 @@ export function ChartTileBody({ tile, titleId, statusId }: { tile: DashboardTile
 
   const { data: me, isLoading: meLoading } = useMe()
   // Under the hub a tile asks the dashboard for its chart, because the viewer may not be allowed to open the query.
-  const hubTile = !!me?.permissions && !!context
+  const hubTile = isHub(me) && !!context
 
   const chart = tile.chart
   const queryId = chart?.savedQueryId ?? ''

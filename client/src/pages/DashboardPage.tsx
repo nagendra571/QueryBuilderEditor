@@ -1,11 +1,14 @@
 import { useQueryClient } from '@tanstack/react-query'
-import { AlertTriangle, ArrowLeft, BarChart3, Loader2, MoreHorizontal, Pencil, Plus, Rows3, Share2, StickyNote, Trash2 } from 'lucide-react'
+import { AlertTriangle, ArrowLeft, BarChart3, Globe, Loader2, MoreHorizontal, Pencil, Plus, Rows3, Share2, StickyNote, Trash2 } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
+import { dashboardPublishLabel, isHub } from '@/features/hub/permissions'
+import { useMe } from '@/hooks/useMe'
 import { AccessLevelBadge } from '@/features/builder/ShareDialog'
+import { PublishedChip } from '@/features/hub/PublishedChip'
 import { AddChartDialog } from '@/features/dashboards/AddChartDialog'
 import { ConfirmDeleteDialog } from '@/features/dashboards/ConfirmDeleteDialog'
 import { DashboardParameterBar } from '@/features/dashboards/DashboardParameterBar'
@@ -28,6 +31,7 @@ import {
   useDashboard,
   useDeleteDashboard,
   useRenameDashboard,
+  useSetDashboardPublished,
   useSaveDashboardTiles,
 } from '@/hooks/useDashboards'
 import { visualizationDataPrefix } from '@/hooks/useVisualizations'
@@ -75,6 +79,8 @@ export function DashboardPage() {
   const saveTiles = useSaveDashboardTiles(id ?? '')
   const rename = useRenameDashboard(id ?? '')
   const remove = useDeleteDashboard()
+  const setPublished = useSetDashboardPublished(id ?? '')
+  const { data: me } = useMe()
 
   const limiter = useMemo(() => createLimiter(MAX_CONCURRENT_RENDERS), [])
   const [draft, setDraft] = useState<DraftTile[] | null>(null)
@@ -119,6 +125,9 @@ export function DashboardPage() {
   const editing = draft !== null
   const tiles = draft ?? viewTiles
   const canEdit = dashboard?.accessLevel === 'owner' || dashboard?.accessLevel === 'editor'
+  // Under the hub an Admin manages every dashboard in the app, and only Admins publish.
+  const canPublish = isHub(me) && !!me?.permissions?.canPublish
+  const canManage = !!dashboard?.isOwner || canPublish
 
   function beginEdit() {
     if (!dashboard) return
@@ -357,6 +366,7 @@ export function DashboardPage() {
             <h1 className="flex min-w-0 items-center gap-2 text-[1.75rem] leading-tight font-bold tracking-tight">
               <span className="truncate">{dashboard.name}</span>
               <AccessLevelBadge level={dashboard.accessLevel} />
+              {dashboard.published && <PublishedChip />}
             </h1>
             {!dashboard.isOwner && <p className="text-xs text-muted-foreground">Owned by {dashboard.ownerName}</p>}
           </div>
@@ -377,7 +387,20 @@ export function DashboardPage() {
                 Edit
               </Button>
             )}
-            {!editing && dashboard.isOwner && (
+            {!editing && canPublish && (
+              <Button
+                size="sm"
+                variant={dashboard.published ? 'secondary' : 'outline'}
+                className="h-8 text-xs"
+                disabled={setPublished.isPending}
+                title={dashboard.published ? 'Everyone in the app can see this dashboard' : 'Make this dashboard visible to everyone in the app'}
+                onClick={() => setPublished.mutate(!dashboard.published)}
+              >
+                <Globe className="size-3.5" />
+                {dashboardPublishLabel(!!dashboard.published)}
+              </Button>
+            )}
+            {!editing && canManage && (
               <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => setShareOpen(true)}>
                 <Share2 className="size-3.5" />
                 Share
@@ -395,7 +418,7 @@ export function DashboardPage() {
                     <Pencil className="size-3.5" />
                     Rename
                   </DropdownMenuItem>
-                  {dashboard.isOwner && (
+                  {canManage && (
                     <DropdownMenuItem variant="destructive" onSelect={() => setDeleteOpen(true)}>
                       <Trash2 className="size-3.5" />
                       Delete
@@ -512,6 +535,7 @@ export function DashboardPage() {
       <ParameterMappingDialog
         tile={mappingTile}
         dashboardParameters={params}
+        dashboardId={id}
         onOpenChange={(open) => !open && setMapTileKey(null)}
         onSave={saveMappings}
       />
@@ -537,7 +561,7 @@ export function DashboardPage() {
         initialDescription={editingSection?.text ?? ''}
         onSave={saveSection}
       />
-      {dashboard.isOwner && (
+      {canManage && (
         <ShareDashboardDialog open={shareOpen} onOpenChange={setShareOpen} dashboardId={dashboard.id} dashboardName={dashboard.name} />
       )}
       <DashboardNameDialog

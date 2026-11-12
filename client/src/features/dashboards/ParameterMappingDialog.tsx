@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { Loader2 } from 'lucide-react'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
@@ -14,8 +14,10 @@ import {
 } from '@/features/dashboards/dashboard-params'
 import { ParameterControl } from '@/features/parameters/controls/ParameterControl'
 import { effectiveType, isBlank, parameterTitle, TYPE_LABELS } from '@/features/parameters/param-values'
-import { savedQueriesApi } from '@/lib/api'
-import type { DashboardParameterDto, DashboardTileDto, ParameterMappingDto, ParameterMappingSource, QueryParameter } from '@/types'
+import { isHub } from '@/features/hub/permissions'
+import { useMe } from '@/hooks/useMe'
+import { dashboardsApi, savedQueriesApi } from '@/lib/api'
+import type { DashboardContext, DashboardParameterDto, DashboardTileDto, ParameterMappingDto, ParameterMappingSource, QueryParameter } from '@/types'
 
 const NEW_PARAMETER = '__new__'
 
@@ -32,22 +34,48 @@ const SOURCE_LABELS: Record<ParameterMappingSource, string> = {
 export function ParameterMappingDialog({
   tile,
   dashboardParameters,
+  dashboardId,
   onOpenChange,
   onSave,
 }: {
   tile: DashboardTileDto | null
+  /** Under the hub the tile's query is read through the dashboard, because the editor may not be allowed to open it. */
+  dashboardId?: string
   dashboardParameters: DashboardParameterDto[]
   onOpenChange: (open: boolean) => void
   onSave: (mappings: Record<string, ParameterMappingDto>, created: DashboardParameterDto[]) => void
 }) {
   const queryId = tile?.chart?.savedQueryId ?? ''
-  const detail = useQuery({
+  const { data: me, isLoading: meLoading } = useMe()
+  const hubTile = isHub(me) && !!dashboardId && !!tile
+  const context = useMemo(() => (hubTile && tile ? { dashboardId: dashboardId!, tileId: tile.id } : undefined), [hubTile, dashboardId, tile])
+  const savedDetail = useQuery({
     queryKey: ['saved-query', queryId],
     queryFn: () => savedQueriesApi.getById(queryId),
-    enabled: !!tile?.chart,
+    enabled: !!tile?.chart && !meLoading && !hubTile,
     retry: false,
     staleTime: 30_000,
   })
+  const tileChart = useQuery({
+    queryKey: ['tile-chart', context?.dashboardId, context?.tileId],
+    queryFn: () => dashboardsApi.tileChart(context!.dashboardId, context!.tileId),
+    enabled: !!tile?.chart && hubTile,
+    retry: false,
+    staleTime: 30_000,
+  })
+  const detail = hubTile
+    ? {
+        isLoading: tileChart.isLoading,
+        isError: tileChart.isError,
+        data: tileChart.data
+          ? { definition: { parameters: tileChart.data.parameters.map((p) => ({ ...p, optionsQueryId: null }) as QueryParameter) } }
+          : undefined,
+      }
+    : {
+        isLoading: savedDetail.isLoading || meLoading,
+        isError: savedDetail.isError,
+        data: savedDetail.data ? { definition: { parameters: savedDetail.data.definition.parameters } } : undefined,
+      }
 
   return (
     <Dialog open={tile !== null} onOpenChange={onOpenChange}>
@@ -76,6 +104,7 @@ export function ParameterMappingDialog({
                 <Form
                   tile={tile}
                   queryParameters={detail.data.definition.parameters}
+                  dashboardContext={context}
                   dashboardParameters={dashboardParameters}
                   onCancel={() => onOpenChange(false)}
                   onSave={onSave}
@@ -91,12 +120,14 @@ export function ParameterMappingDialog({
 function Form({
   tile,
   queryParameters,
+  dashboardContext,
   dashboardParameters,
   onCancel,
   onSave,
 }: {
   tile: DashboardTileDto
   queryParameters: QueryParameter[]
+  dashboardContext?: DashboardContext
   dashboardParameters: DashboardParameterDto[]
   onCancel: () => void
   onSave: (mappings: Record<string, ParameterMappingDto>, created: DashboardParameterDto[]) => void
@@ -232,7 +263,7 @@ function Form({
                       id={`${sourceId}-fixed`}
                       value={row.fixed}
                       onChange={(v) => set(p.name, { fixed: v })}
-                      optionsSource={{ kind: 'saved', queryId: tile.chart?.savedQueryId ?? '', name: p.name }}
+                      optionsSource={{ kind: 'saved', queryId: tile.chart?.savedQueryId ?? '', name: p.name, context: dashboardContext }}
                     />
                   </div>
                 )}
