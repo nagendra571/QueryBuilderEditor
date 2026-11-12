@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Tokens;
 using QueryBuilder.Application.Abstractions;
+using QueryBuilder.Application.Common;
 using QueryBuilder.Application.DataScoping;
 using QueryBuilder.Application.Hub;
 using QueryBuilder.Domain.Enums;
@@ -414,7 +415,8 @@ public sealed class LaunchTokenValidator : ILaunchTokenValidator
             return false;
         }
 
-        if (jti.Length > MaxJtiLength || sub.Length > MaxIdentityLength)
+        if (jti.Length > MaxJtiLength || sub.Length > MaxIdentityLength
+            || sub.StartsWith(SuperAdminMask.Prefix, StringComparison.OrdinalIgnoreCase))
         {
             problem = LaunchRefusalReason.Malformed;
             return false;

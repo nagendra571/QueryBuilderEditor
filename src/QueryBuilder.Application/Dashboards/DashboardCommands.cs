@@ -577,7 +577,7 @@ public sealed class DeleteDashboardCommandHandler(
 
         if (!DashboardAccess.CanManage(dashboard, AccessActor.From(currentUser)))
         {
-            throw new ForbiddenException("Only the owner can delete this dashboard.");
+            throw new ForbiddenException("You don't have permission to delete this dashboard.");
         }
 
         dashboards.Remove(dashboard);

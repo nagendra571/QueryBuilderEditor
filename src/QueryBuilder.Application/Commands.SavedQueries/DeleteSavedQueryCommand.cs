@@ -20,7 +20,7 @@ public sealed class DeleteSavedQueryCommandHandler(
 
         if (!SavedQueryAccess.CanManage(existing, AccessActor.From(currentUser)))
         {
-            throw new ForbiddenException("Only the owner can delete this query.");
+            throw new ForbiddenException("You don't have permission to delete this query.");
         }
 
         // Snapshot the name before the row disappears — the audit trail must still read cleanly afterward.

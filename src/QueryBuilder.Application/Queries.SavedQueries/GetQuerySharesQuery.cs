@@ -19,7 +19,7 @@ public sealed class GetQuerySharesQueryHandler(ISavedQueryRepository repository,
 
         if (!SavedQueryAccess.CanManage(query, AccessActor.From(currentUser)))
         {
-            throw new ForbiddenException("Only the owner can view sharing for this query.");
+            throw new ForbiddenException("You don't have permission to view sharing for this query.");
         }
 
         return query.Shares

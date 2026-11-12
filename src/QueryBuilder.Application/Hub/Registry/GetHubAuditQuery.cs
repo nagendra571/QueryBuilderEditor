@@ -22,10 +22,10 @@ public sealed record HubAuditEntryDto(
 /// <summary>Reads the audit across every app, run inside a hub-wide scope. Rows without an app (hub-level) have a null <c>AppKey</c>.</summary>
 public interface IHubAuditReader
 {
-    Task<IReadOnlyList<HubAuditEntryDto>> ListAsync(Guid? appId, AuditAction? action, DateTimeOffset? before, int take, CancellationToken ct);
+    Task<IReadOnlyList<HubAuditEntryDto>> ListAsync(Guid? appId, AuditAction? action, DateTimeOffset? before, Guid? beforeId, int take, CancellationToken ct);
 }
 
-public sealed record GetHubAuditQuery(Guid? AppId, AuditAction? Action, DateTimeOffset? Before, int? Take) : IRequest<IReadOnlyList<HubAuditEntryDto>>;
+public sealed record GetHubAuditQuery(Guid? AppId, AuditAction? Action, DateTimeOffset? Before, int? Take, Guid? BeforeId = null) : IRequest<IReadOnlyList<HubAuditEntryDto>>;
 
 public sealed class GetHubAuditQueryHandler(ICurrentUserService user, IHubWideScopeFactory factory)
     : IRequestHandler<GetHubAuditQuery, IReadOnlyList<HubAuditEntryDto>>
@@ -49,6 +49,6 @@ public sealed class GetHubAuditQueryHandler(ICurrentUserService user, IHubWideSc
         await using var scope = factory.Create();
         var reader = (IHubAuditReader?)scope.ServiceProvider.GetService(typeof(IHubAuditReader))
             ?? throw new InvalidOperationException("IHubAuditReader is not registered.");
-        return await reader.ListAsync(request.AppId, request.Action, request.Before, take, ct);
+        return await reader.ListAsync(request.AppId, request.Action, request.Before, request.BeforeId, take, ct);
     }
 }

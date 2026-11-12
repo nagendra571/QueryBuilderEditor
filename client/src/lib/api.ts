@@ -222,6 +222,7 @@ export interface HubAuditParams {
   appId?: string
   action?: string
   before?: string
+  beforeId?: string
   take?: number
 }
 

@@ -161,12 +161,12 @@ export function AdminDataSourcePolicyPage() {
       <fieldset disabled={!!readOnlyReason} className="m-0 flex min-w-0 flex-col gap-(--space-section) border-0 p-0">
       {connectionNote && !readOnlyReason && <p className="text-xs text-muted-foreground">{connectionNote}</p>}
       {/* Remounts whenever anything the section edits changes on the server, so its drafts (and the password) restart clean. */}
-      <fieldset disabled={!!connectionNote} className="m-0 min-w-0 border-0 p-0">
-        <ConnectionSection
-          key={`${data.id}|${data.name}|${data.description ?? ''}|${data.connectionUnreadable}|${JSON.stringify(data.connection)}`}
-          dataSource={data}
-        />
-      </fieldset>
+      <ConnectionSection
+        key={`${data.id}|${data.name}|${data.description ?? ''}|${data.connectionUnreadable}|${JSON.stringify(data.connection)}`}
+        dataSource={data}
+        connectionLocked={!!connectionNote}
+        readOnly={!!readOnlyReason}
+      />
 
       <div className="flex flex-col gap-2">
         <h2 className="text-sm font-semibold">Catalog scope</h2>

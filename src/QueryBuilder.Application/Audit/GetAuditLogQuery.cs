@@ -49,9 +49,11 @@ public sealed class GetAuditLogQueryHandler(
 
     private static AuditLogEntryDto ToDto(AuditLogEntry e, bool mask) => new(
         e.Id, e.TimestampUtc, mask ? MaskActor(e.Actor) : e.Actor, e.Action, e.EntityType, e.EntityId, e.EntityName, e.DataSourceId, e.Summary,
-        mask ? MaskDetails(e.DetailsJson) : e.DetailsJson, e.IpAddress);
+        mask ? MaskDetails(e.DetailsJson) : e.DetailsJson, mask && IsStaff(e.Actor) ? null : e.IpAddress);
 
-    private static string MaskActor(string actor) => actor.StartsWith("super:", StringComparison.Ordinal) ? SuperAdminLabel : actor;
+    private static bool IsStaff(string actor) => actor.StartsWith("super:", StringComparison.Ordinal);
+
+    private static string MaskActor(string actor) => IsStaff(actor) ? SuperAdminLabel : actor;
 
     private static readonly HashSet<string> StaffIdKeys = new(StringComparer.OrdinalIgnoreCase) { "oid", "objectId" };
 

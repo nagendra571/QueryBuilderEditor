@@ -1,5 +1,6 @@
 using QueryBuilder.Application.Abstractions;
 using QueryBuilder.Application.Common;
+using QueryBuilder.Application.Dtos;
 using QueryBuilder.Application.Parameters;
 using QueryBuilder.Domain.Entities;
 using QueryBuilder.Domain.Enums;
@@ -28,6 +29,38 @@ public sealed class DashboardGrant : IDashboardGrant
 
 public sealed class DashboardGrantResolver(IDashboardRepository dashboards, IDashboardGrant grant)
 {
+    private Dictionary<string, ParameterMappingDto>? _tileMappings;
+
+    /// <summary>
+    /// For a caller whose access comes only from the dashboard: the tile's mappings decide the values, so a fixed value
+    /// cannot be overridden from the browser. Fixed values are forced, parameters the tile does not map (or maps to the
+    /// query default) are dropped, and only values for dashboard-parameter or tile-control mappings come from the caller.
+    /// </summary>
+    public Dictionary<string, string?> ConstrainValues(IReadOnlyDictionary<string, string?> browserValues)
+    {
+        var result = new Dictionary<string, string?>(StringComparer.Ordinal);
+        if (_tileMappings is null)
+        {
+            return result;
+        }
+
+        foreach (var (name, mapping) in _tileMappings)
+        {
+            switch (mapping.Source)
+            {
+                case ParameterMappingSource.Fixed:
+                    result[name] = mapping.Value;
+                    break;
+                case ParameterMappingSource.Dashboard or ParameterMappingSource.Tile
+                    when browserValues.TryGetValue(name, out var value):
+                    result[name] = value;
+                    break;
+            }
+        }
+
+        return result;
+    }
+
     /// <summary>
     /// Hub mode only. True (and the grant filled) when the dashboard loads in the caller's app, the caller can see it, the
     /// tile is a chart tile of that dashboard, it points at <paramref name="visualizationId"/> when one is given, and that
@@ -72,6 +105,7 @@ public sealed class DashboardGrantResolver(IDashboardRepository dashboards, IDas
             .Where(p => p.Type == ParameterType.QueryList && p.OptionsQueryId is { } id && id != Guid.Empty)
             .Select(p => p.OptionsQueryId!.Value));
 
+        _tileMappings = DashboardParameterStore.ReadMappings(tile.ParameterMappingsJson);
         grant.Allow(covered);
         return true;
     }

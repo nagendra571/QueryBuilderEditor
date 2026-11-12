@@ -22,7 +22,7 @@ public sealed class GetDashboardSharesQueryHandler(IDashboardRepository dashboar
 
         if (!DashboardAccess.CanManage(dashboard, AccessActor.From(currentUser)))
         {
-            throw new ForbiddenException("Only the owner can view sharing for this dashboard.");
+            throw new ForbiddenException("You don't have permission to view sharing for this dashboard.");
         }
 
         return dashboard.Shares
@@ -70,25 +70,12 @@ public sealed class ShareDashboardCommandHandler(
 
         if (!DashboardAccess.CanManage(dashboard, actor))
         {
-            throw new ForbiddenException("Only the owner can share this dashboard.");
+            throw new ForbiddenException("You don't have permission to share this dashboard.");
         }
 
         if (request.SharedWithUserId == dashboard.OwnerId)
         {
             throw new CatalogValidationException("The owner already has full access — no need to share with themselves.");
-        }
-
-        // Every id is checked before anything is written, so one bad id shares nothing.
-        var targetChecked = false;
-        if (actor.InHub && !dashboard.Shares.Any(s => s.SharedWithUserId == request.SharedWithUserId))
-        {
-            targetChecked = true;
-            var sourceIds = dashboard.Tiles.Where(t => t.Visualization?.SavedQuery is not null)
-                .Select(t => t.Visualization!.SavedQuery!.DataSourceId);
-            if (!await targets.IsKnownAsync(request.SharedWithUserId, sourceIds, cancellationToken))
-            {
-                throw new ValidationException(Hub.ShareTargets.NotKnownMessage);
-            }
         }
 
         var onDashboard = dashboard.Tiles
@@ -111,6 +98,23 @@ public sealed class ShareDashboardCommandHandler(
             }
 
             queriesToShare.Add(query);
+        }
+
+        var newQueryShares = queriesToShare.Any(q => q.OwnerId != request.SharedWithUserId
+            && !q.Shares.Any(s => s.SharedWithUserId == request.SharedWithUserId));
+
+        // The person is checked before anything is written, so someone who left the list shares nothing, even when they
+        // already hold the dashboard share and only the new query shares would have failed.
+        var targetChecked = false;
+        if (actor.InHub && (newQueryShares || !dashboard.Shares.Any(s => s.SharedWithUserId == request.SharedWithUserId)))
+        {
+            targetChecked = true;
+            var sourceIds = dashboard.Tiles.Where(t => t.Visualization?.SavedQuery is not null)
+                .Select(t => t.Visualization!.SavedQuery!.DataSourceId);
+            if (!await targets.IsKnownAsync(request.SharedWithUserId, sourceIds, cancellationToken))
+            {
+                throw new ValidationException(Hub.ShareTargets.NotKnownMessage);
+            }
         }
 
         var share = dashboard.Shares.FirstOrDefault(s => s.SharedWithUserId == request.SharedWithUserId);
@@ -172,7 +176,7 @@ public sealed class RemoveDashboardShareCommandHandler(
 
         if (!DashboardAccess.CanManage(dashboard, AccessActor.From(currentUser)))
         {
-            throw new ForbiddenException("Only the owner can manage sharing for this dashboard.");
+            throw new ForbiddenException("You don't have permission to manage sharing for this dashboard.");
         }
 
         var share = dashboard.Shares.FirstOrDefault(s => s.Id == request.ShareId)
@@ -204,7 +208,7 @@ public sealed class GetDashboardSharePreviewQueryHandler(IDashboardRepository da
 
         if (!DashboardAccess.CanManage(dashboard, AccessActor.From(currentUser)))
         {
-            throw new ForbiddenException("Only the owner can manage sharing for this dashboard.");
+            throw new ForbiddenException("You don't have permission to manage sharing for this dashboard.");
         }
 
         var inaccessible = dashboard.Tiles

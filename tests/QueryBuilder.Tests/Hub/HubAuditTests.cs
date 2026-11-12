@@ -119,6 +119,64 @@ public class HubAuditTests
     });
 
     [MetadataSqlFact]
+    public Task App_admin_does_not_see_the_ip_address_of_a_super_admin_entry() => HubApiHost.RunAsync(async env =>
+    {
+        await using (var db = env.HubWideDb())
+        {
+            db.AuditLogEntries.AddRange(
+                new AuditLogEntry { AppId = env.AppA, Actor = "super:admin-oid", Action = AuditAction.SuperAdminViewedApp, EntityType = nameof(App), Summary = "staff ip", IpAddress = "203.0.113.9", TimestampUtc = DateTimeOffset.UtcNow },
+                new AuditLogEntry { AppId = env.AppA, Actor = "mary", Action = AuditAction.QueryRun, EntityType = nameof(App), Summary = "mary ip", IpAddress = "198.51.100.7", TimestampUtc = DateTimeOffset.UtcNow });
+            await db.SaveChangesAsync();
+        }
+
+        var admin = env.NewBrowser();
+        await admin.SignInAppAsync(env.AppA, HubRole.Admin);
+        var entries = (await HubApiHost.Browser.JsonAsync(await admin.GetAsync($"{Mount}/api/audit"))).EnumerateArray().ToList();
+        Assert.Equal(JsonValueKind.Null, entries.Single(e => e.GetProperty("summary").GetString() == "staff ip").GetProperty("ipAddress").ValueKind);
+        Assert.Equal("198.51.100.7", entries.Single(e => e.GetProperty("summary").GetString() == "mary ip").GetProperty("ipAddress").GetString());
+
+        var super = await SuperAsync(env, env.AppA);
+        var raw = (await HubApiHost.Browser.JsonAsync(await super.GetAsync($"{Mount}/api/audit"))).EnumerateArray()
+            .Single(e => e.GetProperty("summary").GetString() == "staff ip");
+        Assert.Equal("203.0.113.9", raw.GetProperty("ipAddress").GetString());
+    });
+
+    [MetadataSqlFact]
+    public Task Hub_audit_pages_by_timestamp_and_id_without_skipping_rows_that_share_a_timestamp() => HubApiHost.RunAsync(async env =>
+    {
+        var stamp = DateTimeOffset.UtcNow.AddHours(-1);
+        await using (var db = env.HubWideDb())
+        {
+            for (var i = 0; i < 5; i++)
+            {
+                db.AuditLogEntries.Add(new AuditLogEntry { AppId = env.AppA, Actor = "mary", Action = AuditAction.QueryRun, EntityType = nameof(App), Summary = $"same-{i}", TimestampUtc = stamp });
+            }
+
+            await db.SaveChangesAsync();
+        }
+
+        var super = await SuperAsync(env);
+        var seen = new List<string>();
+        string? before = null, beforeId = null;
+        for (var page = 0; page < 10; page++)
+        {
+            var url = $"{Mount}/api/hub/audit?action=QueryRun&take=2" + (before is null ? "" : $"&before={Uri.EscapeDataString(before)}&beforeId={beforeId}");
+            var rows = (await HubApiHost.Browser.JsonAsync(await super.GetAsync(url))).EnumerateArray().ToList();
+            if (rows.Count == 0)
+            {
+                break;
+            }
+
+            seen.AddRange(rows.Select(r => r.GetProperty("summary").GetString()!));
+            before = rows[^1].GetProperty("timestampUtc").GetDateTimeOffset().ToString("O");
+            beforeId = rows[^1].GetProperty("id").GetString();
+        }
+
+        Assert.Equal(5, seen.Count(x => x.StartsWith("same-", StringComparison.Ordinal)));
+        Assert.Equal(seen.Count, seen.Distinct().Count());
+    });
+
+    [MetadataSqlFact]
     public Task App_admin_sees_super_admin_owner_masked_on_queries_and_dashboards() => HubApiHost.RunAsync(async env =>
     {
         Guid queryId, dashboardId;

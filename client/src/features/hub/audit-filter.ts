@@ -18,7 +18,7 @@ export const HUB_AUDIT_ACTIONS = [
 ] as const
 
 /** The server binds the enum from the query string by its PascalCase name only; the JSON it returns is camelCase. */
-export function auditQueryParams(params: { appId?: string; action?: string; before?: string; take?: number }) {
+export function auditQueryParams(params: { appId?: string; action?: string; before?: string; beforeId?: string; take?: number }) {
   const action = params.action ? params.action.charAt(0).toUpperCase() + params.action.slice(1) : undefined
   return { ...params, action }
 }

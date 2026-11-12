@@ -154,7 +154,7 @@ function SettingsSection({ app, isDefault }: { app: HubAppDto; isDefault: boolea
           className="h-9 w-44"
         />
         <p className="text-xs text-muted-foreground">
-          No query in this app returns more than this. A data source&apos;s own limit and the host default still apply; the lowest wins.
+          No query in this app returns more than this. This ceiling always caps it. A data source&apos;s own limit overrides the host default, but never goes above the ceiling.
         </p>
       </div>
 
@@ -215,7 +215,7 @@ function KeysSection({ app }: { app: HubAppDto }) {
         </Button>
       </div>
 
-      <div className="overflow-hidden rounded-md border border-border">
+      <div className="overflow-x-auto rounded-md border border-border">
         <Table>
           <TableHeader>
             <TableRow>
@@ -270,7 +270,7 @@ function KeysSection({ app }: { app: HubAppDto }) {
           <DialogHeader>
             <DialogTitle>Revoke key {revoking?.kid}?</DialogTitle>
             <DialogDescription>
-              Launch tokens signed with it are refused from now on. People already signed in stay signed in. A revoked key can&apos;t be
+              Launch tokens signed with it are refused from now on. Revoking a key also ends every session of this app, so everyone has to sign in again. A revoked key can&apos;t be
               turned back on; add it again as a new key id if you need it.
             </DialogDescription>
           </DialogHeader>

@@ -22,7 +22,7 @@ public sealed class RemoveShareCommandHandler(
 
         if (!SavedQueryAccess.CanManage(query, AccessActor.From(currentUser)))
         {
-            throw new ForbiddenException("Only the owner can manage sharing for this query.");
+            throw new ForbiddenException("You don't have permission to manage sharing for this query.");
         }
 
         var share = query.Shares.FirstOrDefault(s => s.Id == request.ShareId)

@@ -8,7 +8,7 @@ namespace QueryBuilder.Infrastructure.Hub;
 /// <summary>Only ever resolved from a hub-wide scope, which is what lets the app filter see every app's rows.</summary>
 internal sealed class HubAuditReader(AppDbContext db) : IHubAuditReader
 {
-    public async Task<IReadOnlyList<HubAuditEntryDto>> ListAsync(Guid? appId, AuditAction? action, DateTimeOffset? before, int take, CancellationToken ct)
+    public async Task<IReadOnlyList<HubAuditEntryDto>> ListAsync(Guid? appId, AuditAction? action, DateTimeOffset? before, Guid? beforeId, int take, CancellationToken ct)
     {
         var query = db.AuditLogEntries.AsNoTracking().AsQueryable();
         if (appId is { } app)
@@ -23,7 +23,10 @@ internal sealed class HubAuditReader(AppDbContext db) : IHubAuditReader
 
         if (before is { } b)
         {
-            query = query.Where(e => e.TimestampUtc < b);
+            // Rows sharing a timestamp at a page boundary are ordered by Id, so the cursor carries both.
+            query = beforeId is { } bid
+                ? query.Where(e => e.TimestampUtc < b || (e.TimestampUtc == b && e.Id.CompareTo(bid) < 0))
+                : query.Where(e => e.TimestampUtc < b);
         }
 
         var rows = await query.OrderByDescending(e => e.TimestampUtc).ThenByDescending(e => e.Id).Take(take).ToListAsync(ct);

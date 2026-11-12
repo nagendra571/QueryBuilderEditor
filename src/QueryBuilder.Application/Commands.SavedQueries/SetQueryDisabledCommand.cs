@@ -20,7 +20,7 @@ public sealed class SetQueryDisabledCommandHandler(
 
         if (!SavedQueryAccess.CanManage(existing, AccessActor.From(currentUser)))
         {
-            throw new ForbiddenException("Only the owner can disable or enable this query.");
+            throw new ForbiddenException("You don't have permission to disable or enable this query.");
         }
 
         existing.IsDisabled = !existing.IsDisabled;

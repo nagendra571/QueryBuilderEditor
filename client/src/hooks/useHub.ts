@@ -96,12 +96,18 @@ export function useSetReturnUrls(id: string) {
   })
 }
 
+type AuditCursor = { before: string; beforeId: string }
+
 export function useHubAudit(params: Omit<HubAuditParams, 'before' | 'take'>) {
   return useInfiniteQuery({
     queryKey: [...hubAuditKey, params],
-    initialPageParam: undefined as string | undefined,
-    queryFn: ({ pageParam }) => hubApi.audit({ ...params, before: pageParam, take: HUB_AUDIT_PAGE }),
-    getNextPageParam: (last) => (last.length === HUB_AUDIT_PAGE ? last[last.length - 1].timestampUtc : undefined),
+    initialPageParam: undefined as AuditCursor | undefined,
+    queryFn: ({ pageParam }) => hubApi.audit({ ...params, ...pageParam, take: HUB_AUDIT_PAGE }),
+    // The server orders by time, then id, so the cursor carries both or rows sharing a timestamp would be skipped.
+    getNextPageParam: (last): AuditCursor | undefined => {
+      const tail = last[last.length - 1]
+      return last.length === HUB_AUDIT_PAGE ? { before: tail.timestampUtc, beforeId: tail.id } : undefined
+    },
     retry: false,
   })
 }

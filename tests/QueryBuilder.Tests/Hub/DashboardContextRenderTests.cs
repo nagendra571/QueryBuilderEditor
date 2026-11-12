@@ -94,7 +94,13 @@ public class DashboardContextRenderTests
             new DashboardTile { Id = ids.PublishedTile, AppId = app, DashboardId = ids.Published, Kind = DashboardTileKind.Chart, VisualizationId = ids.Viz },
             new DashboardTile { Id = ids.OtherPublishedTile, AppId = app, DashboardId = ids.OtherPublished, Kind = DashboardTileKind.Chart, VisualizationId = ids.OtherQueryViz },
             new DashboardTile { Id = ids.PrivateTile, AppId = app, DashboardId = ids.Private, Kind = DashboardTileKind.Chart, VisualizationId = ids.Viz },
-            new DashboardTile { Id = ids.ListTile, AppId = app, DashboardId = ids.ListDashboard, Kind = DashboardTileKind.Chart, VisualizationId = ids.ListViz });
+            new DashboardTile
+            {
+                Id = ids.ListTile, AppId = app, DashboardId = ids.ListDashboard, Kind = DashboardTileKind.Chart, VisualizationId = ids.ListViz,
+                // The tile's own control feeds p, so a Viewer's value for it is honoured; unmapped parameters are ignored for them.
+                ParameterMappingsJson = QueryBuilder.Application.Dashboards.DashboardParameterStore.WriteMappings(
+                    new Dictionary<string, QueryBuilder.Application.Dtos.ParameterMappingDto> { ["p"] = new(ParameterMappingSource.Tile, null, null, "p") })
+            });
         await db.SaveChangesAsync();
         return ids;
     }
@@ -165,6 +171,83 @@ public class DashboardContextRenderTests
         var foreign = await check.Dashboards.SingleAsync(d => d.AppId == env.AppB);
         var cross = await viewer.PostAsync(DataUrl(s.Query, s.Viz), new { parameterValues = new { }, dashboardId = foreign.Id, tileId = s.PublishedTile });
         Assert.Equal(HttpStatusCode.Forbidden, cross.StatusCode);
+    });
+
+    private sealed record MappedTiles(Guid Query, Guid Viz, Guid Dashboard, Guid MappedTile, Guid UnmappedTile);
+
+    // A query with two optional parameters: lbl (label equals) and pid (program id equals).
+    private static async Task<MappedTiles> SeedMappedAsync(HubApiHost env, Seed s)
+    {
+        var definition = Definition("ProgramId", "label");
+        definition.Filters.Conditions.Add(new FilterCondition
+        {
+            TableAlias = "t", ColumnName = "label", DataType = ColumnDataType.Text, Operator = FilterOperator.Equals, IsParameterized = true, ParameterName = "lbl"
+        });
+        definition.Filters.Conditions.Add(new FilterCondition
+        {
+            TableAlias = "t", ColumnName = "ProgramId", DataType = ColumnDataType.Number, Operator = FilterOperator.Equals, IsParameterized = true, ParameterName = "pid"
+        });
+        definition.Parameters.Add(new QueryParameter { Name = "lbl", Label = "lbl", DataType = ColumnDataType.Text, Type = ParameterType.Text, IsRequired = false });
+        definition.Parameters.Add(new QueryParameter { Name = "pid", Label = "pid", DataType = ColumnDataType.Number, Type = ParameterType.Number, IsRequired = false });
+
+        var ids = new MappedTiles(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
+        var mappings = QueryBuilder.Application.Dashboards.DashboardParameterStore.WriteMappings(new Dictionary<string, QueryBuilder.Application.Dtos.ParameterMappingDto>
+        {
+            ["lbl"] = new(ParameterMappingSource.Fixed, null, "ten-a", null),
+            ["pid"] = new(ParameterMappingSource.Dashboard, "dpid", null, null)
+        });
+
+        await using var db = env.HubWideDb();
+        db.SavedQueries.Add(new SavedQuery
+        {
+            Id = ids.Query, AppId = env.AppA, Name = "mapped", DataSourceId = s.Source, OwnerId = "mary", OwnerName = "Mary",
+            DefinitionJson = QueryDefinitionSerializer.Serialize(definition)
+        });
+        db.Dashboards.Add(new Dashboard { Id = ids.Dashboard, AppId = env.AppA, Name = "mapped-dashboard", OwnerId = "mary", OwnerName = "Mary", PublishedToApp = true });
+        await db.SaveChangesAsync();
+        db.QueryVisualizations.Add(new QueryVisualization
+        {
+            Id = ids.Viz, AppId = env.AppA, SavedQueryId = ids.Query, Name = "mapped chart", Type = VisualizationType.Table, OptionsJson = TableOptions("ProgramId", "label")
+        });
+        await db.SaveChangesAsync();
+        db.DashboardTiles.AddRange(
+            new DashboardTile { Id = ids.MappedTile, AppId = env.AppA, DashboardId = ids.Dashboard, Kind = DashboardTileKind.Chart, VisualizationId = ids.Viz, ParameterMappingsJson = mappings },
+            new DashboardTile { Id = ids.UnmappedTile, AppId = env.AppA, DashboardId = ids.Dashboard, Kind = DashboardTileKind.Chart, VisualizationId = ids.Viz });
+        await db.SaveChangesAsync();
+        return ids;
+    }
+
+    [MetadataSqlFact]
+    public Task Viewer_cannot_override_a_fixed_or_unmapped_parameter_but_dashboard_values_are_honoured() => HubApiHost.RunAsync(async env =>
+    {
+        var m = await SeedMappedAsync(env, await SeedAsync(env));
+        var viewer = await ViewerAsync(env);
+        string Url() => DataUrl(m.Query, m.Viz);
+
+        async Task<string> Body(HttpResponseMessage r)
+        {
+            Assert.Equal(HttpStatusCode.OK, r.StatusCode);
+            return await r.Content.ReadAsStringAsync();
+        }
+
+        // The fixed value wins over whatever the browser sends.
+        var forced = await Body(await viewer.PostAsync(Url(), new { parameterValues = new { lbl = "twenty" }, dashboardId = m.Dashboard, tileId = m.MappedTile }));
+        Assert.Contains("ten-a", forced, StringComparison.Ordinal);
+        Assert.DoesNotContain("twenty", forced, StringComparison.Ordinal);
+
+        // A value for a dashboard-mapped parameter is the Viewer's own control and is honoured: ten-a is in program 10, not 20.
+        var honoured = await viewer.PostAsync(Url(), new { parameterValues = new { pid = "20" }, dashboardId = m.Dashboard, tileId = m.MappedTile });
+        Assert.Equal(0, await RowsAsync(honoured));
+
+        // A tile that maps nothing ignores the browser's values: the query's defaults apply (no filters).
+        Assert.Equal(3, await RowsAsync(await viewer.PostAsync(Url(), new { parameterValues = new { lbl = "twenty", pid = "20" }, dashboardId = m.Dashboard, tileId = m.UnmappedTile })));
+
+        // Someone with real access to the query keeps today's behaviour: their value is used.
+        var admin = env.NewBrowser();
+        await admin.SignInAppAsync(env.AppA, HubRole.Admin, "ann");
+        var adminBody = await Body(await admin.PostAsync(Url(), new { parameterValues = new { lbl = "twenty" }, dashboardId = m.Dashboard, tileId = m.MappedTile }));
+        Assert.Contains("twenty", adminBody, StringComparison.Ordinal);
+        Assert.DoesNotContain("ten-a", adminBody, StringComparison.Ordinal);
     });
 
     [MetadataSqlFact]

@@ -55,10 +55,13 @@ public sealed class RenderVisualizationCommandHandler(
             await grantResolver.TryGrantAsync(dashboardId, tileId, savedQuery, request.VisualizationId, actor, cancellationToken);
         }
 
-        if (!(SavedQueryAccess.CanView(savedQuery, actor) || dashboardGrant.Covers(savedQuery.Id)))
+        var canView = SavedQueryAccess.CanView(savedQuery, actor);
+        if (!(canView || dashboardGrant.Covers(savedQuery.Id)))
         {
             throw new ForbiddenException("You do not have access to this query.");
         }
+
+        var parameterValues = canView ? request.ParameterValues : grantResolver.ConstrainValues(request.ParameterValues);
 
         var visualization = await visualizations.GetByIdAsync(request.VisualizationId, cancellationToken);
         if (visualization is null || visualization.SavedQueryId != savedQuery.Id)
@@ -79,7 +82,7 @@ public sealed class RenderVisualizationCommandHandler(
             ?? throw new NotFoundException(nameof(DataSource), savedQuery.DataSourceId);
 
         await catalogService.ValidateAsync(savedQuery.DataSourceId, definition, cancellationToken);
-        var bound = await parameterBinder.MaterializeAsync(definition, request.ParameterValues, cancellationToken);
+        var bound = await parameterBinder.MaterializeAsync(definition, parameterValues, cancellationToken);
         var scopePredicates = await dataScopeGuard.AuthorizeAsync(savedQuery.DataSourceId, bound, cancellationToken);
 
         var builder = sqlBuilderFactory.GetBuilder(dataSource.Provider);

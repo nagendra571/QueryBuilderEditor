@@ -227,6 +227,30 @@ public class HubSharingTests
     });
 
     [MetadataSqlFact]
+    public Task Also_sharing_queries_with_someone_who_left_the_list_writes_nothing() => HubApiHost.RunAsync(async env =>
+    {
+        var s = await SeedAsync(env, env.AppA, "owner", directoryView: false);
+        await using (var db = env.HubWideDb())
+        {
+            // "gone" already holds the dashboard share but is no longer a known person of the app.
+            db.DashboardShares.Add(new DashboardShare { AppId = env.AppA, DashboardId = s.Dashboard, SharedWithUserId = "gone", SharedWithUserEmail = "gone@x", AccessLevel = QueryAccessLevel.Viewer, CreatedBy = "owner" });
+            await db.SaveChangesAsync();
+        }
+
+        var owner = env.NewBrowser();
+        await owner.SignInAppAsync(env.AppA, HubRole.Author, "owner");
+        var response = await owner.PostAsync($"{Api}/dashboards/{s.Dashboard}/shares", new
+        {
+            sharedWithUserId = "gone", sharedWithUserEmail = "gone@x", accessLevel = "Editor", alsoShareQueryIds = new[] { s.Query }
+        });
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+
+        await using var check = env.HubWideDb();
+        Assert.Equal(QueryAccessLevel.Viewer, (await check.DashboardShares.SingleAsync()).AccessLevel);
+        Assert.Empty(await check.QueryShares.ToListAsync());
+    });
+
+    [MetadataSqlFact]
     public Task Embedded_share_rules_unchanged() => HubApiHost.RunAsync(async env =>
     {
         var s = await SeedAsync(env, App.DefaultId, "Admin");

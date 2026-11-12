@@ -134,6 +134,14 @@ public class LaunchTokenValidatorTests
     });
 
     [MetadataSqlFact]
+    public Task The_super_admin_prefix_is_reserved_for_staff() => RunAsync(async env =>
+    {
+        await ExpectAsync(env, env.Token(c => c["sub"] = "super:abc"), LaunchRefusalReason.Malformed, env.AppA);
+        await ExpectAsync(env, env.Token(c => c["sub"] = "SUPER:abc"), LaunchRefusalReason.Malformed, env.AppA);
+        Assert.Null((await env.Validate(env.Token(c => c["sub"] = "superman"))).Refusal);
+    });
+
+    [MetadataSqlFact]
     public Task Unknown_app() => RunAsync(async env =>
         await ExpectAsync(env, env.Token(c => c["iss"] = "nobody"), LaunchRefusalReason.UnknownApp, appId: null));
 

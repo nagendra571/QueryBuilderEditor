@@ -42,7 +42,7 @@ public sealed class ShareQueryCommandHandler(
 
         if (!SavedQueryAccess.CanManage(query, AccessActor.From(currentUser)))
         {
-            throw new ForbiddenException("Only the owner can share this query.");
+            throw new ForbiddenException("You don't have permission to share this query.");
         }
 
         if (request.SharedWithUserId == query.OwnerId)

@@ -23,7 +23,19 @@ import { useDataSourceManagement, useSetDataSourceActive, useTestConnection, use
 import { ApiError } from '@/lib/api-client'
 import type { AdminDataSourceDetailDto, ConnectionTestResult } from '@/types'
 
-export function ConnectionSection({ dataSource }: { dataSource: AdminDataSourceDetailDto }) {
+/**
+ * `connectionLocked`: the connection fields, test and on/off are off (name and description stay editable).
+ * `readOnly`: the whole data source is off for this caller, so nothing here can be renamed either.
+ */
+export function ConnectionSection({
+  dataSource,
+  connectionLocked = false,
+  readOnly = false,
+}: {
+  dataSource: AdminDataSourceDetailDto
+  connectionLocked?: boolean
+  readOnly?: boolean
+}) {
   const management = useDataSourceManagement()
   const enabled = management.data?.enabled === true
 
@@ -47,7 +59,7 @@ export function ConnectionSection({ dataSource }: { dataSource: AdminDataSourceD
       )}
 
       {enabled ? (
-        <EditableConnection dataSource={dataSource} />
+        <EditableConnection dataSource={dataSource} connectionLocked={connectionLocked} readOnly={readOnly} />
       ) : (
         <ReadOnlyConnection dataSource={dataSource} loading={management.isLoading} />
       )}
@@ -101,7 +113,15 @@ function ReadOnlyConnection({ dataSource, loading }: { dataSource: AdminDataSour
   )
 }
 
-function EditableConnection({ dataSource }: { dataSource: AdminDataSourceDetailDto }) {
+function EditableConnection({
+  dataSource,
+  connectionLocked,
+  readOnly,
+}: {
+  dataSource: AdminDataSourceDetailDto
+  connectionLocked: boolean
+  readOnly: boolean
+}) {
   const update = useUpdateDataSource(dataSource.id)
   const test = useTestConnection()
   const setActive = useSetDataSourceActive(dataSource.id)
@@ -205,12 +225,14 @@ function EditableConnection({ dataSource }: { dataSource: AdminDataSourceDetailD
               </span>
             </p>
           )}
-          <ConnectionFields
-            form={form}
-            errors={connectionErrors}
-            onChange={changeForm}
-            passwordPlaceholder={saved?.hasPassword ? 'Leave blank to keep the current password' : undefined}
-          />
+          <fieldset disabled={connectionLocked} className="m-0 min-w-0 border-0 p-0">
+            <ConnectionFields
+              form={form}
+              errors={connectionErrors}
+              onChange={changeForm}
+              passwordPlaceholder={saved?.hasPassword ? 'Leave blank to keep the current password' : undefined}
+            />
+          </fieldset>
           {passwordProblem && (
             <p role="alert" className="text-xs text-destructive">
               {passwordProblem}
@@ -236,7 +258,7 @@ function EditableConnection({ dataSource }: { dataSource: AdminDataSourceDetailD
               {dataSource.connectionStringName ? <> (connection string "{dataSource.connectionStringName}")</> : null}
             </>
           )}
-          , so it can't be changed here. You can still rename it and change its description.
+          , so it can't be changed here.{readOnly ? '' : ' You can still rename it and change its description.'}
         </p>
       )}
 
@@ -253,12 +275,12 @@ function EditableConnection({ dataSource }: { dataSource: AdminDataSourceDetailD
           Save
         </Button>
         {managed && (
-          <Button variant="outline" onClick={() => void runTest()} disabled={test.isPending}>
+          <Button variant="outline" onClick={() => void runTest()} disabled={test.isPending || connectionLocked}>
             {test.isPending ? <Loader2 className="size-3.5 animate-spin" /> : <Plug className="size-3.5" />}
             Test connection
           </Button>
         )}
-        <Button variant={dataSource.isActive ? 'destructive' : 'outline'} className="ml-auto" onClick={() => setConfirmOpen(true)}>
+        <Button variant={dataSource.isActive ? 'destructive' : 'outline'} className="ml-auto" onClick={() => setConfirmOpen(true)} disabled={connectionLocked}>
           <Power className="size-3.5" />
           {dataSource.isActive ? 'Turn off' : 'Turn on'}
         </Button>

@@ -21,8 +21,8 @@ internal static class HubRegistryEndpoints
     public static void MapHubRegistryEndpoints(this IEndpointRouteBuilder endpoints)
     {
         endpoints.MapGroup(QueryBuilderRoutes.BasePath + "/api/hub/audit").RequireSuperAdmin().WithTags("Hub registry")
-            .MapGet("", async (Guid? appId, AuditAction? action, DateTimeOffset? before, int? take, ISender sender, CancellationToken ct) =>
-                Results.Json(await sender.Send(new GetHubAuditQuery(appId, action, before, take), ct), QueryBuilderJson.Options));
+            .MapGet("", async (Guid? appId, AuditAction? action, DateTimeOffset? before, Guid? beforeId, int? take, ISender sender, CancellationToken ct) =>
+                Results.Json(await sender.Send(new GetHubAuditQuery(appId, action, before, take, beforeId), ct), QueryBuilderJson.Options));
 
         var group = endpoints.MapGroup(Path).RequireSuperAdmin().WithTags("Hub registry");
 
