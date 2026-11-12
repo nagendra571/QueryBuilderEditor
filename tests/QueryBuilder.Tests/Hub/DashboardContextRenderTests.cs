@@ -218,7 +218,7 @@ public class DashboardContextRenderTests
     }
 
     [MetadataSqlFact]
-    public Task Viewer_cannot_override_a_fixed_or_unmapped_parameter_but_dashboard_values_are_honoured() => HubApiHost.RunAsync(async env =>
+    public Task Viewer_cannot_override_a_fixed_parameter_but_other_values_are_honoured() => HubApiHost.RunAsync(async env =>
     {
         var m = await SeedMappedAsync(env, await SeedAsync(env));
         var viewer = await ViewerAsync(env);
@@ -239,8 +239,22 @@ public class DashboardContextRenderTests
         var honoured = await viewer.PostAsync(Url(), new { parameterValues = new { pid = "20" }, dashboardId = m.Dashboard, tileId = m.MappedTile });
         Assert.Equal(0, await RowsAsync(honoured));
 
-        // A tile that maps nothing ignores the browser's values: the query's defaults apply (no filters).
-        Assert.Equal(3, await RowsAsync(await viewer.PostAsync(Url(), new { parameterValues = new { lbl = "twenty", pid = "20" }, dashboardId = m.Dashboard, tileId = m.UnmappedTile })));
+        // A tile that maps nothing leaves its parameters as prompts the Viewer sets.
+        var prompted = await Body(await viewer.PostAsync(Url(), new { parameterValues = new { lbl = "twenty", pid = "20" }, dashboardId = m.Dashboard, tileId = m.UnmappedTile }));
+        Assert.Contains("twenty", prompted, StringComparison.Ordinal);
+        Assert.DoesNotContain("ten-a", prompted, StringComparison.Ordinal);
+
+        // A required unmapped parameter with no default renders once the Viewer supplies a value.
+        await using (var db = env.HubWideDb())
+        {
+            var query = await db.SavedQueries.SingleAsync(q => q.Id == m.Query);
+            var definition = QueryDefinitionSerializer.Deserialize(query.DefinitionJson);
+            definition.Parameters.Single(p => p.Name == "lbl").IsRequired = true;
+            query.DefinitionJson = QueryDefinitionSerializer.Serialize(definition);
+            await db.SaveChangesAsync();
+        }
+
+        Assert.Equal(1, await RowsAsync(await viewer.PostAsync(Url(), new { parameterValues = new { lbl = "twenty" }, dashboardId = m.Dashboard, tileId = m.UnmappedTile })));
 
         // Someone with real access to the query keeps today's behaviour: their value is used.
         var admin = env.NewBrowser();

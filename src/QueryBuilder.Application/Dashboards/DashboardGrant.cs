@@ -32,29 +32,18 @@ public sealed class DashboardGrantResolver(IDashboardRepository dashboards, IDas
     private Dictionary<string, ParameterMappingDto>? _tileMappings;
 
     /// <summary>
-    /// For a caller whose access comes only from the dashboard: the tile's mappings decide the values, so a fixed value
-    /// cannot be overridden from the browser. Fixed values are forced, parameters the tile does not map (or maps to the
-    /// query default) are dropped, and only values for dashboard-parameter or tile-control mappings come from the caller.
+    /// For a caller whose access comes only from the dashboard: the caller's values stand (unmapped and default parameters
+    /// are prompts the Viewer sets, as are dashboard and tile-control mappings), except a Fixed mapping, whose stored
+    /// value always replaces whatever the browser sent.
     /// </summary>
     public Dictionary<string, string?> ConstrainValues(IReadOnlyDictionary<string, string?> browserValues)
     {
-        var result = new Dictionary<string, string?>(StringComparer.Ordinal);
-        if (_tileMappings is null)
+        var result = new Dictionary<string, string?>(browserValues, StringComparer.Ordinal);
+        foreach (var (name, mapping) in _tileMappings ?? [])
         {
-            return result;
-        }
-
-        foreach (var (name, mapping) in _tileMappings)
-        {
-            switch (mapping.Source)
+            if (mapping.Source == ParameterMappingSource.Fixed)
             {
-                case ParameterMappingSource.Fixed:
-                    result[name] = mapping.Value;
-                    break;
-                case ParameterMappingSource.Dashboard or ParameterMappingSource.Tile
-                    when browserValues.TryGetValue(name, out var value):
-                    result[name] = value;
-                    break;
+                result[name] = mapping.Value;
             }
         }
 
