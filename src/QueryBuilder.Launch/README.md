@@ -16,6 +16,8 @@ Your app (user already signed in)            QueryBuilder hub
 
 The hub only ever stores your public key. Leaking the hub's database cannot be used to impersonate your app.
 
+**Step-by-step setup:** Part C of the [hub setup guide](https://github.com/nagendra571/QueryBuilderEditor/blob/main/docs/hub-setup-guide.md#4-part-c-connect-an-app-app-a) walks through registering your app, making and registering a key pair, and adding the button, for ASP.NET Core and for MVC 5 on .NET Framework.
+
 ## 1. What you need first
 
 Agree these with the hub's super admin before you write code:

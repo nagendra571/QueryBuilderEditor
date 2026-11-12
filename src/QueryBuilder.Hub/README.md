@@ -1,5 +1,7 @@
 # QueryBuilder Hub
 
+> New to the hub? Start with the step-by-step [setup guide](../../docs/hub-setup-guide.md).
+
 The deployable host for QueryBuilder in **hub mode**: one QueryBuilder serving several apps. Each app hands its users over
 with a signed launch token (see [`QueryBuilder.Launch`](../QueryBuilder.Launch/README.md)); your own staff, the super admins,
 sign in with your identity provider (Microsoft Entra ID or any OpenID Connect provider), with one-time sign-in codes, or with

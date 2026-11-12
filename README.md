@@ -15,6 +15,14 @@ Ships two ways:
 | **As a package** | [`QueryBuilder.Editor`](https://www.nuget.org/packages/QueryBuilder.Editor) on NuGet — drop it into your own ASP.NET Core app. See that package's [README](src/QueryBuilder.Editor/README.md) for the full integration guide. |
 | **As this repo** | Clone it and run the sample app directly (below) to try the whole thing without writing any integration code first. |
 
+## QueryBuilder Hub
+
+One QueryBuilder can serve several apps (hub mode). Each app signs a short-lived launch token for its signed-in users; your own staff sign in as super admins. Start with the [hub setup guide](docs/hub-setup-guide.md), then see:
+
+- [`src/QueryBuilder.Hub/README.md`](src/QueryBuilder.Hub/README.md): the ready-made hub host (settings, proxies, troubleshooting).
+- [`src/QueryBuilder.Launch/README.md`](src/QueryBuilder.Launch/README.md): connecting an app (`QueryBuilder.Launch`).
+- [Building your own hub host](docs/hub-setup-guide.md#3-part-b-build-your-own-hub-on-the-querybuildereditor-package) (Part B of the guide) and [`MANAGING-KEYS.md`](MANAGING-KEYS.md).
+
 ## Screenshots
 
 *(Run the sample app locally — see below — to see the catalog sidebar, visual query builder, results grid, and audit history in action.)*
@@ -320,6 +328,8 @@ Three pieces make it work:
 | `QueryBuilder.Hub` | a ready-made `net10.0` host you deploy (not a NuGet package): identity provider and sign-in code sign-in for super admins, HTTPS and HSTS, forwarded headers, a launch rate limit | [deployment guide](src/QueryBuilder.Hub/README.md) |
 | `QueryBuilder.Launch` | a small `netstandard2.0` package your apps use to sign the token and render the launch form; works from .NET Framework 4.7.2+ | [integration guide](src/QueryBuilder.Launch/README.md) |
 
+**Getting started:** the step-by-step [hub setup guide](docs/hub-setup-guide.md) walks from an empty database to a connected app: deploying the ready-made hub, building your own host, connecting an app, and day-to-day operations.
+
 ### Turning it on in your own host
 
 Most teams should deploy `QueryBuilder.Hub` as it is. To build a host yourself:
@@ -348,6 +358,22 @@ to sign in (below). `options.Hub.CookieName` (default `__Host-qb-hub`),
 `AbsoluteLifetime` (8 hours) and `IdleTimeout` (1 hour) can be changed. A super admin signs in at `/querybuilder/signin`.
 A host of your own must use HTTPS, `UseForwardedHeaders` behind a proxy, `UseExceptionHandler`, no `UsePathBase`, and send
 `frame-ancestors 'self'`; `QueryBuilder.Hub` does all of that.
+
+### Building your own hub host
+
+Most teams should deploy the ready-made `QueryBuilder.Hub`. If you build your own host, these are the essentials (a complete,
+compiled `Program.cs` is in [Part B of the setup guide](docs/hub-setup-guide.md#3-part-b-build-your-own-hub-on-the-querybuildereditor-package)):
+
+- Set `options.Hub.Enabled`, `options.Hub.Audience`, `options.DataSourceManagement.EncryptionKey`, and a way for super admins to sign in:
+  `options.Hub.SuperAdminSignInScheme` (your OpenID Connect scheme, with `SignInScheme = "QueryBuilder.HubExternal"`, PKCE and `MapInboundClaims = false`)
+  and/or `options.Hub.SignInCodes.Enabled` with `options.Hub.SuperAdmins.CodeNames`.
+- Add the OpenID Connect handler yourself (`Microsoft.AspNetCore.Authentication.OpenIdConnect`); the package registers only the cookie schemes.
+- Pipeline order: `UseForwardedHeaders`, security headers (`frame-ancestors 'self'`), `UseExceptionHandler`, HSTS, `UseHttpsRedirection`,
+  `UseRateLimiter`, `UseAuthentication`, `UseAuthorization`, `UseQueryBuilderEditorUI`, `MapQueryBuilderEditor`.
+- Rate-limit `POST /querybuilder/launch` and `POST /querybuilder/signin/code` per client address, matched by route.
+- Never call `UsePathBase`, and never configure Data Protection yourself: hub mode takes it over.
+- To issue a sign-in code, call `ISuperAdminCodeIssuer.IssueAsync(name, minutes, ct)` (namespace `QueryBuilder.Editor.Hub`) from a server-side command of
+  your own; never expose it over HTTP.
 
 ### How super admins sign in
 
