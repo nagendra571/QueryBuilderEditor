@@ -34,8 +34,11 @@ public partial class CrossAppEndpointMatrixTests
 
     private static readonly byte[] OldKey = Enumerable.Repeat((byte)0x63, 32).ToArray();
 
+    // Source names are unique per app and every role writes into App B, so each role pass gets its own names.
+    private static string Suffix = "";
+
     private sealed record Ids(
-        Guid DataSource, Guid Query, Guid Visualization, Guid Dashboard, Guid Tile, Guid QueryShare, Guid DashboardShare, Guid Rule, Guid Managed)
+        Guid DataSource, Guid Query, Guid Visualization, Guid Dashboard, Guid Tile, Guid QueryShare, Guid DashboardShare, Guid Rule, Guid Managed, string SeenUser)
     {
         public IEnumerable<Guid> All => [DataSource, Query, Visualization, Dashboard, Tile, QueryShare, DashboardShare, Rule, Managed];
     }
@@ -43,9 +46,30 @@ public partial class CrossAppEndpointMatrixTests
     // Ok: 2xx. NotFound: 404. Exact: the listed status, with a reason. Refused / BadRequest: 403 / 400 AND the same status and
     // body as the twin call that names a missing id, so existence is not revealed. Same: any status below 500, identical to the
     // twin. Positive: the control with B's own ids, anything but 404 or 5xx.
-    private enum Expect { Ok, NotFound, Exact, Refused, BadRequest, Same, Positive }
+    // Hidden: 404, or 403 from a gate that runs before anything is loaded; either way nothing of A is shown.
+    private enum Expect { Ok, NotFound, Exact, Refused, BadRequest, Same, Positive, Hidden }
 
-    private sealed record Call(string Label, HttpMethod Method, string Url, object? Body, Expect Expect, Call? Twin = null, int Status = 0, string? Why = null);
+    private enum Who { Viewer, Author, Admin, Super }
+
+    private sealed record Call(string Label, HttpMethod Method, string Url, object? Body, Expect Expect, Call? Twin = null, int Status = 0, string? Why = null, string? Key = null);
+
+    // The only endpoints a hub Viewer reaches; every other route must answer a Viewer 403 before any handler runs.
+    private static readonly HashSet<string> ViewerRoutes =
+    [
+        "GET /api/me",
+        "GET /api/dashboards",
+        "GET /api/dashboards/{id}",
+        "POST /api/queries/{queryId}/visualizations/{visualizationId}/data",
+        "GET /api/queries/{id}/parameters/{name}/options",
+        "GET /api/dashboards/{id}/tiles/{tileId}/chart",
+        "GET /api/dashboards/{id}/parameters/{name}/options"
+    ];
+
+    // Routes an Author (today's user inside the app) is refused before anything loads, on A's ids and on B's own.
+    private static bool AuthorRefused(string key) => key.Contains(" /api/admin/", StringComparison.Ordinal);
+
+    // Controls whose B-on-B call can't be 2xx for any role in this test, with the reason.
+    private static readonly Dictionary<string, string> ControlNotOk = new();
 
     // Exact "METHOD pattern" keys, never a prefix, so a future app-scoped route under /api/hub is not silently skipped.
     private static readonly Dictionary<string, string> Excluded = new()
@@ -66,7 +90,7 @@ public partial class CrossAppEndpointMatrixTests
     // Guid-routed endpoints: key is "METHOD pattern" with the ":guid" constraint dropped; value builds a valid JSON body.
     private static readonly Dictionary<string, Func<Ids, object?>> Bodies = new()
     {
-        ["PUT /api/admin/data-sources/{id}"] = _ => new { name = "renamed", description = "x" },
+        ["PUT /api/admin/data-sources/{id}"] = _ => new { name = "renamed" + Suffix, description = "x" },
         ["PUT /api/admin/data-sources/{id}/active"] = _ => new { isActive = false },
         ["PUT /api/admin/data-sources/{id}/lock"] = _ => new { locked = true },
         ["POST /api/admin/data-sources/{id}/test"] = _ => null,
@@ -85,7 +109,7 @@ public partial class CrossAppEndpointMatrixTests
         ["PUT /api/dashboards/{id}/published"] = _ => new { published = true },
         ["DELETE /api/dashboards/{id}"] = _ => null,
         ["GET /api/dashboards/{id}/shares"] = _ => null,
-        ["POST /api/dashboards/{id}/shares"] = a => new { sharedWithUserId = "x", sharedWithUserEmail = "x@x", accessLevel = "Viewer", alsoShareQueryIds = new[] { a.Query } },
+        ["POST /api/dashboards/{id}/shares"] = a => new { sharedWithUserId = a.SeenUser, sharedWithUserEmail = a.SeenUser + "@x", accessLevel = "Viewer", alsoShareQueryIds = new[] { a.Query } },
         ["DELETE /api/dashboards/{id}/shares/{shareId}"] = _ => null,
         ["GET /api/dashboards/{id}/share-preview"] = _ => null,
         ["GET /api/data-sources/{id}/catalog"] = _ => null,
@@ -96,7 +120,7 @@ public partial class CrossAppEndpointMatrixTests
         ["POST /api/queries/{id}/disable"] = _ => null,
         ["GET /api/queries/{id}/parameters/{name}/options"] = _ => null,
         ["GET /api/queries/{id}/shares"] = _ => null,
-        ["POST /api/queries/{id}/shares"] = _ => new { sharedWithUserId = "x", sharedWithUserEmail = "x@x", accessLevel = "Viewer" },
+        ["POST /api/queries/{id}/shares"] = a => new { sharedWithUserId = a.SeenUser, sharedWithUserEmail = a.SeenUser + "@x", accessLevel = "Viewer" },
         ["DELETE /api/queries/{id}/shares/{shareId}"] = _ => null,
         ["GET /api/queries/{queryId}/visualizations"] = _ => null,
         ["POST /api/queries/{queryId}/visualizations"] = _ => new { name = "v", type = "Table", options = new { table = new { columns = new[] { "c" } } } },
@@ -139,7 +163,7 @@ public partial class CrossAppEndpointMatrixTests
         ["POST /api/admin/data-sources"] = (_, _) =>
         [
             new("create", HttpMethod.Post, "/api/admin/data-sources",
-                new { name = "n", provider = "SqlServer", connection = new { host = "h", database = "d", username = "u", password = "p" } },
+                new { name = "n" + Suffix, provider = "SqlServer", connection = new { host = "h", database = "d", username = "u", password = "p" } },
                 Expect.Exact, Status: 201, Why: "creates a managed source in B, which stores the details without connecting")
         ],
         ["POST /api/admin/data-sources/test"] = (a, _) =>
@@ -201,9 +225,9 @@ public partial class CrossAppEndpointMatrixTests
             new("tiles: B dashboard, parameter sourced from A's query", HttpMethod.Put, $"/api/dashboards/{b.Dashboard}/tiles", Tiles(a.Query), Expect.Same,
                 new("tiles: B dashboard, parameter sourced from a missing query", HttpMethod.Put, $"/api/dashboards/{b.Dashboard}/tiles", Tiles(Guid.NewGuid()), Expect.Ok)),
             new("share dashboard + A query", HttpMethod.Post, $"/api/dashboards/{b.Dashboard}/shares",
-                new { sharedWithUserId = "x", sharedWithUserEmail = "x@x", accessLevel = "Viewer", alsoShareQueryIds = new[] { a.Query } }, Expect.BadRequest,
+                new { sharedWithUserId = b.SeenUser, sharedWithUserEmail = b.SeenUser + "@x", accessLevel = "Viewer", alsoShareQueryIds = new[] { a.Query } }, Expect.BadRequest,
                 new("share dashboard + missing query", HttpMethod.Post, $"/api/dashboards/{b.Dashboard}/shares",
-                    new { sharedWithUserId = "x", sharedWithUserEmail = "x@x", accessLevel = "Viewer", alsoShareQueryIds = new[] { Guid.NewGuid() } }, Expect.Ok)),
+                    new { sharedWithUserId = b.SeenUser, sharedWithUserEmail = b.SeenUser + "@x", accessLevel = "Viewer", alsoShareQueryIds = new[] { Guid.NewGuid() } }, Expect.Ok)),
             new("B query, A share", HttpMethod.Delete, $"/api/queries/{b.Query}/shares/{a.QueryShare}", null, Expect.NotFound),
             new("B dashboard, A share", HttpMethod.Delete, $"/api/dashboards/{b.Dashboard}/shares/{a.DashboardShare}", null, Expect.NotFound),
             new("B query, A visualization update", HttpMethod.Put, $"/api/queries/{b.Query}/visualizations/{a.Visualization}", new { name = "v", type = "Table", options = new { table = new { columns = new[] { "c" } } } }, Expect.NotFound),
@@ -234,7 +258,8 @@ public partial class CrossAppEndpointMatrixTests
 
     private static async Task<Ids> SeedAsync(AppDbContext db, Guid app, string tag, string owner, AesGcmConnectionSecretProtector? oldKey = null)
     {
-        var ids = new Ids(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
+        var ids = new Ids(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), "");
+        ids = ids with { SeenUser = $"{tag}-seen-{ids.Query:N}" };
         db.DataSources.Add(new DataSource { Id = ids.DataSource, AppId = app, Name = $"{tag}-source", ConnectionStringName = "biz", AllowedObjects = ["dbo.v"], ScopeKeys = ["ProgramId"] });
         db.SavedQueries.Add(new SavedQuery { Id = ids.Query, AppId = app, Name = $"{tag}-query", DataSourceId = ids.DataSource, OwnerId = owner, DefinitionJson = DefinitionJson(ids.Query) });
         db.Dashboards.Add(new Dashboard
@@ -255,10 +280,10 @@ public partial class CrossAppEndpointMatrixTests
 
         await db.SaveChangesAsync();
         db.QueryShares.Add(new QueryShare { Id = ids.QueryShare, AppId = app, SavedQueryId = ids.Query, SharedWithUserId = "other", SharedWithUserEmail = $"{tag}@x" });
-        db.QueryVisualizations.Add(new QueryVisualization { Id = ids.Visualization, AppId = app, SavedQueryId = ids.Query, Name = $"{tag}-viz" });
+        db.QueryVisualizations.Add(new QueryVisualization { Id = ids.Visualization, AppId = app, SavedQueryId = ids.Query, Name = $"{tag}-viz", Type = VisualizationType.Table, OptionsJson = "{\"table\":{\"columns\":[\"c\"]}}" });
         db.DashboardShares.Add(new DashboardShare { Id = ids.DashboardShare, AppId = app, DashboardId = ids.Dashboard, SharedWithUserId = "other", SharedWithUserEmail = $"{tag}@x" });
         db.DataScopeRules.Add(new DataScopeRule { Id = ids.Rule, AppId = app, DataSourceId = ids.DataSource, ObjectName = "dbo.v", ScopeKey = "k", ColumnName = "c" });
-        db.SeenUsers.Add(new SeenUser { AppId = app, UserId = $"{tag}-seen-{ids.Query:N}", Name = $"{tag}-seen-name", Email = $"{tag}-seen@x" });
+        db.SeenUsers.Add(new SeenUser { AppId = app, UserId = ids.SeenUser, Name = $"{tag}-seen-name", Email = $"{tag}-seen@x" });
         await db.SaveChangesAsync();
         db.DashboardTiles.Add(new DashboardTile { Id = ids.Tile, AppId = app, DashboardId = ids.Dashboard, Kind = DashboardTileKind.Chart, VisualizationId = ids.Visualization });
         db.AuditLogEntries.Add(new AuditLogEntry { AppId = app, EntityType = "SavedQuery", EntityId = ids.Query, Summary = $"{tag}-audit" });
@@ -371,8 +396,37 @@ public partial class CrossAppEndpointMatrixTests
 
     private static string Blur(string text) => Regex.Replace(GuidText().Replace(text, "<id>"), @"""executionTimeMs"":\d+", @"""executionTimeMs"":0");
 
-    private static async Task RunMatrixAsync(HubApiHost env, HubApiHost.Browser caller, string who, Ids a, Ids b, Func<Task<Ids>> newBSet)
+    // What this role must get, stated per route: a Viewer is turned away before any handler except on the allowlist, and an
+    // Author is refused the admin routes. Everything else keeps the Admin expectation.
+    private static Call ForRole(Who who, string key, Call call, bool control)
     {
+        if (who == Who.Viewer && !ViewerRoutes.Contains(key))
+        {
+            return call with { Expect = Expect.Exact, Status = 403, Why = "Viewer gate runs before any handler", Twin = null };
+        }
+
+        if (who == Who.Author && AuthorRefused(key))
+        {
+            return call with { Expect = Expect.Exact, Status = 403, Why = "Authors may not use admin routes", Twin = null };
+        }
+
+        // Publishing loads the dashboard first (A's id is 404), then refuses an Author on their own.
+        if (who == Who.Author && control && key.EndsWith("/published", StringComparison.Ordinal))
+        {
+            return call with { Expect = Expect.Exact, Status = 403, Why = "only Admins publish", Twin = null };
+        }
+
+        if (who == Who.Viewer && !control && key.Contains('{') && call.Expect is Expect.NotFound or Expect.Ok or Expect.Refused or Expect.BadRequest or Expect.Same)
+        {
+            return call with { Expect = Expect.Hidden, Twin = null };
+        }
+
+        return call;
+    }
+
+    private static async Task RunMatrixAsync(HubApiHost env, HubApiHost.Browser caller, Who role, Ids a, Ids b, Func<Task<Ids>> newBSet, Dictionary<string, bool> controlOk)
+    {
+        var who = role.ToString();
         var endpoints = Discover(env.Host.Services).ToList();
         var calls = new List<Call>();
         var positives = new List<Call>();
@@ -391,15 +445,15 @@ public partial class CrossAppEndpointMatrixTests
 
             if (raw.Contains(":guid", StringComparison.Ordinal) && Bodies.ContainsKey(key))
             {
-                calls.AddRange(GuidCalls(method, raw, a, b, withMixed: true));
+                calls.AddRange(GuidCalls(method, raw, a, b, withMixed: true).Select(c => ForRole(role, key, c with { Key = key }, control: false)));
                 var set = await newBSet();
                 positives.AddRange(GuidCalls(method, raw, set, set, withMixed: false)
-                    .Select(c => c with { Expect = Expect.Positive, Label = $"{c.Label} [B's own ids]" }));
+                    .Select(c => ForRole(role, key, c with { Expect = Expect.Positive, Label = $"{c.Label} [B's own ids]", Key = key }, control: true)));
                 covered.Add(key);
             }
             else if (!raw.Contains("{", StringComparison.Ordinal) && NoIdCalls.TryGetValue(key, out var build))
             {
-                calls.AddRange(build(a, b));
+                calls.AddRange(build(a, b).Select(c => ForRole(role, key, c with { Key = key }, control: false)));
                 covered.Add(key);
             }
             else
@@ -411,27 +465,34 @@ public partial class CrossAppEndpointMatrixTests
         Assert.True(unknown.Count == 0, $"Endpoints missing from the cross-app matrix (add a body row, a NoIdCalls row or an Excluded reason): {string.Join("; ", unknown)}");
         var stale = Bodies.Keys.Concat(NoIdCalls.Keys).Where(k => !covered.Contains(k)).Concat(Excluded.Keys.Where(k => !excludedSeen.Contains(k))).ToList();
         Assert.True(stale.Count == 0, $"Matrix rows that no longer match an endpoint: {string.Join("; ", stale)}");
-        calls.AddRange(Extras(a, b));
+        const string RenderKey = "POST /api/queries/{queryId}/visualizations/{visualizationId}/data";
+        calls.AddRange(Extras(a, b).Select(c => ForRole(role, c.Label == "B query, A visualization data" ? RenderKey : "extra", c, control: false)));
 
-        var secrets = new[] { "alpha-source", "alpha-query", "alpha-dashboard", "alpha-viz", "alpha-owner", "alpha-audit", "alpha@x", "alpha-managed", "alpha-seen" };
+        var secrets = new[] { "alpha-source", "alpha-query", "alpha-dashboard", "alpha-viz", "alpha-owner", "alpha-audit", "alpha@x", "alpha-managed", "alpha-seen", "alpha.example", "rsa-a" };
         var failures = new List<string>();
 
         async Task Check(Call call)
         {
             var (status, text) = await SendAsync(caller, call);
             var sent = Mount + call.Url + (call.Body is null ? "" : JsonSerializer.Serialize(call.Body));
-            // A 404 legitimately echoes the id the caller typed; anything else must not carry any of A's ids.
-            var ids = a.All.Select(i => i.ToString()).Where(i => status != 404 || !sent.Contains(i, StringComparison.OrdinalIgnoreCase));
+            // A 404 or 403 (a gate that never loaded anything) legitimately echoes the id the caller typed; anything else must not carry any of A's ids.
+            var ids = a.All.Select(i => i.ToString()).Where(i => status is not (404 or 403) || !sent.Contains(i, StringComparison.OrdinalIgnoreCase));
             var leaked = secrets.Concat(ids).FirstOrDefault(s => text.Contains(s, StringComparison.OrdinalIgnoreCase));
 
             string? problem = call.Expect switch
             {
                 Expect.NotFound => status == 404 ? null : "expected 404",
+                Expect.Hidden => status is 404 or 403 ? null : "expected 404 (or 403 from a gate before any load)",
                 Expect.Ok => status is >= 200 and < 300 ? null : "expected 2xx",
                 Expect.Exact => status == call.Status ? null : $"expected {call.Status} ({call.Why})",
                 Expect.Positive => status == 404 || (status >= 500 && !PositiveMayFailServerSide.ContainsKey(call.Label)) ? "B's own ids must reach the handler (not 404, not 5xx)" : null,
                 _ => await TwinProblem(call, status, text)
             };
+
+            if (call.Expect == Expect.Positive && call.Key is { } controlKey && status is >= 200 and < 300)
+            {
+                controlOk[controlKey] = true;
+            }
 
             if (problem is not null || leaked is not null)
             {
@@ -474,24 +535,8 @@ public partial class CrossAppEndpointMatrixTests
         Assert.True(failures.Count == 0, string.Join("\n", failures));
     }
 
-    private static Task Scenario(bool superViewingB) => HubApiHost.RunAsync(async env =>
+    private static Task Scenario() => HubApiHost.RunAsync(async env =>
     {
-        var caller = env.NewBrowser();
-        if (superViewingB)
-        {
-            await caller.SignInSuperAsync(env.AppB);
-        }
-        else
-        {
-            await caller.SignInAppAsync(env.AppB, HubRole.Admin);
-        }
-
-        // App admins don't yet see others' private rows, so B's rows belong to the caller: a 404 on A's id must come
-        // from the app boundary, not from an owner check that would have refused anyway.
-        var me = await HubApiHost.Browser.JsonAsync(await caller.GetAsync($"{Mount}/api/me"));
-        var callerId = me.GetProperty("userId").GetString()!;
-        var oldKey = new AesGcmConnectionSecretProtector(new ConnectionSecretKey(OldKey));
-
         // Both apps' data sources point at the metadata database and read this view, so B's own queries, options and charts
         // really run and a cross-app leak would return real rows.
         await using (var setup = env.HubWideDb())
@@ -499,15 +544,15 @@ public partial class CrossAppEndpointMatrixTests
             await setup.Database.ExecuteSqlRawAsync("CREATE VIEW dbo.v AS SELECT CAST('x' AS nvarchar(10)) AS c");
         }
 
-        Ids a, b;
+        var oldKey = new AesGcmConnectionSecretProtector(new ConnectionSecretKey(OldKey));
+        Ids a;
         string before;
         await using (var db = env.HubWideDb())
         {
-            // B's admins may add connections, so the create call below reaches the cross-app checks instead of the switch.
+            // B's admins may add connections, so the create call reaches the cross-app checks instead of the switch.
             (await db.Apps.FirstAsync(x => x.Id == env.AppB)).AppAdminsCanManageConnections = true;
             await db.SaveChangesAsync();
             a = await SeedAsync(db, env.AppA, "alpha", "alpha-owner", oldKey);
-            b = await SeedAsync(db, env.AppB, "bravo", callerId, oldKey);
             db.AppReturnUrls.Add(new AppReturnUrl { AppId = env.AppA, Url = "https://alpha.example/back" });
             await db.SaveChangesAsync();
         }
@@ -525,29 +570,64 @@ public partial class CrossAppEndpointMatrixTests
         Assert.Contains("[\"ProgramId\"]", before);
         Assert.Contains("[\"dbo.v\"]", before);
 
-        // Sanity: the caller really is B, so a 404 on A's id is not just "signed out".
-        var own = await caller.GetAsync($"{Mount}/api/data-sources");
-        Assert.Equal(HttpStatusCode.OK, own.StatusCode);
-        var listed = await own.Content.ReadAsStringAsync();
-        Assert.Contains("bravo-source", listed);
-        Assert.DoesNotContain("alpha-source", listed);
+        var endpoints = Discover(env.Host.Services).Select(e => $"{e.Method} {Normalize(e.Raw)}").ToHashSet();
+        var allowedOnHost = env.Host.Services.GetRequiredService<EndpointDataSource>().Endpoints.OfType<RouteEndpoint>()
+            .Where(e => e.RoutePattern.RawText!.StartsWith(Mount + "/api", StringComparison.Ordinal)
+                        && e.Metadata.GetMetadata<QueryBuilder.Editor.Hub.ViewerAllowedMetadata>() is not null)
+            .SelectMany(e => (e.Metadata.GetMetadata<HttpMethodMetadata>()?.HttpMethods ?? ["ANY"]).Select(m => $"{m} {Normalize(e.RoutePattern.RawText![Mount.Length..])}"))
+            .ToHashSet();
+        Assert.True(ViewerRoutes.SetEquals(allowedOnHost), $"Viewer allowlist differs from the table: {string.Join("; ", ViewerRoutes.Except(allowedOnHost).Concat(allowedOnHost.Except(ViewerRoutes)))}");
+        Assert.All(ViewerRoutes, r => Assert.Contains(r, endpoints));
 
-        // The key is shared by every app, so in hub mode its status and rotation are hub-wide and super-admin-only (see
-        // DataSourceLockTests); the per-app routes are gone and an app admin is refused the hub ones.
-        Assert.Equal(HttpStatusCode.NotFound, await caller.StatusAsync($"{Mount}/api/admin/encryption-key"));
-        if (!superViewingB)
+        var controlOk = new Dictionary<string, bool>();
+        foreach (var role in new[] { Who.Viewer, Who.Author, Who.Admin, Who.Super })
         {
-            Assert.Equal(HttpStatusCode.Forbidden, await caller.StatusAsync($"{Mount}/api/hub/encryption-key"));
+            Suffix = $"-{role}";
+            var caller = env.NewBrowser();
+            if (role == Who.Super)
+            {
+                await caller.SignInSuperAsync(env.AppB);
+            }
+            else
+            {
+                await caller.SignInAppAsync(env.AppB, Enum.Parse<HubRole>(role.ToString()), user: $"{role.ToString().ToLowerInvariant()}-b");
+            }
+
+            // B's rows belong to the caller, so a 404 on A's id must come from the app boundary, not an owner check.
+            var me = await HubApiHost.Browser.JsonAsync(await caller.GetAsync($"{Mount}/api/me"));
+            var callerId = me.GetProperty("userId").GetString()!;
+
+            async Task<Ids> NewBSet()
+            {
+                await using var db = env.HubWideDb();
+                return await SeedAsync(db, env.AppB, "bravo", callerId);
+            }
+
+            var b = await NewBSet();
+
+            // Sanity: the caller really is B, so a 404 on A's id is not just "signed out".
+            if (role != Who.Viewer)
+            {
+                var own = await caller.GetAsync($"{Mount}/api/data-sources");
+                Assert.Equal(HttpStatusCode.OK, own.StatusCode);
+                var listed = await own.Content.ReadAsStringAsync();
+                Assert.Contains("bravo-source", listed);
+                Assert.DoesNotContain("alpha-source", listed);
+            }
+
+            // The key is shared by every app, so in hub mode its status and rotation are hub-wide and super-admin-only.
+            Assert.Equal(role is Who.Viewer or Who.Author ? HttpStatusCode.Forbidden : HttpStatusCode.NotFound, await caller.StatusAsync($"{Mount}/api/admin/encryption-key"));
+            if (role != Who.Super)
+            {
+                Assert.Equal(HttpStatusCode.Forbidden, await caller.StatusAsync($"{Mount}/api/hub/encryption-key"));
+            }
+
+            await RunMatrixAsync(env, caller, role, a, b, NewBSet, controlOk);
         }
 
-        async Task<Ids> NewBSet()
-        {
-            await using var db = env.HubWideDb();
-            var set = await SeedAsync(db, env.AppB, "bravo", callerId);
-            return set;
-        }
-
-        await RunMatrixAsync(env, caller, superViewingB ? "super viewing B" : "B admin", a, b, NewBSet);
+        // At least one role's B-on-B call succeeds per body-id route, so a 404 on A's id can't be a broken body.
+        var neverOk = Bodies.Keys.Where(k => !controlOk.ContainsKey(k) && !ControlNotOk.ContainsKey(k)).ToList();
+        Assert.True(neverOk.Count == 0, $"No role got a 2xx from the B-on-B control of: {string.Join("; ", neverOk)}");
 
         await using var after = env.HubWideDb();
         Assert.Equal(before, await SnapshotAsync(after, env.AppA));
@@ -559,10 +639,7 @@ public partial class CrossAppEndpointMatrixTests
     });
 
     [MetadataSqlFact]
-    public Task App_b_admin_cannot_see_or_change_app_a_through_any_endpoint() => Scenario(superViewingB: false);
-
-    [MetadataSqlFact]
-    public Task Super_admin_viewing_app_b_cannot_see_or_change_app_a_through_any_endpoint() => Scenario(superViewingB: true);
+    public Task Every_role_in_app_b_is_kept_out_of_app_a_through_every_endpoint() => Scenario();
 
     private sealed class CapturingLogger<T> : ILogger<T>
     {
