@@ -13,9 +13,15 @@ integration ergonomics (single-call registration, embedded SPA, DBA-friendly mig
   `TemplateBuilderClient` references it. **1.1.0** (targets `net8.0` with EF Core 9.0.22 and `net10.0` with EF
   Core 10.0.14) is published and committed on the same branch, not merged to `main`. `TemplateBuilderClient` hasn't
   moved to it yet. Any further change needs a new version.
-- GitHub: https://github.com/nagendra571/QueryBuilderEditor — local `main` is **1 commit ahead** of
-  `origin/main`: `bca3dcb` (adds `docs/row-level-data-scoping.docx`), committed at the user's request
-  but **not pushed** (they only asked to commit). Push only if asked.
+- **2.0.0 is PUBLISHED (2026-11-12): `QueryBuilder.Editor` 2.0.0 and the new `QueryBuilder.Launch` 1.0.0 were pushed to
+  NuGet by the user.** Everything up to the hub (feature/rea1 1.0.14–1.5.0 and feature/hub) was merged to `main` through
+  PR #1 (`8d150d9`). The release commit (version bump, `QueryBuilder.schema.2.0.0.sql`) is on branch `release/2.0.0` and
+  goes to `main` through a pull request. Any further change needs 2.0.1+ (Launch: 1.0.1+). Released without: the full
+  net8.0 suite after the final fixes (machine ran out of memory), the PostgreSQL test group (Docker not running), and a
+  real Entra/OIDC tenant — check these first if a bug report arrives.
+- GitHub: https://github.com/nagendra571/QueryBuilderEditor — **`main` is protected: changes only through a pull
+  request** (direct pushes are refused with GH013). Push only if asked; the `gh` CLI here is not signed in, so the user
+  opens/merges PRs in the browser.
 - Hosted test deployment (user's own, real usage/bug reports come from here):
   http://templatebuilder.runasp.net/querybuilder — this is the `TemplateBuilderClient` app below.
 - Untracked on purpose, never commit: `Sample-AppUsers.sql`, `Sample-DataScope.sql` (local test-data
@@ -26,8 +32,12 @@ integration ergonomics (single-call registration, embedded SPA, DBA-friendly mig
 
 ## Where we left off (update this at the end of each session)
 
+**2026-11-12: released as QueryBuilder.Editor 2.0.0 + QueryBuilder.Launch 1.0.0 (see the top of this file); the notes
+below about "local, never pushed" and "release still needs" are history — all of it is on `main` and on NuGet. Setup guide:
+`docs/hub-setup-guide.md`. Open questions for the user still stand: `docs/superpowers/plans/2026-11-12-hub-part4-questions.md`.**
+
 **2026-11-12, "Super admin sign-in options" (spec `docs/superpowers/specs/2026-11-12-super-admin-sign-in-options-design.md`,
-commits `57f6195..HEAD` on local `feature/hub`, never pushed).** A hub super admin can now sign in with an identity provider
+commits `57f6195..0f5d1fd`).** A hub super admin can now sign in with an identity provider
 (`Hub:SignIn:Provider:Kind` = `Entra` or `OpenIdConnect`; generic OIDC matches `sub` via `SuperAdmins.UserIds`, emails only when
 `email_verified` is true, groups from `GroupsClaim`, userinfo read), with one-time codes (`Hub:SignIn:Codes:*` +
 `SuperAdmins.CodeNames`; created only by the server command `QueryBuilder.Hub signin-code --name <n> [--minutes m]`,

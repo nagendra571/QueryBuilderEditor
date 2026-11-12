@@ -153,8 +153,8 @@ tables for that start, and again for each upgrade.
    sqlcmd -S <server> -d <database> -I -b -i QueryBuilder.schema.<version>.sql
    ```
 
-   (The script that ships in this repository today is the 1.5.0 one. The 2.0.0 script is generated when the version is bumped.
-   Hub mode needs the 2.0.0 script, so ask for it before you plan a DBA run.)
+   (Use `QueryBuilder.schema.2.0.0.sql`, from `src/QueryBuilder.Editor/Scripts` or the `scripts/` folder of the
+   QueryBuilder.Editor 2.0.0 package.)
 2. The DBA inserts the mode marker once, and turns the built-in Default app off, because the hub does that itself only
    when it claims a database and an existing marker skips that step:
 
@@ -790,8 +790,7 @@ operator your **key id** (`kid`): for example `2026-11`, 1 to 64 characters, let
 
 ### C4. Add the package and the button (app owner): ASP.NET Core
 
-Add the package (`netstandard2.0`, no dependencies, RS256 or ES256 only). The packages `QueryBuilder.Launch` and `QueryBuilder.Editor` 2.0.0 are
-not published until the hub release is out; until then use a project reference or a local package feed built from this repository:
+Add the package (`netstandard2.0`, no dependencies, RS256 or ES256 only):
 
 ```powershell
 dotnet add package QueryBuilder.Launch

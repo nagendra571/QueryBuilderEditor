@@ -29,8 +29,8 @@ Whenever a new EF Core migration is added under `QueryBuilder.Infrastructure/Per
 
 ## What the 2.0.0 script contains (hub mode)
 
-Four migrations were added for hub mode. The script file itself is regenerated when the version is bumped, not before; once
-it is, the list below is what it applies:
+Four migrations were added for hub mode. `QueryBuilder.schema.2.0.0.sql` applies them (it was checked twice on an empty
+database and twice on top of a 1.5.0 database):
 
 | Migration | What it does |
 |---|---|
