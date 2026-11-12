@@ -46,7 +46,9 @@ Things your DBA should know:
 - **The `AppId` columns keep a named database default** (`DF_<Table>_AppId`, the Default app) on purpose: raw-SQL data source
   registration, rolling back to 1.5.0 and mixed versions keep working. Do not drop them.
 - **Grant `INSERT` on `MetadataSettings`** to the application login, or insert the mode row yourself once:
-  `INSERT INTO MetadataSettings ([Key], [Value]) VALUES ('Mode', 'Embedded')` (`'Hub'` for a hub). Without it an embedded host
+  `INSERT INTO MetadataSettings ([Key], [Value]) VALUES ('Mode', 'Embedded')` (`'Hub'` for a hub; then also run
+  `UPDATE Apps SET IsEnabled = 0 WHERE Id = '00000000-0000-0000-0000-00000000000d';`, since the hub turns the Default app off
+  when it claims a database and a pre-inserted marker skips that step). Without it an embedded host
   only logs a warning, and a hub refuses to start.
 - **A hub needs its own empty database.** Never run a hub against a database an embedded host uses; the mode marker makes the
   hub refuse it.

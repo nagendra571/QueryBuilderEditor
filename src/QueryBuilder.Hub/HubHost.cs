@@ -28,9 +28,14 @@ public static class HubHost
         Require(settings.Entra.TenantId, "Hub:Entra:TenantId");
         Require(settings.Entra.ClientId, "Hub:Entra:ClientId");
         Require(settings.Entra.ClientSecret, "Hub:Entra:ClientSecret");
-        if (!Uri.TryCreate(settings.Audience, UriKind.Absolute, out var audience) || audience.Scheme != Uri.UriSchemeHttps)
+        if (!Uri.TryCreate(settings.Audience, UriKind.Absolute, out var audience)
+            || audience.Scheme != Uri.UriSchemeHttps
+            || settings.Audience!.EndsWith('/')
+            || settings.Audience.Contains('?')
+            || settings.Audience.Contains('#')
+            || !string.IsNullOrEmpty(audience.AbsolutePath.Trim('/')))
         {
-            throw new InvalidOperationException("Hub:Audience must be the hub's public https:// URL.");
+            throw new InvalidOperationException("Hub:Audience must be the hub's public https:// address only: scheme, host and optional port, with no path, query, fragment or trailing slash.");
         }
 
         builder.Services.AddQueryBuilderEditor(o =>
@@ -69,6 +74,7 @@ public static class HubHost
             options.Scope.Add("email");
         });
 
+        builder.Services.AddAuthorization();
         ConfigureForwardedHeaders(builder.Services, settings.ForwardedHeaders);
         ConfigureRateLimiter(builder.Services, settings.LaunchRateLimit);
 
@@ -85,6 +91,7 @@ public static class HubHost
         app.UseHttpsRedirection();
         app.UseRateLimiter();
         app.UseAuthentication();
+        app.UseAuthorization();
         app.UseQueryBuilderEditorUI();
         app.MapQueryBuilderEditor();
         app.MapGet("/healthz", () => Results.Text("ok")).AllowAnonymous();

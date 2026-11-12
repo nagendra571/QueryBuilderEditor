@@ -8,10 +8,10 @@ namespace QueryBuilder.Launch
     /// Your app's private signing key plus the id (<c>kid</c>) the hub registered its public half under. The key is
     /// the caller's: this class never exports it and never disposes it.
     /// </summary>
-    public sealed class LaunchSigningKey : IDisposable
+    public sealed class LaunchSigningKey
     {
         private const string P256Oid = "1.2.840.10045.3.1.7";
-        private static readonly Regex KidPattern = new Regex("^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$", RegexOptions.CultureInvariant);
+        private static readonly Regex KidPattern = new Regex("^[A-Za-z0-9][A-Za-z0-9._-]{0,63}\\z",RegexOptions.CultureInvariant);
 
         private readonly RSA? _rsa;
         private readonly ECDsa? _ecdsa;
@@ -92,11 +92,6 @@ namespace QueryBuilder.Launch
             }
 
             return signature;
-        }
-
-        /// <summary>Nothing to release: the key belongs to the caller.</summary>
-        public void Dispose()
-        {
         }
 
         private static void CheckKid(string kid)

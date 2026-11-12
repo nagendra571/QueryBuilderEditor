@@ -67,7 +67,7 @@ public class LaunchTokenTests
         using var rsa = RSA.Create(2048);
         await WithHubAsync(rsa, null, async (validator, appId) =>
         {
-            using var key = LaunchSigningKey.Rsa("rsa-1", rsa);
+            var key = LaunchSigningKey.Rsa("rsa-1", rsa);
             var token = LaunchToken.Create("app-a", Audience, key, new LaunchUser("user-1", "Mary \"Q\"\n\U0001F600 O'Neil", "mary+qb@x.com"),
                 LaunchRole.Author, Scope("10", "20"));
             var result = await validator.ValidateAsync(token, CancellationToken.None);
@@ -88,7 +88,7 @@ public class LaunchTokenTests
         using var ec = ECDsa.Create(ECCurve.NamedCurves.nistP256);
         await WithHubAsync(null, ec, async (validator, _) =>
         {
-            using var key = LaunchSigningKey.EcdsaP256("ec-1", ec);
+            var key = LaunchSigningKey.EcdsaP256("ec-1", ec);
             Assert.Equal("ES256", key.Algorithm);
             var token = LaunchToken.Create("app-a", Audience, key, new LaunchUser("user-1"), LaunchRole.Viewer, LaunchScope.Unrestricted);
             var result = await validator.ValidateAsync(token, CancellationToken.None);
@@ -102,7 +102,7 @@ public class LaunchTokenTests
     public void Iat_and_exp_are_whole_seconds_and_default_lifetime_is_60_seconds()
     {
         using var rsa = RSA.Create(2048);
-        using var key = LaunchSigningKey.Rsa("rsa-1", rsa);
+        var key = LaunchSigningKey.Rsa("rsa-1", rsa);
         var now = new DateTimeOffset(2026, 11, 12, 10, 0, 0, 750, TimeSpan.Zero);
         var payload = Payload(LaunchToken.Create("app-a", Audience, key, new LaunchUser("u"), LaunchRole.Admin, LaunchScope.Unrestricted, now: now));
         var iat = now.ToUnixTimeSeconds();
@@ -118,7 +118,7 @@ public class LaunchTokenTests
     public void Lifetime_outside_1_to_120_seconds_is_refused(int seconds)
     {
         using var rsa = RSA.Create(2048);
-        using var key = LaunchSigningKey.Rsa("rsa-1", rsa);
+        var key = LaunchSigningKey.Rsa("rsa-1", rsa);
         Assert.Throws<ArgumentOutOfRangeException>(() => LaunchToken.Create("a", Audience, key, new LaunchUser("u"),
             LaunchRole.Admin, LaunchScope.Unrestricted, lifetime: TimeSpan.FromSeconds(seconds)));
         LaunchToken.Create("a", Audience, key, new LaunchUser("u"), LaunchRole.Admin, LaunchScope.Unrestricted, lifetime: TimeSpan.FromSeconds(120));
@@ -130,7 +130,7 @@ public class LaunchTokenTests
         using var rsa = RSA.Create(2048);
         await WithHubAsync(rsa, null, async (validator, _) =>
         {
-            using var key = LaunchSigningKey.Rsa("rsa-1", rsa);
+            var key = LaunchSigningKey.Rsa("rsa-1", rsa);
             var atLimit = ScopeOfSize(ResolvedDataScope.MaxSessionBytes);
             Assert.Equal(ResolvedDataScope.MaxSessionBytes, atLimit.SerializedByteCount);
             var token = LaunchToken.Create("app-a", Audience, key, new LaunchUser("u"), LaunchRole.Admin, atLimit);
@@ -211,11 +211,7 @@ public class LaunchTokenTests
         using var p384 = ECDsa.Create(ECCurve.NamedCurves.nistP384);
         Assert.Throws<ArgumentException>(() => LaunchSigningKey.EcdsaP256("k", p384));
         using var rsa = RSA.Create(2048);
-        using (LaunchSigningKey.Rsa("k", rsa))
-        {
-        }
-
-        // Disposing the wrapper leaves the caller's key usable.
+        _ = LaunchSigningKey.Rsa("k", rsa);
         rsa.ExportParameters(false);
     }
 
@@ -224,11 +220,19 @@ public class LaunchTokenTests
     [InlineData("-a")]
     [InlineData("a b")]
     [InlineData("a/b")]
+    [InlineData("k1\n")]
     [InlineData("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")]
     public void Bad_kid_is_refused(string kid)
     {
         using var rsa = RSA.Create(2048);
         Assert.Throws<ArgumentException>(() => LaunchSigningKey.Rsa(kid, rsa));
+    }
+
+    [Fact]
+    public void Scope_key_patterns_match_the_hub()
+    {
+        LaunchScope.For(new Dictionary<string, IEnumerable<string>> { ["_Region"] = new[] { "1" } });
+        Assert.Throws<ArgumentException>(() => LaunchScope.For(new Dictionary<string, IEnumerable<string>> { ["Region\n"] = new[] { "1" } }));
     }
 
     [Fact]
@@ -279,7 +283,7 @@ public class LaunchTokenTests
     public void Bad_return_url_is_refused(string url)
     {
         using var rsa = RSA.Create(2048);
-        using var key = LaunchSigningKey.Rsa("k", rsa);
+        var key = LaunchSigningKey.Rsa("k", rsa);
         Assert.Throws<ArgumentException>(() => LaunchToken.Create("a", Audience, key, new LaunchUser("u"), LaunchRole.Admin, LaunchScope.Unrestricted, returnUrl: url));
         Assert.Throws<ArgumentException>(() => LaunchToken.Create("a", Audience, key, new LaunchUser("u"), LaunchRole.Admin, LaunchScope.Unrestricted,
             returnUrl: "https://a.example/" + new string('x', 800)));
@@ -303,7 +307,7 @@ public class LaunchTokenTests
     public void Role_and_scope_are_checked_and_unrestricted_has_no_scope_claim()
     {
         using var rsa = RSA.Create(2048);
-        using var key = LaunchSigningKey.Rsa("k", rsa);
+        var key = LaunchSigningKey.Rsa("k", rsa);
         Assert.Throws<ArgumentOutOfRangeException>(() => LaunchToken.Create("a", Audience, key, new LaunchUser("u"), (LaunchRole)9, LaunchScope.Unrestricted));
         Assert.Throws<ArgumentNullException>(() => LaunchToken.Create("a", Audience, key, new LaunchUser("u"), LaunchRole.Admin, null!));
         var payload = Payload(LaunchToken.Create("a", Audience, key, new LaunchUser("u"), LaunchRole.Admin, Scope("1")));
@@ -315,7 +319,7 @@ public class LaunchTokenTests
     public void Json_strings_are_escaped()
     {
         using var rsa = RSA.Create(2048);
-        using var key = LaunchSigningKey.Rsa("k", rsa);
+        var key = LaunchSigningKey.Rsa("k", rsa);
         var payload = Payload(LaunchToken.Create("a", Audience, key, new LaunchUser("u", "Q\"\\\n\u0001é"), LaunchRole.Admin, LaunchScope.Unrestricted));
         Assert.Contains("\"name\":\"Q\\\"\\\\\\n\\u0001é\"", payload);
     }

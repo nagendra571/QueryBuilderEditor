@@ -17,7 +17,7 @@ namespace QueryBuilder.Launch
         public const int MaxValueLength = 200;
         public const int MaxBytes = 6144;
 
-        private static readonly Regex KeyPattern = new Regex("^[A-Za-z][A-Za-z0-9_]{0,127}$", RegexOptions.CultureInvariant);
+        private static readonly Regex KeyPattern = new Regex("^[A-Za-z_][A-Za-z0-9_]{0,127}\\z", RegexOptions.CultureInvariant);
 
         private readonly List<KeyValuePair<string, List<string>>>? _values;
 

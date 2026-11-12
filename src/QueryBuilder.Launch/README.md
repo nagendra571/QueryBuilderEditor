@@ -23,7 +23,7 @@ Agree these with the hub's super admin before you write code:
 | Item | What it is |
 |---|---|
 | **App key** | The id the hub registered your app under (the token's `iss`). 2 to 63 characters: lowercase letters, digits and hyphens, for example `agency-a`. |
-| **Audience** | The hub's public https URL exactly as the hub has it in `Hub:Audience` (for example `https://hub.example.com`). The token's `aud` must equal it character for character. |
+| **Audience** | The hub's public https address exactly as the hub has it in `Hub:Audience` (for example `https://hub.example.com`): scheme, host and optional port, no trailing slash. The token's `aud` must equal it character for character. |
 | **Key id (`kid`)** | A name you give each signing key, for example `2026-11`. 1 to 64 characters: letters, digits, `.`, `_`, `-`, starting with a letter or digit. |
 | **Scope keys** | The names of the row-level scope values you will send (for example `ProgramId`), declared for your app in the hub console. A token that names a key the hub does not know is refused. |
 | **Return URL** (optional) | Where "Back to your app" and logout send the user. Registered in the console, in the canonical form `https://app.example.com/` (https only; `http://localhost` is allowed for development). The token's `returnUrl` must match one registered URL exactly. |
@@ -376,7 +376,7 @@ by default). Everyone behind one office network address shares that limit; the h
 |---|---|
 | Token lifetime | 1 to 120 seconds, default 60; `iat`/`exp` in whole seconds; 30 seconds clock skew allowed |
 | Scope | at most 20 keys, 1,000 values per key, 200 characters per value, 6,144 UTF-8 bytes serialised (`LaunchScope.SerializedByteCount`) |
-| Scope key name | starts with a letter or `_`; letters, digits and `_`; up to 128 characters (this library accepts only a leading letter) |
+| Scope key name | starts with a letter or `_`; letters, digits and `_`; up to 128 characters |
 | `kid` | `^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$` |
 | Keys | RSA 2048 to 8192 bits, or ECDSA P-256; public key PEM up to 4,000 characters |
 | User id / name / email | 256 / 200 / 320 characters |

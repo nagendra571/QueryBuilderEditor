@@ -45,7 +45,7 @@ in environment variables or a file that exists only on the server (see section 3
 | Setting | Required | Default | What it does |
 |---|---|---|---|
 | `Hub:ConnectionString` | yes | none | The hub's own SQL Server metadata database. It must be empty, or already a hub database. |
-| `Hub:Audience` | yes | none | The hub's public https URL, for example `https://hub.example.com`. Every launch token's `aud` must equal it exactly. The host refuses to start if it is not an absolute `https://` URL. |
+| `Hub:Audience` | yes | none | The hub's public https address, for example `https://hub.example.com`: scheme, host and optional port only, no path, query, fragment or trailing slash. Every launch token's `aud` must equal it exactly. The host refuses to start otherwise. |
 | `Hub:Entra:TenantId` | yes | none | Directory (tenant) ID. |
 | `Hub:Entra:ClientId` | yes | none | Application (client) ID. |
 | `Hub:Entra:ClientSecret` | yes | none | The client secret. Environment variable or server-only file only. |
@@ -110,16 +110,17 @@ If a reverse proxy, load balancer or an Azure service terminates TLS in front of
 - Set `Hub:ForwardedHeaders:KnownProxies` (addresses) or `KnownNetworks` (CIDR ranges). With neither set, only a proxy on
   the same machine (loopback) is trusted. **Configuring either one replaces that loopback default**, so include loopback too
   if the proxy runs beside the hub.
-- Wrong values have two effects at once: every request looks like plain http (so the `__Host-` cookies fail and sign-in
-  loops), and every user appears to come from the proxy's address, so they all share one launch rate-limit allowance.
+- Wrong values have two effects at once: every request looks like plain http (Entra then reports `AADSTS50011` because the
+  redirect URI is built as `http://…/signin-oidc`, or sign-in redirects in a loop; the hub's own cookies are always
+  `Secure` and keep working), and every user appears to come from the proxy's address, so they all share one launch rate-limit allowance.
 - `Hub:ForwardedHeaders:ForwardLimit` (default 1) is how many hops of `X-Forwarded-For` are read, counted from the right,
   and every hop it reads must be a known proxy. With **chained proxies** (for example Front Door in front of an Application
   Gateway) list every proxy hop in `KnownProxies`/`KnownNetworks` and set `ForwardLimit` to the number of hops, so the client
   address two hops back is the one used. Alternatively, have the last hop replace `X-Forwarded-For` with the original client
   address. Leave it at 1 with a chain and every user appears to come from the first proxy's address: one shared launch
   rate-limit allowance and wrong addresses in the audit log. `X-Forwarded-Prefix` is ignored.
-- **To check it**: open `https://<hub>/healthz` (must answer `ok`), then sign in as a super admin. If sign-in returns to the
-  sign-in page, or the audit log shows one address for every user, the proxy settings are wrong.
+- **To check it**: open `https://<hub>/healthz` (must answer `ok`), then sign in as a super admin. If Entra answers `AADSTS50011`, sign-in
+  loops, or the audit log shows one address for every user, the proxy settings are wrong.
 
 The launch limit is **per client address** (30 per minute by default, then `429` with `Retry-After`). A whole office behind one
 NAT shares it: if people launch in bursts, raise `Hub:LaunchRateLimit:PermitLimit`.
@@ -173,7 +174,9 @@ By default the host migrates the database itself at start. If the login has no D
 [`QueryBuilder.Editor/Scripts`](../QueryBuilder.Editor/Scripts/README.md) before each upgrade (with `sqlcmd`, pass `-I`).
 The hub's login then needs `SELECT`, `INSERT`, `UPDATE` and `DELETE` on all QueryBuilder tables, including `MetadataSettings`
 (the first start inserts the mode row; if you would rather not grant that, your DBA can insert `('Mode', 'Hub')`
-and the hub then only reads it), `LaunchReplays` and `DataProtectionKeys`.
+and the hub then only reads it; with that route also run
+`UPDATE Apps SET IsEnabled = 0 WHERE Id = '00000000-0000-0000-0000-00000000000d';`, because the hub turns the Default app off when it
+claims a database and a DBA-inserted marker skips that step), `LaunchReplays` and `DataProtectionKeys`.
 
 ## 8. Troubleshooting
 
@@ -183,8 +186,8 @@ and the hub then only reads it), `LaunchReplays` and `DataProtectionKeys`.
 | Host won't start and the message names `DataSourceManagement.EncryptionKey`, `HubOptions.SuperAdmins.TenantIds`, `HubOptions.SuperAdmins` (object ids, emails or groups) or `HubOptions.Audience` | Those are the package's option names; the host fills them from `Hub:DataSourceKey` (and `Hub:PreviousDataSourceKeys`), `Hub:SuperAdmins:TenantIds`, `Hub:SuperAdmins:ObjectIds` / `Emails` / `GroupIds` and `Hub:Audience` | Set the matching `Hub:*` setting |
 | Host won't start, "needs its own empty metadata database" | The database holds QueryBuilder data from an embedded app | Give the hub a new empty database |
 | Host won't start, "belongs to an Embedded-mode installation" | The database was claimed by an embedded host | Same: a separate database |
-| After Entra sign-in you are sent back to sign in again | The proxy's headers are not trusted, so the app believes it is on http | Fix `KnownProxies`/`KnownNetworks` (section 4) |
-| `AADSTS50011` (reply URL mismatch) at Entra | The redirect URI differs from `https://<host>` + `Hub:Entra:CallbackPath` | Register the exact URL |
+| Sign-in loops after Entra, or the redirect goes to an `http://` address | The proxy's headers are not trusted, so the app believes it is on http | Fix `KnownProxies`/`KnownNetworks` (section 4) |
+| `AADSTS50011` (reply URL mismatch) at Entra | The redirect URI differs from `https://<host>` + `Hub:Entra:CallbackPath`, or the proxy's headers aren't trusted (the URI is built as `http://…`) | Register the exact URL |
 | After Entra sign-in you get the generic page "This link to QueryBuilder isn't valid or has expired" (403) | Your tenant id, object id, email or group is not in `Hub:SuperAdmins`, or you belong to too many groups for Entra to list them | Add the entry and restart. Another super admin can read the reason in the audit log (`SuperAdminSignInRefused`) |
 | An app's users get the generic "link isn't valid" page | See the [launch troubleshooting table](../QueryBuilder.Launch/README.md#6-troubleshooting) | Read the `LaunchRefused` reason in `/querybuilder/hub/audit` |
 | Users all launch fine for a while, then `429` | Launch rate limit per address | Raise `Hub:LaunchRateLimit:PermitLimit`, check proxy settings |

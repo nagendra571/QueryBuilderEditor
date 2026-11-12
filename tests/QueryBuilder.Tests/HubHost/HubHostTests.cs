@@ -184,6 +184,9 @@ public class HubHostTests
     [InlineData("")]
     [InlineData("http://hub.test")]
     [InlineData("<set in environment>")]
+    [InlineData("https://hub.test/")]
+    [InlineData("https://hub.test/x")]
+    [InlineData("https://hub.test?a=1")]
     public void Audience_must_be_an_https_url(string audience)
     {
         var settings = Settings("Server=unused");
@@ -196,6 +199,17 @@ public class HubHostTests
         {
             Assert.DoesNotContain(audience, ex.Message);
         }
+    }
+
+    [Theory]
+    [InlineData("https://hub.test")]
+    [InlineData("https://hub.test:8443")]
+    public void Audience_with_only_scheme_host_and_port_is_accepted(string audience)
+    {
+        var settings = Settings("Server=unused");
+        settings["Hub:Audience"] = audience;
+
+        Build(settings);
     }
 
     [Theory]
