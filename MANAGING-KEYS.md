@@ -154,6 +154,31 @@ Data sources from `appsettings.json` connection strings, saved queries, charts a
 
 ---
 
+## Hub mode (2.0.0): the key is a hub setting
+
+If you run the QueryBuilder hub (`src/QueryBuilder.Hub`, see its README) instead of an embedded QueryBuilder, three things differ:
+
+- **The key is required and lives in the hub's settings**, not `QueryBuilder:DataSourceKey`: `Hub:DataSourceKey`
+  (environment variable `Hub__DataSourceKey`), with old keys in `Hub:PreviousDataSourceKeys`
+  (`Hub__PreviousDataSourceKeys__0`, `__1`, ...). Everything in sections 1 to 3 about making, saving and hiding it applies
+  unchanged: never in the repository, a copy in a password manager.
+- **It also protects the session cookie's keys.** The hub keeps its Data Protection key ring in the metadata database,
+  encrypted with this key, so the key is needed even if no data source is ever added through the form.
+- **There is one key for the whole hub, shared by every app, and only a super admin can rotate it.** The key section
+  (**Generate a new key**, the fingerprints, **Re-encrypt**) is on the console's Apps page, `/querybuilder/hub/apps`, instead
+  of on each admin page. Rotation follows section 4, with every instance of the hub getting the same new key and the same
+  `PreviousDataSourceKeys` before you press Re-encrypt.
+
+**Keep the old key for at least 90 days plus 8 hours.** Re-encrypt re-saves data source passwords only. The stored session keys
+stay encrypted with the key that wrote them and are read with the old one for as long as they are valid (90 days, plus an
+8-hour session that may have started on the last day). Remove the old key from `PreviousDataSourceKeys` earlier and those
+sessions stop working, so users are asked to launch again. Section 4's "step 5" (new key only) must wait that long in hub mode.
+
+All instances of a hub must carry the same `Hub:DataSourceKey` and `Hub:PreviousDataSourceKeys`; one instance with an older
+list cannot read what another wrote.
+
+---
+
 ## 6. Troubleshooting
 
 | What you see | Why | Fix |

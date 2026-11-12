@@ -596,6 +596,139 @@ Adding the feature creates three tables, `Dashboards`, `DashboardTiles` and `Das
 parameters add two nullable `nvarchar(max)` columns (migration `AddDashboardParameters`). Dashboard
 create/update/delete/share/unshare are recorded in the audit log.
 
+## Hub mode (2.0.0)
+
+Hub mode turns one QueryBuilder into a **hub** that serves several apps. Each app (a tenant) hands its signed-in users
+over with a short-lived, signed **launch token**; your own staff, the **super admins**, sign in with Microsoft Entra ID.
+It is opt-in: with `options.Hub.Enabled` left `false`, QueryBuilder behaves as in every earlier release, and an existing
+embedded installation needs nothing but the database upgrade described below.
+
+Three pieces make it work:
+
+| Piece | What it is | Guide |
+|---|---|---|
+| `QueryBuilder.Editor` | this package; hub mode is switched on with `options.Hub` | this section |
+| `QueryBuilder.Hub` | a ready-made `net10.0` host you deploy (not a NuGet package): Entra sign-in, HTTPS and HSTS, forwarded headers, a launch rate limit | [deployment guide](https://github.com/nagendra571/QueryBuilderEditor/blob/main/src/QueryBuilder.Hub/README.md) |
+| `QueryBuilder.Launch` | a small `netstandard2.0` package your apps use to sign the token and render the launch form; works from .NET Framework 4.7.2+ | [integration guide](https://github.com/nagendra571/QueryBuilderEditor/blob/main/src/QueryBuilder.Launch/README.md) |
+
+### Turning it on in your own host
+
+Most teams should deploy `QueryBuilder.Hub` as it is. To build a host yourself:
+
+```csharp
+builder.Services.AddQueryBuilderEditor(options =>
+{
+    options.ConnectionString = hubConnectionString;               // the hub's OWN, empty database
+    options.Hub.Enabled = true;
+    options.Hub.Audience = "https://hub.example.com";             // every launch token's `aud` must equal this
+    options.Hub.SuperAdminSignInScheme = "entra";                 // your OpenID Connect scheme, see below
+    options.Hub.SuperAdmins.TenantIds = ["<your Entra tenant id>"];
+    options.Hub.SuperAdmins.ObjectIds = ["<a super admin's object id>"];   // and/or Emails, GroupIds
+    options.DataSourceManagement.EncryptionKey = hubKey;          // required: base64 of 32 bytes
+});
+
+builder.Services.AddAuthentication().AddOpenIdConnect("entra", o =>
+{
+    // ... authority, client id and secret ...
+    o.SignInScheme = "QueryBuilder.HubExternal";                  // a short-lived cookie scheme the package registers
+});
+```
+
+Hub mode refuses to start without `Audience`, `SuperAdminSignInScheme`, at least one tenant id, at least one object id, email
+or group id, and `DataSourceManagement.EncryptionKey`. `options.Hub.CookieName` (default `__Host-qb-hub`),
+`AbsoluteLifetime` (8 hours) and `IdleTimeout` (1 hour) can be changed. A super admin signs in at `/querybuilder/signin`.
+A host of your own must use HTTPS, `UseForwardedHeaders` behind a proxy, `UseExceptionHandler`, no `UsePathBase`, and send
+`frame-ancestors 'self'`; `QueryBuilder.Hub` does all of that.
+
+### Who can do what
+
+A person's role comes from the **latest launch token only**; it is never stored as a permanent grant.
+
+| Role | Comes from | Can |
+|---|---|---|
+| Super admin | Entra sign-in plus the allowlist; never from a launch token | Everything in every app: the app registry (apps, signing keys, return URLs, scope keys, record ceiling), locking, unlocking and moving data sources, the encryption key, the hub audit log. Unrestricted data scope. |
+| Admin | token `role` = `Admin` | Everything inside their app: sees and manages every query, dashboard and share, runs the Admin page for the app's data sources (except locked ones), publishes dashboards. |
+| Author | `Author` | The normal user, inside their app: build, save, chart, run, export, share, build dashboards. |
+| Viewer | `Viewer` | Dashboards only: the ones published to the app and the ones shared with them. Parameter controls and refresh work; there is no query list, builder, SQL, chart settings, sharing or export. |
+
+- **Isolation.** A user is the pair (app, user id): the same email from two apps is two people. A request that names another
+  app's query, dashboard, share or data source is answered 404 and changes nothing.
+- **Viewer allowlist.** A Viewer can call exactly seven endpoints: the dashboard list, one dashboard, a dashboard tile's chart,
+  a dashboard's parameter options, a query's parameter options (through a dashboard), the chart render for a query, and
+  `/api/me`. The Viewer role wins over any share: sharing a query with a Viewer gives them nothing beyond dashboards.
+- **Publishing.** Admins (and super admins) can **Publish** a dashboard to the app and **Unpublish** it; every Viewer and
+  Author of the app then sees it read-only.
+- **Dashboard-context charts.** A chart tile on a dashboard the viewer can see renders with the **viewer's own data scope**.
+  They see the chart, its settings and its parameter controls, never the SQL, the query definition or the source query's id.
+  Values an Admin fixed on a tile (a fixed mapping) cannot be overridden by the viewer.
+- **Sharing to known people.** In hub mode a query or dashboard can be shared only with people the app already knows: those who
+  have launched (the 2,000 most recent are offered) plus the data source's `AppUsers` view (the picker reads its first 500
+  rows). Changing the level of an existing share still works for someone who has since left the directory.
+- **User-id case rule.** Ids are compared exactly. A launch is refused when the app already knows the same id in a different
+  case (as a user, an owner or a share target), and sharing with a case variant of a known user is refused, so two spellings
+  can never merge. A user id starting with `super:` is refused (reserved for super admins).
+- **Data sources.** A data source added by a super admin is **locked**: the app's admins and users can use it, but only a
+  super admin changes it, until a super admin unlocks it (and a super admin can lock it again). The per-app switch **App admins
+  can add data sources** (off by default) lets app admins add, edit, test and turn off the unlocked sources of their own app.
+  A super admin can **move** a data source to another app (refused while a saved query or dashboard uses it, and when the
+  target app already has one with that name). A data source that points at the hub's own metadata database is refused,
+  compared by server identity; if the target is unreachable at that moment the check lets it pass, and the catalog load
+  checks again. After a move, other instances can keep the old data scope rules for up to 5 minutes.
+- **Record limits.** A super admin can give each app a **record ceiling**. The limit that applies is the lower of the ceiling
+  and the data source's own limit (or the host default when the data source has none); a change takes up to 30 seconds to apply.
+- **Scope.** The app's declared **scope keys** replace the host's `DataScope.Keys` (a data source can still add its own). The
+  token's scope replaces `DataScope.Resolver`. `unrestricted` means no row restriction; super admins are unrestricted.
+- **The banner and logout.** A launched user sees a banner with the app's name and a "Back to" link to the return URL from the
+  token. Logging out is a `POST` to `/querybuilder/logout` with the header `X-QueryBuilder-Request: 1`; it answers
+  `{ "redirectUrl": ... }` (the registered return URL, else `/querybuilder/`).
+
+### Sessions and the launch endpoint
+
+`POST /querybuilder/launch` takes a form with one field, `token` (never a query string or header). A refused launch shows one
+generic page and records the reason (`LaunchRefused`) in the hub audit log; the reason is never shown to the user and the
+token is never logged. On success the hub sets the cookie `__Host-qb-hub` (HttpOnly, Secure, SameSite=Lax) and redirects to
+`/querybuilder/`. A session lasts 8 hours at most and ends after 1 hour unused; a new launch replaces it. Turning an app off,
+or revoking one of its signing keys, ends that app's sessions within about 30 seconds. The cookie carries the user, role and
+scope, so a token's scope may not exceed 6,144 UTF-8 bytes (about 150 to 300 values); the worst-case cookie is roughly 13 to
+15 KB, so check your proxy's request header size limit. A token's `iat` and `exp` must be whole seconds: a fractional value is
+refused.
+
+### Things to know before you deploy it
+
+- **HTTPS is required.** Browsers refuse the `__Host-` cookie over plain http.
+- **Hub mode takes over Data Protection.** Session keys are stored in the metadata database and encrypted with
+  `DataSourceManagement.EncryptionKey`. Do not configure Data Protection persistence for the host, and give every instance the
+  same metadata database and the same `EncryptionKey` and `PreviousEncryptionKeys`.
+- **After rotating the key, keep the old one for at least 90 days plus 8 hours** in `PreviousEncryptionKeys` (the key ring's
+  lifetime plus the longest session), not only until Re-encrypt finishes.
+- **Group-based super admins are re-checked against Entra only at sign-in.** The allowlist itself is checked on every request,
+  but removing someone from an Entra group ends their session only when it expires (8 hours at most) or when you remove the
+  group id and restart. Prefer `ObjectIds`: an email can be changed by a tenant administrator.
+- **Do not start hosted services concurrently** (`HostOptions.ServicesStartConcurrently`): the checks that claim the database
+  and the key ring depend on starting in order.
+- **The hub needs its own empty metadata database.** See the next section.
+
+### Upgrading the database to 2.0.0
+
+2.0.0 adds four migrations: `AddApps`, `AddHubRegistry`, `AddAppSessionsValidAfter` and `AddHubRolesAndPublishing`. **DBA-managed
+hosts must run the new schema script before deploying, even if they never use hub mode** (shipped at
+`scripts/QueryBuilder.schema.<version>.sql` in this package; see [`Scripts/README.md`](https://github.com/nagendra571/QueryBuilderEditor/blob/main/src/QueryBuilder.Editor/Scripts/README.md)).
+
+- **Apps and `AppId`.** A new `Apps` table and an `AppId` column on the app-owned tables (saved queries, visualizations, shares,
+  data sources, data scope rules, dashboards, tiles, dashboard shares and the audit log). Every existing row goes to the built-in
+  **Default** app, the one embedded mode uses. The columns keep a database default of the Default app on purpose, so raw-SQL
+  data source registration (`INSERT INTO DataSources ...`), rolling back to 1.5.0 and a mix of old and new versions keep working.
+- **`AuditLogEntries` backfill.** Setting `AppId` on existing audit rows rewrites the whole table in one statement, so a large
+  audit log means a long run and a lot of transaction log. Plan the window.
+- **`MetadataSettings` and the mode marker.** A small table records which mode owns the database: `Embedded` or `Hub`. The first
+  start writes it. A database already marked for the other mode is refused ("use a separate metadata database for the hub"),
+  and a hub refuses a database that already holds queries, dashboards or data sources but has no marker. Embedded mode only
+  logs a warning when the table is missing or cannot be written. **The application login needs `INSERT` on `MetadataSettings`**,
+  or your DBA inserts `('Mode', 'Embedded')` (or `'Hub'`) once.
+- **Hub registry tables and columns.** `AppSigningKeys`, `AppReturnUrls`, `SeenUsers`, `LaunchReplays` and `DataProtectionKeys`,
+  plus `PublishedToApp` on dashboards, `LockedBySuperAdmin` on data sources, and on apps the record ceiling, the "app admins can
+  add data sources" switch, the scope keys and a session-validity stamp.
+
 ## Access Control
 
 By default the editor is **open to all users** — no authentication required.
@@ -635,6 +768,8 @@ Every failing check includes a one-line fix. Returns 404 outside Development.
 
 ## What's included
 
+- Hub mode (opt-in): one QueryBuilder serving several apps through signed launch tokens, with Admin/Author/Viewer roles,
+  published dashboards and Entra-signed-in super admins (see "Hub mode (2.0.0)")
 - Business data sources on SQL Server or PostgreSQL, mixed freely on one host
 - Searchable catalog sidebar (schemas → tables/views → columns) with type-aware icons
 - Drag-and-drop column selection, reordering, and aliasing
