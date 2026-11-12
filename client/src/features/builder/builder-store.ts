@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { aggregateResultDataType, describeAggregate } from '@/features/builder/aggregate-functions'
+import { allowedTypesFor, defaultTypeFor, dropOrphanParameters, effectiveType, initialDefault, type ParameterValues } from '@/features/parameters/param-values'
 import type {
   AggregateFunction,
   ColumnDataType,
@@ -8,6 +9,7 @@ import type {
   FilterOperator,
   QueryColumn,
   QueryDefinition,
+  QueryParameter,
   QuerySort,
   QuerySource,
   SortDirection,
@@ -44,6 +46,64 @@ function pruneHaving(having: FilterGroup | null | undefined, columns: QueryColum
   return { ...having, conditions }
 }
 
+
+function newParameter(name: string, label: string, condition: FilterCondition): QueryParameter {
+  const type = defaultTypeFor(condition.dataType, condition.operator)
+  return {
+    name,
+    label,
+    dataType: condition.dataType,
+    type,
+    defaultValue: initialDefault(condition, type),
+    isRequired: true,
+    options: [],
+    allowMultiple: false,
+  }
+}
+
+/**
+ * A parameter's type has to stay valid for the filter it is bound to. When the filter's column or
+ * condition changes, keep the type if it still fits, otherwise fall back to the filter's natural
+ * type (or drop the prompt entirely when the new condition can't be asked at run time).
+ */
+function reconcileParameters(definition: QueryDefinition): QueryDefinition {
+  let parameters = definition.parameters
+  let changed = false
+
+  const fix = (group: FilterGroup | null | undefined): FilterGroup | null | undefined => {
+    if (!group) return group
+    return {
+      ...group,
+      conditions: group.conditions.map((c) => {
+        if (!c.isParameterized) return c
+        const parameter = parameters.find((p) => p.name === c.parameterName)
+        const allowed = allowedTypesFor(c.dataType, c.operator)
+        if (!parameter) return c
+        const type = effectiveType(parameter)
+        const multipleOk = c.operator === 'in' || c.operator === 'notIn'
+        if (allowed.includes(type) && (multipleOk || !parameter.allowMultiple)) return c
+        changed = true
+        if (allowed.length === 0) {
+          parameters = parameters.filter((p) => p.name !== parameter.name)
+          return { ...c, isParameterized: false, parameterName: undefined }
+        }
+        const next = allowed.includes(type) ? type : defaultTypeFor(c.dataType, c.operator)
+        parameters = parameters.map((p) =>
+          p.name === parameter.name
+            ? { ...p, dataType: c.dataType, type: next, defaultValue: null, options: [], optionsQueryId: null, allowMultiple: multipleOk && p.allowMultiple }
+            : p,
+        )
+        return c
+      }),
+      groups: group.groups.map((g) => fix(g)!),
+    }
+  }
+
+  const filters = fix(definition.filters)!
+  const having = fix(definition.having)
+  return changed ? { ...definition, filters, having, parameters } : definition
+}
+
 interface BuilderState {
   queryId: string | null
   name: string
@@ -51,6 +111,9 @@ interface BuilderState {
   dataSourceId: string | null
   definition: QueryDefinition
   isDirty: boolean
+  /** Name of the parameter whose settings dialog is open, if any. */
+  parameterSettingsFor: string | null
+  openParameterSettings: (name: string | null) => void
 
   startNew: (dataSourceId: string) => void
   loadExisting: (queryId: string, dataSourceId: string, name: string, description: string, definition: QueryDefinition) => void
@@ -79,6 +142,10 @@ interface BuilderState {
   updateSortDirection: (index: number, direction: SortDirection) => void
   removeSort: (index: number) => void
 
+  updateParameter: (name: string, parameter: QueryParameter) => void
+  /** Makes the given bar values this query's defaults; saved with the next Save. */
+  setParameterDefaults: (values: ParameterValues) => void
+
   setName: (name: string) => void
   setDescription: (description: string) => void
 }
@@ -90,6 +157,8 @@ export const useBuilderStore = create<BuilderState>((set) => ({
   dataSourceId: null,
   definition: emptyDefinition(),
   isDirty: false,
+  parameterSettingsFor: null,
+  openParameterSettings: (name) => set({ parameterSettingsFor: name }),
 
   startNew: (dataSourceId) =>
     set({
@@ -136,7 +205,7 @@ export const useBuilderStore = create<BuilderState>((set) => ({
         .filter((c) => columnKey(c.tableAlias, c.columnName, c.aggregate) !== key)
         .map((c, i) => ({ ...c, orderIndex: i }))
       return {
-        definition: { ...state.definition, columns, having: pruneHaving(state.definition.having, columns) },
+        definition: dropOrphanParameters({ ...state.definition, columns, having: pruneHaving(state.definition.having, columns) }),
         isDirty: true,
       }
     }),
@@ -189,7 +258,7 @@ export const useBuilderStore = create<BuilderState>((set) => ({
         columnKey(c.tableAlias, c.columnName, c.aggregate) === key ? { ...c, aggregate, alias } : c,
       )
       return {
-        definition: { ...state.definition, columns, having: pruneHaving(state.definition.having, columns) },
+        definition: dropOrphanParameters({ ...state.definition, columns, having: pruneHaving(state.definition.having, columns) }),
         isDirty: true,
       }
     }),
@@ -217,25 +286,25 @@ export const useBuilderStore = create<BuilderState>((set) => ({
 
   updateFilterCondition: (index, patch) =>
     set((state) => ({
-      definition: {
+      definition: reconcileParameters({
         ...state.definition,
         filters: {
           ...state.definition.filters,
           conditions: state.definition.filters.conditions.map((c, i) => (i === index ? { ...c, ...patch } : c)),
         },
-      },
+      }),
       isDirty: true,
     })),
 
   removeFilterCondition: (index) =>
     set((state) => ({
-      definition: {
+      definition: dropOrphanParameters({
         ...state.definition,
         filters: {
           ...state.definition.filters,
           conditions: state.definition.filters.conditions.filter((_, i) => i !== index),
         },
-      },
+      }),
       isDirty: true,
     })),
 
@@ -266,6 +335,9 @@ export const useBuilderStore = create<BuilderState>((set) => ({
         }
       }
 
+      // Some conditions (is empty, between on a number...) have nothing to ask at run time.
+      if (allowedTypesFor(condition.dataType, condition.operator).length === 0) return state
+
       const baseName = condition.columnName.replace(/[^a-zA-Z0-9_]/g, '_')
       let paramName = baseName
       let suffix = 1
@@ -279,13 +351,7 @@ export const useBuilderStore = create<BuilderState>((set) => ({
           ...state.definition,
           parameters: [
             ...state.definition.parameters,
-            {
-              name: paramName,
-              label: condition.columnName,
-              dataType: condition.dataType,
-              defaultValue: condition.value,
-              isRequired: true,
-            },
+            newParameter(paramName, condition.columnName, condition),
           ],
           filters: {
             ...state.definition.filters,
@@ -323,10 +389,10 @@ export const useBuilderStore = create<BuilderState>((set) => ({
       const having = state.definition.having
       if (!having) return state
       return {
-        definition: {
+        definition: reconcileParameters({
           ...state.definition,
           having: { ...having, conditions: having.conditions.map((c, i) => (i === index ? { ...c, ...patch } : c)) },
-        },
+        }),
         isDirty: true,
       }
     }),
@@ -336,7 +402,7 @@ export const useBuilderStore = create<BuilderState>((set) => ({
       const having = state.definition.having
       if (!having) return state
       return {
-        definition: { ...state.definition, having: { ...having, conditions: having.conditions.filter((_, i) => i !== index) } },
+        definition: dropOrphanParameters({ ...state.definition, having: { ...having, conditions: having.conditions.filter((_, i) => i !== index) } }),
         isDirty: true,
       }
     }),
@@ -370,6 +436,8 @@ export const useBuilderStore = create<BuilderState>((set) => ({
         }
       }
 
+      if (allowedTypesFor(condition.dataType, condition.operator).length === 0) return state
+
       const baseName = `${condition.columnName}_total`.replace(/[^a-zA-Z0-9_]/g, '_')
       let paramName = baseName
       let suffix = 1
@@ -383,13 +451,7 @@ export const useBuilderStore = create<BuilderState>((set) => ({
           ...state.definition,
           parameters: [
             ...state.definition.parameters,
-            {
-              name: paramName,
-              label: describeAggregate(condition.aggregate, condition.columnName),
-              dataType: condition.dataType,
-              defaultValue: condition.value,
-              isRequired: true,
-            },
+            newParameter(paramName, describeAggregate(condition.aggregate, condition.columnName), condition),
           ],
           having: {
             ...having,
@@ -421,6 +483,26 @@ export const useBuilderStore = create<BuilderState>((set) => ({
       definition: {
         ...state.definition,
         sorts: state.definition.sorts.filter((_, i) => i !== index).map((s, i) => ({ ...s, orderIndex: i })),
+      },
+      isDirty: true,
+    })),
+
+  updateParameter: (name, parameter) =>
+    set((state) => ({
+      definition: {
+        ...state.definition,
+        parameters: state.definition.parameters.map((p) => (p.name === name ? { ...parameter, name } : p)),
+      },
+      isDirty: true,
+    })),
+
+  setParameterDefaults: (values) =>
+    set((state) => ({
+      definition: {
+        ...state.definition,
+        parameters: state.definition.parameters.map((p) =>
+          p.name in values ? { ...p, defaultValue: values[p.name] } : p,
+        ),
       },
       isDirty: true,
     })),

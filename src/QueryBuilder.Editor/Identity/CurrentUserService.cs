@@ -1,4 +1,5 @@
 using QueryBuilder.Application.Abstractions;
+using QueryBuilder.Domain.Enums;
 using QueryBuilder.Editor;
 
 namespace QueryBuilder.Editor.Identity;
@@ -9,7 +10,10 @@ namespace QueryBuilder.Editor.Identity;
 /// then "anonymous". Resolved once per request and cached on this scoped instance, matching
 /// TemplateBuilder.Editor's ActorResolver contract.
 /// </summary>
-public sealed class CurrentUserService(IHttpContextAccessor httpContextAccessor, QueryBuilderEditorOptions editorOptions)
+public sealed class CurrentUserService(
+    IHttpContextAccessor httpContextAccessor,
+    QueryBuilderEditorOptions editorOptions,
+    IAppSessionSource? hubSession = null)
     : ICurrentUserService
 {
     private const int ActorMaxLength = 450;
@@ -17,9 +21,16 @@ public sealed class CurrentUserService(IHttpContextAccessor httpContextAccessor,
 
     private string? _resolvedActor;
 
-    public string UserId => ResolveActor();
-    public string DisplayName => ResolveActor();
-    public string? Email => httpContextAccessor.HttpContext?.User?.Identity?.IsAuthenticated == true
+    // In hub mode the session is the only identity: the host's ActorResolver and claims never apply.
+    private HubSessionInfo? HubSession => editorOptions.Hub.Enabled ? hubSession?.Current : null;
+
+    // Never ResolveActor() in hub mode: without a session the caller is anonymous, whatever the host's resolver or
+    // its own sign-in says (a resolver that throws must not fail a sessionless request either).
+    public string UserId => editorOptions.Hub.Enabled ? HubSession?.UserId ?? AnonymousActor : ResolveActor();
+    public string DisplayName => editorOptions.Hub.Enabled ? HubSession?.DisplayName ?? AnonymousActor : ResolveActor();
+    public HubRole? Role => HubSession?.Role;
+    public bool IsSuperAdmin => HubSession?.IsSuperAdmin ?? false;
+    public string? Email => editorOptions.Hub.Enabled ? HubSession?.Email : httpContextAccessor.HttpContext?.User?.Identity?.IsAuthenticated == true
         ? httpContextAccessor.HttpContext.User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value
         : null;
 

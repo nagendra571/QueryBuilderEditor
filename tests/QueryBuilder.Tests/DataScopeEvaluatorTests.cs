@@ -11,7 +11,7 @@ public class DataScopeEvaluatorTests
     [Fact]
     public void Unrestricted_sees_everything_unfiltered_even_undecided_objects()
     {
-        var access = DataScopeEvaluator.Evaluate(Orders, [], ResolvedDataScope.Unrestricted, Keys);
+        var access = DataScopeEvaluator.Evaluate(Orders, [], ResolvedDataScope.Unrestricted, Keys, StringComparison.OrdinalIgnoreCase);
 
         Assert.True(access.IsVisible);
         Assert.Empty(access.Filters);
@@ -20,7 +20,7 @@ public class DataScopeEvaluatorTests
     [Fact]
     public void Undecided_object_is_hidden_from_scoped_user()
     {
-        var access = DataScopeEvaluator.Evaluate(Orders, [TestData.Rule("sales.vw_Programs")], TestData.Scoped(("ProgramId", ["10"])), Keys);
+        var access = DataScopeEvaluator.Evaluate(Orders, [TestData.Rule("sales.vw_Programs")], TestData.Scoped(("ProgramId", ["10"])), Keys, StringComparison.OrdinalIgnoreCase);
 
         Assert.False(access.IsVisible);
     }
@@ -28,7 +28,7 @@ public class DataScopeEvaluatorTests
     [Fact]
     public void Not_scoped_object_is_visible_unfiltered_even_when_denied()
     {
-        var access = DataScopeEvaluator.Evaluate(Orders, [TestData.Rule(Orders)], ResolvedDataScope.Denied, Keys);
+        var access = DataScopeEvaluator.Evaluate(Orders, [TestData.Rule(Orders)], ResolvedDataScope.Denied, Keys, StringComparison.OrdinalIgnoreCase);
 
         Assert.True(access.IsVisible);
         Assert.Empty(access.Filters);
@@ -38,7 +38,7 @@ public class DataScopeEvaluatorTests
     public void Scoped_object_is_filtered_by_the_users_values()
     {
         var access = DataScopeEvaluator.Evaluate(
-            Orders, [TestData.Rule(Orders, "ProgramId", "ProgramId")], TestData.Scoped(("programid", ["10", "12"])), Keys);
+            Orders, [TestData.Rule(Orders, "ProgramId", "ProgramId")], TestData.Scoped(("programid", ["10", "12"])), Keys, StringComparison.OrdinalIgnoreCase);
 
         Assert.True(access.IsVisible);
         var filter = Assert.Single(access.Filters);
@@ -51,7 +51,7 @@ public class DataScopeEvaluatorTests
     {
         var rules = new[] { TestData.Rule(Orders, "ProgramId", "ProgramId"), TestData.Rule(Orders, "Region", "RegionCode") };
 
-        var access = DataScopeEvaluator.Evaluate(Orders, rules, TestData.Scoped(("ProgramId", ["10"])), Keys);
+        var access = DataScopeEvaluator.Evaluate(Orders, rules, TestData.Scoped(("ProgramId", ["10"])), Keys, StringComparison.OrdinalIgnoreCase);
 
         Assert.False(access.IsVisible);
     }
@@ -59,7 +59,7 @@ public class DataScopeEvaluatorTests
     [Fact]
     public void Scoped_object_is_hidden_from_denied_user()
     {
-        var access = DataScopeEvaluator.Evaluate(Orders, [TestData.Rule(Orders, "ProgramId", "ProgramId")], ResolvedDataScope.Denied, Keys);
+        var access = DataScopeEvaluator.Evaluate(Orders, [TestData.Rule(Orders, "ProgramId", "ProgramId")], ResolvedDataScope.Denied, Keys, StringComparison.OrdinalIgnoreCase);
 
         Assert.False(access.IsVisible);
     }
@@ -69,7 +69,7 @@ public class DataScopeEvaluatorTests
     {
         var rules = new[] { TestData.Rule(Orders, "ProgramId", "ProgramId"), TestData.Rule(Orders, "Region", "RegionCode") };
 
-        var access = DataScopeEvaluator.Evaluate(Orders, rules, TestData.Scoped(("ProgramId", ["10"]), ("Region", ["EU"])), Keys);
+        var access = DataScopeEvaluator.Evaluate(Orders, rules, TestData.Scoped(("ProgramId", ["10"]), ("Region", ["EU"])), Keys, StringComparison.OrdinalIgnoreCase);
 
         Assert.True(access.IsVisible);
         Assert.Equal(2, access.Filters.Count);
@@ -79,7 +79,7 @@ public class DataScopeEvaluatorTests
     public void Rule_for_a_key_the_host_no_longer_declares_hides_the_object()
     {
         var access = DataScopeEvaluator.Evaluate(
-            Orders, [TestData.Rule(Orders, "ModuleId", "ProgramId")], TestData.Scoped(("ModuleId", ["1"])), Keys);
+            Orders, [TestData.Rule(Orders, "ModuleId", "ProgramId")], TestData.Scoped(("ModuleId", ["1"])), Keys, StringComparison.OrdinalIgnoreCase);
 
         Assert.False(access.IsVisible);
     }
@@ -89,7 +89,7 @@ public class DataScopeEvaluatorTests
     {
         var rules = new[] { TestData.Rule(Orders), TestData.Rule(Orders, "ProgramId", "ProgramId") };
 
-        var access = DataScopeEvaluator.Evaluate(Orders, rules, TestData.Scoped(("ProgramId", ["10"])), Keys);
+        var access = DataScopeEvaluator.Evaluate(Orders, rules, TestData.Scoped(("ProgramId", ["10"])), Keys, StringComparison.OrdinalIgnoreCase);
 
         Assert.Single(access.Filters);
     }
@@ -97,7 +97,7 @@ public class DataScopeEvaluatorTests
     [Fact]
     public void Object_name_matching_ignores_case()
     {
-        var access = DataScopeEvaluator.Evaluate("SALES.VW_ORDERS", [TestData.Rule(Orders)], ResolvedDataScope.Denied, Keys);
+        var access = DataScopeEvaluator.Evaluate("SALES.VW_ORDERS", [TestData.Rule(Orders)], ResolvedDataScope.Denied, Keys, StringComparison.OrdinalIgnoreCase);
 
         Assert.True(access.IsVisible);
     }

@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <IsPackable>false</IsPackable>
@@ -12,6 +12,14 @@
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
     <PackageReference Include="xunit" Version="2.9.3" />
     <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
+  </ItemGroup>
+
+  <!-- Test host only: the package itself takes no dependency on it. Versions match each target's framework. -->
+  <ItemGroup Condition="'$(TargetFramework)' == 'net8.0'">
+    <PackageReference Include="Microsoft.AspNetCore.TestHost" Version="8.0.32" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(TargetFramework)' == 'net10.0'">
+    <PackageReference Include="Microsoft.AspNetCore.TestHost" Version="10.0.2" />
   </ItemGroup>
 
   <ItemGroup>
@@ -29,6 +37,15 @@
     <ProjectReference Include="..\..\src\QueryBuilder.Application\QueryBuilder.Application.csproj" />
     <ProjectReference Include="..\..\src\QueryBuilder.Infrastructure\QueryBuilder.Infrastructure.csproj" />
     <ProjectReference Include="..\..\src\QueryBuilder.Editor\QueryBuilder.Editor.csproj" />
+    <ProjectReference Include="..\..\src\QueryBuilder.Launch\QueryBuilder.Launch.csproj" />
+  </ItemGroup>
+
+  <!-- The hub host is net10.0 only; its tests live in HubHost/. -->
+  <ItemGroup Condition="'$(TargetFramework)' == 'net10.0'">
+    <ProjectReference Include="..\..\src\QueryBuilder.Hub\QueryBuilder.Hub.csproj" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(TargetFramework)' != 'net10.0'">
+    <Compile Remove="HubHost/**" />
   </ItemGroup>
 
 </Project>

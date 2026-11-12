@@ -47,8 +47,6 @@ export interface ColumnMetadata {
   isNullable: boolean
   isPrimaryKey: boolean
   isForeignKey: boolean
-  foreignKeyTable?: string | null
-  foreignKeyColumn?: string | null
   ordinalPosition: number
 }
 
@@ -64,9 +62,24 @@ export interface SchemaMetadata {
   objects: SchemaObjectMetadata[]
 }
 
+export interface UnavailableObject {
+  schemaName: string
+  name: string
+  kind: SchemaObjectKind
+  reason: 'nameClash'
+}
+
 export interface DataSourceCatalog {
   dataSourceId: string
+  provider: DataSourceProvider
   schemas: SchemaMetadata[]
+  /** Absent in responses cached before this field existed. */
+  unavailableObjects?: UnavailableObject[]
+}
+
+export interface AdminUnavailableObject extends UnavailableObject {
+  /** Already formatted for display (`public.orders`, or quoted when a dot is ambiguous). */
+  clashesWith: string[]
 }
 
 export interface DataSourceDto {
@@ -140,12 +153,39 @@ export interface FilterGroup {
   groups: FilterGroup[]
 }
 
+export type ParameterType =
+  | 'text'
+  | 'number'
+  | 'date'
+  | 'dateTime'
+  | 'dateRange'
+  | 'dateTimeRange'
+  | 'list'
+  | 'queryList'
+  | 'boolean'
+
 export interface QueryParameter {
   name: string
   label: string
   dataType: ColumnDataType
+  /** Absent on queries saved before parameter types existed; then derived from `dataType`. */
+  type?: ParameterType | null
+  /**
+   * Single value, a JSON array string for several values, `start~end` for a range, or a relative
+   * token such as `last_30_days` / `today` that the server resolves at run time.
+   */
   defaultValue?: string | null
   isRequired: boolean
+  options?: string[]
+  optionsQueryId?: string | null
+  optionsLabelColumn?: string | null
+  optionsValueColumn?: string | null
+  allowMultiple?: boolean
+}
+
+export interface ParameterOption {
+  label: string
+  value: string
 }
 
 export interface QueryDefinition {
@@ -213,6 +253,8 @@ export interface AppUserDto {
   id: string
   displayName: string
   email?: string | null
+  /** Hub mode only: launched into the app, or listed by the data source's AppUsers view. */
+  source?: 'launch' | 'directory'
 }
 
 export interface AppUsersResult {
@@ -252,6 +294,7 @@ export interface QuerySqlPreviewDto {
 export interface QueryResultColumnDto {
   name: string
   dataType: ColumnDataType
+  aggregate?: AggregateFunction | null
 }
 
 export interface QueryResultDto {
@@ -278,6 +321,8 @@ export interface ApiProblemDetails {
   title: string
   detail?: string
   errors?: Record<string, string[]>
+  /** Only on a 409 "In use": how many of each kind still use the object. */
+  counts?: Record<string, number>
 }
 
 export type AuditAction =
@@ -293,6 +338,9 @@ export type AuditAction =
   | 'dataSourceCatalogPolicyUpdated'
   | 'dataSourceDataScopeUpdated'
   | 'dataSourceRecordLimitUpdated'
+  | 'visualizationCreated'
+  | 'visualizationUpdated'
+  | 'visualizationDeleted'
 
 export interface AuditLogEntryDto {
   id: string
@@ -310,11 +358,41 @@ export interface AuditLogEntryDto {
 
 // ---- Admin ----
 
+export type SecretKeyMatch = 'current' | 'previous' | 'unreadable'
+
+export interface EncryptionKeySourceDto {
+  id: string
+  name: string
+  isActive: boolean
+  state: SecretKeyMatch
+}
+
+/** Fingerprints and counts only; the server never sends a key, a blob or any connection detail. */
+export interface EncryptionKeyStatusDto {
+  keyConfigured: boolean
+  fingerprint: string | null
+  previousFingerprints: string[]
+  managedCount: number
+  onCurrentKey: number
+  onPreviousKey: number
+  unreadable: number
+  sources: EncryptionKeySourceDto[]
+  canReencrypt: boolean
+}
+
+export interface ReencryptResultDto {
+  reencrypted: number
+  alreadyCurrent: number
+  unreadable: number
+  skippedBecauseChanged: number
+}
+
 export interface AdminDataSourceSummaryDto {
   id: string
   name: string
   provider: DataSourceProvider
   isActive: boolean
+  locked?: boolean
 }
 
 export interface AdminDataSourceDetailDto {
@@ -327,6 +405,71 @@ export interface AdminDataSourceDetailDto {
   maxRecords: number | null
   /** The host app's package-wide default; null = no limit when the data source has none either. */
   defaultMaxRecords: number | null
+  unavailable?: AdminUnavailableObject[]
+  description: string | null
+  isActive: boolean
+  /** True when the connection was entered in the admin UI and is stored encrypted. */
+  isManaged: boolean
+  provider: DataSourceProvider
+  /** Only for a managed source whose details can be read. Never carries the password. */
+  connection: ConnectionDetailsDto | null
+  /** A managed source whose saved details can't be decrypted with the current key. */
+  connectionUnreadable: boolean
+  /** Set only for a source whose connection comes from host configuration. */
+  connectionStringName: string | null
+  /** Why the object list is empty when the data source couldn't be reached. */
+  catalogError: string | null
+  /** True for the data source that uses QueryBuilder's own database. */
+  usesMetadataDatabase: boolean
+  /** Hub mode: added by a super admin, so app admins can only read it. */
+  locked?: boolean
+  canEdit?: boolean
+  canManageConnection?: boolean
+}
+
+export type ConnectionSslMode = 'disable' | 'require' | 'verifyFull'
+
+export interface ConnectionDetailsDto {
+  host: string
+  port: number
+  database: string
+  username: string
+  sslMode: ConnectionSslMode
+  hasPassword: boolean
+}
+
+export interface ConnectionInput {
+  host: string
+  port: number | null
+  database: string
+  username: string
+  /** Blank keeps the stored one, but only when host, port and username are unchanged. */
+  password: string
+  sslMode: ConnectionSslMode
+}
+
+export interface CreateDataSourceRequest {
+  name: string
+  description: string
+  provider: DataSourceProvider
+  connection: ConnectionInput
+}
+
+export interface UpdateDataSourceRequest {
+  name: string
+  description: string
+  connection?: ConnectionInput
+}
+
+export interface TestConnectionRequest {
+  provider: DataSourceProvider
+  connection: ConnectionInput
+  existingId?: string
+}
+
+export interface ConnectionTestResult {
+  ok: boolean
+  message: string
 }
 
 export interface UpdateRecordLimitRequest {
@@ -347,14 +490,24 @@ export interface AdminDataScopeObjectDto {
   state: DataScopeState
   /** Declared scope key → column name, only for `scoped`. */
   mappings: Record<string, string>
-  /** Keys mapped in the database that the host no longer declares. */
+  /** Keys mapped in the database that are no longer a scope key of this data source. */
   staleKeys: string[]
 }
 
 export interface AdminDataScopeDto {
   enabled: boolean
+  /** Host keys plus this data source's own: what a view column can be mapped to. */
   declaredKeys: string[]
+  /** Keys set in the app's code; locked here. */
+  hostKeys: string[]
+  /** Keys an admin added to this data source. */
+  dataSourceKeys: string[]
   objects: AdminDataScopeObjectDto[]
+  unavailable?: AdminUnavailableObject[]
+}
+
+export interface UpdateScopeKeysRequest {
+  keys: string[]
 }
 
 export interface DataScopeObjectRuleDto {
@@ -365,4 +518,264 @@ export interface DataScopeObjectRuleDto {
 
 export interface UpdateDataScopeRequest {
   objects: DataScopeObjectRuleDto[]
+}
+
+// ---- Visualizations ----
+
+export type VisualizationType =
+  | 'bar'
+  | 'line'
+  | 'pie'
+  | 'counter'
+  | 'area'
+  | 'horizontalBar'
+  | 'combo'
+  | 'scatter'
+  | 'table'
+  | 'pivot'
+  | 'funnel'
+  | 'waterfall'
+  | 'trend'
+
+export type ValueFormatStyle = 'number' | 'compact' | 'currency' | 'percent'
+
+export interface ValueFormat {
+  style: ValueFormatStyle
+  decimals?: number | null
+  currency?: string | null
+}
+
+export interface TableOptions {
+  columns: string[]
+}
+
+export interface PivotOptions {
+  rows: string[]
+  column?: string | null
+  values: string[]
+  totals: boolean
+  shade: boolean
+}
+
+export type VisualizationSort = 'none' | 'asc' | 'desc'
+
+export interface CounterOptions {
+  value: string
+  label?: string | null
+  decimals: number
+  target?: string | null
+}
+
+/** Columns are referenced by output name (a column's alias, or its name when it has none). */
+export interface VisualizationOptions {
+  version: number
+  x?: string | null
+  measures: string[]
+  series?: string | null
+  stacked: boolean
+  sortX: VisualizationSort
+  counter?: CounterOptions | null
+  percent?: boolean
+  lineMeasures?: string[]
+  size?: string | null
+  label?: string | null
+  table?: TableOptions | null
+  pivot?: PivotOptions | null
+  format?: ValueFormat | null
+}
+
+export interface VisualizationDto {
+  id: string
+  savedQueryId: string
+  name: string
+  type: VisualizationType
+  options: VisualizationOptions
+  displayOrder: number
+  createdBy: string
+  createdAtUtc: string
+  updatedBy?: string | null
+  updatedAtUtc?: string | null
+}
+
+export interface SaveVisualizationRequest {
+  name: string
+  type: VisualizationType
+  options: VisualizationOptions
+}
+
+export interface RenderVisualizationRequest {
+  parameterValues: Record<string, string | null>
+  /** Set when the chart is drawn as a tile: the server then checks the caller may see that dashboard and tile. */
+  dashboardId?: string
+  tileId?: string
+}
+
+/** What a granted tile needs to draw: the chart and its parameter controls, never the query itself. */
+export interface TileChartDto {
+  savedQueryId: string
+  savedQueryName: string | null
+  isDisabled: boolean
+  visualization: { id: string; name: string; type: VisualizationType; options: VisualizationOptions }
+  parameters: Array<{
+    name: string
+    label: string
+    dataType: ColumnDataType
+    type: ParameterType
+    defaultValue?: string | null
+    isRequired: boolean
+    options: string[]
+    allowMultiple: boolean
+  }>
+}
+
+/** The dashboard tile a chart or its parameter choices are requested for. */
+export interface DashboardContext {
+  dashboardId: string
+  tileId: string
+}
+
+/** Only the columns the chart references — never the query's full output. */
+export interface VisualizationDataDto {
+  columns: QueryResultColumnDto[]
+  rows: Record<string, unknown>[]
+  rowCount: number
+  executionTimeMs: number
+  rowLimit: number
+  truncated?: boolean
+}
+
+export type DashboardTileKind = 'chart' | 'text' | 'section'
+
+export interface DashboardSummaryDto {
+  id: string
+  name: string
+  description?: string | null
+  ownerId: string
+  ownerName: string
+  isOwner: boolean
+  accessLevel: QueryAccessLevel
+  tileCount: number
+  /** Hub mode only: visible read-only to everyone in the app. */
+  published?: boolean
+  createdAtUtc: string
+  updatedAtUtc?: string | null
+}
+
+export interface DashboardTileChartDto {
+  savedQueryId: string
+  savedQueryName: string | null
+  visualizationId: string
+  visualizationName: string
+  type: VisualizationType
+}
+
+/** A restricted tile carries only id, kind, order, width, height and restricted = true. */
+export interface DashboardTileDto {
+  id: string
+  kind: DashboardTileKind
+  order: number
+  /** Grid units in a 12-column grid: column and row of the top-left corner. */
+  x: number
+  y: number
+  width: number
+  height: number
+  autoHeight: boolean
+  restricted: boolean
+  missing: boolean
+  title?: string | null
+  text?: string | null
+  chart?: DashboardTileChartDto | null
+  /** Absent for restricted, removed and text tiles, and for charts that use every query default. */
+  parameterMappings?: Record<string, ParameterMappingDto> | null
+}
+
+/** A parameter shared by several tiles. Same shape rules as a query parameter, plus the saved default. */
+export interface DashboardParameterDto {
+  name: string
+  title?: string | null
+  type: ParameterType
+  options?: string[] | null
+  optionsQueryId?: string | null
+  optionsLabelColumn?: string | null
+  optionsValueColumn?: string | null
+  allowMultiple: boolean
+  value?: string | null
+}
+
+export type ParameterMappingSource = 'default' | 'dashboard' | 'tile' | 'fixed'
+
+/** Where one query parameter of a chart tile gets its value. `default` is never stored. */
+export interface ParameterMappingDto {
+  source: ParameterMappingSource
+  dashboardParameter?: string | null
+  value?: string | null
+  title?: string | null
+}
+
+export interface DashboardDetailDto {
+  id: string
+  name: string
+  description?: string | null
+  ownerId: string
+  ownerName: string
+  isOwner: boolean
+  accessLevel: QueryAccessLevel
+  published?: boolean
+  version: number
+  tiles: DashboardTileDto[]
+  parameters?: DashboardParameterDto[] | null
+}
+
+export interface SaveDashboardRequest {
+  name: string
+  description?: string | null
+  version?: number | null
+}
+
+export interface SaveDashboardTileRequest {
+  id?: string | null
+  kind: DashboardTileKind
+  order: number
+  x: number
+  y: number
+  width: number
+  height: number
+  autoHeight: boolean
+  title?: string | null
+  text?: string | null
+  visualizationId?: string | null
+  /** Omitted = keep what is stored; `{}` = clear. */
+  parameterMappings?: Record<string, ParameterMappingDto> | null
+}
+
+export interface SaveDashboardTilesRequest {
+  version: number
+  tiles: SaveDashboardTileRequest[]
+  /** Omitted = keep the stored list; `[]` = clear. */
+  parameters?: DashboardParameterDto[]
+}
+
+export interface ShareDashboardRequest {
+  sharedWithUserId: string
+  sharedWithUserEmail: string
+  accessLevel: QueryAccessLevel
+  alsoShareQueryIds?: string[]
+}
+
+export interface InaccessibleQueryDto {
+  id: string
+  name: string
+  canShare: boolean
+}
+
+export interface DashboardSharePreviewDto {
+  inaccessibleQueries: InaccessibleQueryDto[]
+}
+
+export interface PickableVisualizationDto {
+  visualizationId: string
+  visualizationName: string
+  type: VisualizationType
+  savedQueryId: string
+  savedQueryName: string
 }

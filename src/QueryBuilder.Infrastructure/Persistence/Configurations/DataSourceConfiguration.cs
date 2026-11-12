@@ -11,10 +11,14 @@ public sealed class DataSourceConfiguration : IEntityTypeConfiguration<DataSourc
     {
         builder.ToTable("DataSources");
         builder.HasKey(x => x.Id);
+        builder.Property(x => x.AppId).IsRequired();
+        builder.HasOne<App>().WithMany().HasForeignKey(x => x.AppId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasIndex(x => x.AppId);
 
         builder.Property(x => x.Name).HasMaxLength(200).IsRequired();
         builder.Property(x => x.Description).HasMaxLength(1000);
         builder.Property(x => x.ConnectionStringName).HasMaxLength(200).IsRequired();
+        builder.Property(x => x.EncryptedConnection).HasColumnType("nvarchar(max)");
         builder.Property(x => x.CreatedBy).HasMaxLength(450).IsRequired();
         builder.Property(x => x.UpdatedBy).HasMaxLength(450);
 
@@ -28,6 +32,16 @@ public sealed class DataSourceConfiguration : IEntityTypeConfiguration<DataSourc
                 v => v.ToList()));
 
         builder.Property(x => x.AllowedObjects)
+            .HasConversion(
+                v => string.Join(',', v),
+                v => v.Length == 0 ? new List<string>() : v.Split(',', StringSplitOptions.RemoveEmptyEntries).ToList())
+            .Metadata.SetValueComparer(new ValueComparer<List<string>>(
+                (a, b) => (a ?? new()).SequenceEqual(b ?? new()),
+                v => v.Aggregate(0, (hash, s) => HashCode.Combine(hash, s.GetHashCode())),
+                v => v.ToList()));
+
+        builder.Property(x => x.ScopeKeys)
+            .HasDefaultValueSql("''")
             .HasConversion(
                 v => string.Join(',', v),
                 v => v.Length == 0 ? new List<string>() : v.Split(',', StringSplitOptions.RemoveEmptyEntries).ToList())

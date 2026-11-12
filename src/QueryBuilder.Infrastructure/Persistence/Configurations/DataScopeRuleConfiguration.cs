@@ -10,6 +10,8 @@ public sealed class DataScopeRuleConfiguration : IEntityTypeConfiguration<DataSc
     {
         builder.ToTable("DataScopeRules");
         builder.HasKey(x => x.Id);
+        builder.Property(x => x.AppId).IsRequired();
+        builder.HasOne<App>().WithMany().HasForeignKey(x => x.AppId).OnDelete(DeleteBehavior.Restrict);
 
         builder.Property(x => x.ObjectName).HasMaxLength(256).IsRequired();
         builder.Property(x => x.ScopeKey).HasMaxLength(128);

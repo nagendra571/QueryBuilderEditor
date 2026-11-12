@@ -20,13 +20,40 @@ public sealed class GlobalExceptionHandler(ILogger<GlobalExceptionHandler> logge
             logger.LogError(exception, "Unhandled exception processing {Method} {Path}", httpContext.Request.Method, httpContext.Request.Path);
         }
 
+        if (exception is CrossAppWriteException crossApp)
+        {
+            // The caller sees a plain 404; operators need to know someone reached for another app's row.
+            // A host resolver that throws must not turn the 404 into a 500.
+            string? actor = null;
+            try
+            {
+                actor = httpContext.RequestServices is { } services
+                    ? Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetService<Application.Abstractions.ICurrentUserService>(services)?.UserId
+                    : null;
+            }
+            catch (Exception)
+            {
+                actor = "(unknown)";
+            }
+
+            logger.LogWarning("Refused a write across apps: app {AppId}, actor {Actor}, {EntityType} {EntityId}, target row app {RowAppId}",
+                crossApp.AppId, actor, crossApp.EntityType, crossApp.EntityId, crossApp.RowAppId);
+        }
+
         var problemDetails = new ProblemDetails
         {
             Status = statusCode,
             Title = title,
-            Detail = statusCode == StatusCodes.Status500InternalServerError ? "An unexpected error occurred." : exception.Message,
+            Detail = statusCode == StatusCodes.Status500InternalServerError
+                ? "An unexpected error occurred."
+                : exception is CrossAppWriteException ? "The requested item was not found." : exception.Message,
             Instance = httpContext.Request.Path
         };
+
+        if (exception is InUseException inUse)
+        {
+            problemDetails.Extensions["counts"] = inUse.Counts;
+        }
 
         if (errors is not null)
         {
@@ -41,11 +68,15 @@ public sealed class GlobalExceptionHandler(ILogger<GlobalExceptionHandler> logge
     private static (int StatusCode, string Title, object? Errors) Map(Exception exception) => exception switch
     {
         NotFoundException => (StatusCodes.Status404NotFound, "Not found", null),
+        // Another app's row is indistinguishable from a missing one; the message names why, so it stays out of the body.
+        CrossAppWriteException => (StatusCodes.Status404NotFound, "Not found", null),
         ForbiddenException => (StatusCodes.Status403Forbidden, "Forbidden", null),
         CatalogValidationException => (StatusCodes.Status400BadRequest, "Invalid query definition", null),
         QueryExecutionException => (StatusCodes.Status400BadRequest, "Query failed", null),
         QueryDisabledException => (StatusCodes.Status409Conflict, "Query disabled", null),
+        ConcurrencyConflictException => (StatusCodes.Status409Conflict, "Conflict", null),
         RecordLimitExceededException => (StatusCodes.Status409Conflict, "Too many records", null),
+        InUseException => (StatusCodes.Status409Conflict, "In use", null),
         // Endpoints read bodies explicitly via ReadFromJsonAsync, so a malformed or wrongly-typed body
         // (e.g. 1.5 for an int) surfaces here rather than through minimal-API binding's own 400.
         System.Text.Json.JsonException => (StatusCodes.Status400BadRequest, "Invalid request body", null),

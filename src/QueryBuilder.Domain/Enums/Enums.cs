@@ -34,6 +34,11 @@ public enum SchemaObjectKind
     View = 1
 }
 
+public enum UnavailableReason
+{
+    NameClash = 0
+}
+
 public enum JoinType
 {
     Inner = 0,
@@ -111,7 +116,47 @@ public enum AuditAction
     QueryEnabled = 8,
     DataSourceCatalogPolicyUpdated = 9,
     DataSourceDataScopeUpdated = 10,
-    DataSourceRecordLimitUpdated = 11
+    DataSourceRecordLimitUpdated = 11,
+    VisualizationCreated = 12,
+    VisualizationUpdated = 13,
+    VisualizationDeleted = 14,
+    DashboardCreated = 15,
+    DashboardUpdated = 16,
+    DashboardDeleted = 17,
+    DashboardShared = 18,
+    DashboardUnshared = 19,
+    DataSourceCreated = 20,
+    DataSourceUpdated = 21,
+    DataSourceActivated = 22,
+    DataSourceDeactivated = 23,
+    EncryptionKeyRotated = 24,
+    DataSourceScopeKeysUpdated = 25,
+    LaunchSucceeded = 26,
+    LaunchRefused = 27,
+    SuperAdminSignedIn = 28,
+    AppRegistryChanged = 29,
+    SuperAdminSignInRefused = 30,
+    SuperAdminViewedApp = 31,
+    DashboardPublished = 32,
+    DashboardUnpublished = 33,
+    DataSourceLockChanged = 34,
+    DataSourceMoved = 35,
+    SuperAdminCodeIssued = 36
+}
+
+/// <summary>How a managed data source's connection is encrypted in transit.</summary>
+public enum ConnectionSslMode
+{
+    Disable = 0,
+    Require = 1,
+    VerifyFull = 2
+}
+
+public enum DashboardTileKind
+{
+    Chart = 0,
+    Text = 1,
+    Section = 2
 }
 
 /// <summary>An admin's row-level data-scope decision for one catalog object. Not persisted as-is —
@@ -121,4 +166,70 @@ public enum DataScopeState
     Undecided = 0,
     NotScoped = 1,
     Scoped = 2
+}
+
+public enum VisualizationType
+{
+    Bar = 0,
+    Line = 1,
+    Pie = 2,
+    Counter = 3,
+    Area = 4,
+    HorizontalBar = 5,
+    Combo = 6,
+    Scatter = 7,
+    Table = 8,
+    Pivot = 9,
+    Funnel = 10,
+    Waterfall = 11,
+    Trend = 12
+}
+
+public enum ValueFormatStyle
+{
+    Number = 0,
+    Compact = 1,
+    Currency = 2,
+    Percent = 3
+}
+
+public enum VisualizationSort
+{
+    None = 0,
+    Asc = 1,
+    Desc = 2
+}
+
+public enum ParameterType
+{
+    Text = 0,
+    Number = 1,
+    Date = 2,
+    DateTime = 3,
+    DateRange = 4,
+    DateTimeRange = 5,
+    List = 6,
+    QueryList = 7,
+    Boolean = 8
+}
+
+/// <summary>Where a dashboard tile gets the value of one of its query's parameters.</summary>
+public enum ParameterMappingSource
+{
+    /// <summary>The query's own default (or nothing, for an optional parameter).</summary>
+    Default = 0,
+    /// <summary>A dashboard-wide parameter, shared with other tiles.</summary>
+    Dashboard = 1,
+    /// <summary>A small control in this tile's header.</summary>
+    Tile = 2,
+    /// <summary>A value the editor set; viewers see no control.</summary>
+    Fixed = 3
+}
+
+/// <summary>What a hub user may do inside one app, as stated by that app's launch token.</summary>
+public enum HubRole
+{
+    Viewer = 0,
+    Author = 1,
+    Admin = 2
 }

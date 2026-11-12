@@ -1,5 +1,7 @@
 using QueryBuilder.Application.Abstractions;
 using QueryBuilder.Application.Common;
+using QueryBuilder.Application.DataScoping;
+using QueryBuilder.Application.DataSourceManagement;
 using QueryBuilder.Application.Dtos;
 using QueryBuilder.Application.Exceptions;
 using QueryBuilder.Domain.Entities;
@@ -24,6 +26,7 @@ public sealed class UpdateDataScopeCommandHandler(
     {
         var dataSource = await dataSourceRepository.GetByIdAsync(request.DataSourceId, cancellationToken)
             ?? throw new NotFoundException(nameof(DataSource), request.DataSourceId);
+        DataSourceLock.EnsureCanChange(dataSource, AccessActor.From(currentUser));
 
         if (!currentScope.IsEnabled)
         {
@@ -31,13 +34,16 @@ public sealed class UpdateDataScopeCommandHandler(
                 "Row-level data scoping is not enabled — configure options.DataScope in AddQueryBuilderEditor first.");
         }
 
+        var effectiveKeys = DataScopeKeys.Effective(currentScope.HostKeys, dataSource);
         var catalog = await catalogService.GetCatalogAsync(request.DataSourceId, cancellationToken);
+        var comparison = IdentifierMatching.Comparison(catalog.Provider);
+        var comparer = IdentifierMatching.Comparer(catalog.Provider);
         var objectsByKey = catalog.Schemas
             .SelectMany(s => s.Objects)
-            .ToDictionary(o => $"{o.SchemaName}.{o.Name}", StringComparer.OrdinalIgnoreCase);
+            .ToDictionary(o => $"{o.SchemaName}.{o.Name}", comparer);
 
         var rules = new List<DataScopeRule>();
-        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var seen = new HashSet<string>(comparer);
         foreach (var entry in request.Objects.Where(o => o.State != DataScopeState.Undecided))
         {
             if (!objectsByKey.TryGetValue(entry.ObjectName, out var metadata))
@@ -67,15 +73,41 @@ public sealed class UpdateDataScopeCommandHandler(
             }
             foreach (var (key, columnName) in mappings)
             {
-                var declaredKey = currentScope.DeclaredKeys.FirstOrDefault(k => string.Equals(k, key, StringComparison.OrdinalIgnoreCase))
+                var declaredKey = effectiveKeys.FirstOrDefault(k => string.Equals(k, key, StringComparison.OrdinalIgnoreCase))
                     ?? throw new CatalogValidationException($"'{key}' is not a declared data-scope key.");
-                var column = metadata.Columns.FirstOrDefault(c => string.Equals(c.Name, columnName, StringComparison.OrdinalIgnoreCase))
+                var column = metadata.Columns.FirstOrDefault(c => string.Equals(c.Name, columnName, comparison))
                     ?? throw new CatalogValidationException($"Column '{columnName}' does not exist on '{objectKey}'.");
+                if (column.HasNondeterministicCollation)
+                {
+                    throw new CatalogValidationException(
+                        $"Column '{column.Name}' on '{objectKey}' uses a case- or accent-insensitive collation, so it can't be a scope column. Map a column with an exact collation, or add a view that exposes one.");
+                }
                 rules.Add(NewRule(objectKey, declaredKey, column.Name));
             }
         }
 
-        await ruleRepository.ReplaceForDataSourceAsync(request.DataSourceId, rules, cancellationToken);
+        // Decisions on objects that clash by name aren't editable, but replacing all rules must not lose them.
+        var unavailableKeys = (await catalogService.GetUnavailableObjectsAsync(request.DataSourceId, cancellationToken))
+            .Select(u => $"{u.SchemaName}.{u.Name}")
+            .ToHashSet(comparer);
+        var carriedForward = new List<DataScopeRule>();
+        if (unavailableKeys.Count > 0)
+        {
+            var existing = await ruleRepository.GetForDataSourceAsync(request.DataSourceId, cancellationToken);
+            foreach (var old in existing.Where(r => unavailableKeys.Contains(r.ObjectName) && !seen.Contains(r.ObjectName)))
+            {
+                carriedForward.Add(new DataScopeRule
+                {
+                    DataSourceId = request.DataSourceId,
+                    ObjectName = old.ObjectName,
+                    ScopeKey = old.ScopeKey,
+                    ColumnName = old.ColumnName,
+                    CreatedBy = old.CreatedBy
+                });
+            }
+        }
+
+        await ruleRepository.ReplaceForDataSourceAsync(request.DataSourceId, [.. rules, .. carriedForward], cancellationToken);
 
         var scopedCount = rules.Where(r => r.ScopeKey is not null).Select(r => r.ObjectName).Distinct().Count();
         var notScopedCount = rules.Count(r => r.ScopeKey is null);

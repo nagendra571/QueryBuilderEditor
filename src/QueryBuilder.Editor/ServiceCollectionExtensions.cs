@@ -1,13 +1,23 @@
+using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.Extensions.Logging;
+using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.DataProtection.KeyManagement;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using QueryBuilder.Editor.Hub;
 using Microsoft.Extensions.DependencyInjection;
 using QueryBuilder.Application;
 using QueryBuilder.Application.Abstractions;
 using QueryBuilder.Application.Common;
+using QueryBuilder.Application.DataSourceManagement;
+using QueryBuilder.Editor.Authorization;
 using QueryBuilder.Editor.DataScoping;
 using QueryBuilder.Editor.Diagnostics;
 using QueryBuilder.Editor.Identity;
 using QueryBuilder.Editor.Middleware;
 using QueryBuilder.Infrastructure;
+using QueryBuilder.Infrastructure.Security;
 
 namespace QueryBuilder.Editor;
 
@@ -49,15 +59,188 @@ public static class ServiceCollectionExtensions
                 $"{RecordLimits.Min} and {RecordLimits.Max}, or left unset for no limit.");
         }
 
+        byte[]? secretKey = null;
+        var management = options.DataSourceManagement;
+        if (management.EncryptionKey is { Length: > 0 })
+        {
+            if (!ConnectionSecretKey.TryParse(management.EncryptionKey, out var parsed, out var keyError))
+            {
+                throw new InvalidOperationException(
+                    $"{nameof(QueryBuilderEditorOptions.DataSourceManagement)}.{nameof(DataSourceManagementOptions.EncryptionKey)} is invalid: {keyError} " +
+                    "Use base64 of exactly 32 bytes, for example the output of `openssl rand -base64 32`.");
+            }
+
+            secretKey = parsed;
+        }
+
+        var previousKeys = new List<byte[]>();
+        var previousEntries = management.PreviousEncryptionKeys ?? [];
+        const string previousName = nameof(DataSourceManagementOptions.PreviousEncryptionKeys);
+        if (previousEntries.Count > 0 && secretKey is null)
+        {
+            throw new InvalidOperationException(
+                $"{nameof(QueryBuilderEditorOptions.DataSourceManagement)}.{previousName} needs " +
+                $"{nameof(DataSourceManagementOptions.EncryptionKey)}: previous keys are only for reading, so there has to be a current key to write with.");
+        }
+
+        for (var i = 0; i < previousEntries.Count; i++)
+        {
+            // Errors name the index only: the entry is a secret and must never reach a log.
+            if (!ConnectionSecretKey.TryParse(previousEntries[i], out var previous, out var previousError))
+            {
+                throw new InvalidOperationException(
+                    $"{nameof(QueryBuilderEditorOptions.DataSourceManagement)}.{previousName}[{i}] is invalid: {previousError} " +
+                    "Use base64 of exactly 32 bytes.");
+            }
+
+            if (previous.AsSpan().SequenceEqual(secretKey))
+            {
+                throw new InvalidOperationException(
+                    $"{nameof(QueryBuilderEditorOptions.DataSourceManagement)}.{previousName}[{i}] is the same as {nameof(DataSourceManagementOptions.EncryptionKey)}. " +
+                    "Remove it: the current key is always tried first.");
+            }
+
+            var duplicate = previousKeys.FindIndex(k => k.AsSpan().SequenceEqual(previous));
+            if (duplicate >= 0)
+            {
+                throw new InvalidOperationException(
+                    $"{nameof(QueryBuilderEditorOptions.DataSourceManagement)}.{previousName}[{i}] repeats entry {duplicate}. Remove one of them.");
+            }
+
+            previousKeys.Add(previous);
+        }
+
+        if (management.Enabled)
+        {
+            if (secretKey is null)
+            {
+                throw new InvalidOperationException(
+                    $"{nameof(QueryBuilderEditorOptions.DataSourceManagement)}.{nameof(DataSourceManagementOptions.Enabled)} needs " +
+                    $"{nameof(DataSourceManagementOptions.EncryptionKey)}: base64 of 32 random bytes, for example `openssl rand -base64 32`.");
+            }
+
+            if (options.AdminAuthorization.Mode == QueryBuilderAuthorizationMode.Anonymous
+                && string.IsNullOrWhiteSpace(options.AdminAuthorization.PolicyName)
+                && !management.AllowAnonymousAdmins)
+            {
+                throw new InvalidOperationException(
+                    $"{nameof(QueryBuilderEditorOptions.DataSourceManagement)}.{nameof(DataSourceManagementOptions.Enabled)} lets admins point this app at any server, " +
+                    $"so {nameof(QueryBuilderEditorOptions.AdminAuthorization)} can't be Anonymous. Restrict it, or set " +
+                    $"{nameof(DataSourceManagementOptions.AllowAnonymousAdmins)} = true for local development only.");
+            }
+        }
+
         // Registered as the resolved instance (not IOptions<T>) — there is exactly one QueryBuilder
         // configuration per host, set once here at startup.
         services.AddSingleton(options);
         services.AddScoped<ICurrentUserService, CurrentUserService>();
         services.AddScoped<ICurrentDataScope, CurrentDataScopeService>();
         services.AddSingleton(new RecordLimitSettings(options.DefaultMaxRecords));
+        // Re-encrypting connects nowhere, so it doesn't need Enabled, but it follows the same admin rule: with apps
+        // sharing one database mid-rotation, an early run makes sources unreadable to an app still on the old key.
+        var anonymousAdmins = options.AdminAuthorization.Mode == QueryBuilderAuthorizationMode.Anonymous
+            && string.IsNullOrWhiteSpace(options.AdminAuthorization.PolicyName);
+        var reencryptAllowed = secretKey is not null && (!anonymousAdmins || management.AllowAnonymousAdmins);
+        // Hub mode requires the key, and connections there are governed by role and the app switch rather than by this flag.
+        services.AddSingleton(new DataSourceManagementSettings(management.Enabled || options.Hub.Enabled, reencryptAllowed));
+
+        if (options.Hub.Enabled)
+        {
+            services.AddSingleton(new QueryBuilder.Application.Hub.LaunchValidationSettings(options.Hub.Audience ?? string.Empty));
+            if (secretKey is null)
+            {
+                throw new InvalidOperationException(
+                    $"Hub mode needs {nameof(QueryBuilderEditorOptions.DataSourceManagement)}.{nameof(DataSourceManagementOptions.EncryptionKey)}: " +
+                    "it encrypts the session key ring stored in the database. Use base64 of 32 random bytes, for example `openssl rand -base64 32`.");
+            }
+
+            if (options.Hub.IdleTimeout <= TimeSpan.Zero)
+            {
+                throw new InvalidOperationException($"{nameof(HubOptions)}.{nameof(HubOptions.IdleTimeout)} must be greater than zero.");
+            }
+
+            if (options.Hub.AbsoluteLifetime <= TimeSpan.Zero)
+            {
+                throw new InvalidOperationException($"{nameof(HubOptions)}.{nameof(HubOptions.AbsoluteLifetime)} must be greater than zero.");
+            }
+
+            if (options.Hub.AbsoluteLifetime < options.Hub.IdleTimeout)
+            {
+                throw new InvalidOperationException(
+                    $"{nameof(HubOptions)}.{nameof(HubOptions.AbsoluteLifetime)} must not be shorter than {nameof(HubOptions.IdleTimeout)}.");
+            }
+
+            if (string.IsNullOrWhiteSpace(options.Hub.Audience))
+            {
+                throw new InvalidOperationException($"{nameof(HubOptions)}.{nameof(HubOptions.Audience)} is required in hub mode.");
+            }
+
+            var superAdmins = options.Hub.SuperAdmins;
+            var providerSet = !string.IsNullOrWhiteSpace(options.Hub.SuperAdminSignInScheme);
+            var codeNamesSet = SuperAdminRecognizer.ConfiguredCodeNameCount(superAdmins) > 0;
+            if (options.Hub.SignInCodes.Enabled && !codeNamesSet)
+            {
+                throw new InvalidOperationException(
+                    $"{nameof(HubOptions)}.{nameof(HubOptions.SignInCodes)} is enabled but {nameof(HubOptions)}.{nameof(HubOptions.SuperAdmins)}.{nameof(SuperAdminOptions.CodeNames)} " +
+                    "has no entry: nobody could be issued a code.");
+            }
+
+            if (options.Hub.SignInCodes.DefaultMinutes is < 1 or > SuperAdminSignInCodes.MaxMinutes)
+            {
+                throw new InvalidOperationException(
+                    $"{nameof(HubOptions)}.{nameof(HubOptions.SignInCodes)}.{nameof(SignInCodeOptions.DefaultMinutes)} must be between 1 and {SuperAdminSignInCodes.MaxMinutes}.");
+            }
+
+            if (!providerSet && !options.Hub.SignInCodes.Enabled)
+            {
+                throw new InvalidOperationException(
+                    $"{nameof(HubOptions)}.{nameof(HubOptions.SuperAdminSignInScheme)} is required in hub mode unless {nameof(HubOptions)}.{nameof(HubOptions.SignInCodes)} " +
+                    "is enabled: a hub nobody can sign in to as a super admin is refused.");
+            }
+
+            if (providerSet)
+            {
+                if (superAdmins.ProviderKind == SuperAdminProviderKind.OpenIdConnect)
+                {
+                    if (SuperAdminRecognizer.ConfiguredEntryCount(superAdmins) == 0)
+                    {
+                        throw new InvalidOperationException(
+                            $"{nameof(HubOptions)}.{nameof(HubOptions.SuperAdmins)} needs at least one entry in {nameof(SuperAdminOptions.UserIds)}, " +
+                            $"{nameof(SuperAdminOptions.Emails)} or {nameof(SuperAdminOptions.GroupIds)}: a hub nobody can administer is refused.");
+                    }
+
+                    if (string.IsNullOrWhiteSpace(superAdmins.GroupsClaim))
+                    {
+                        throw new InvalidOperationException($"{nameof(HubOptions)}.{nameof(HubOptions.SuperAdmins)}.{nameof(SuperAdminOptions.GroupsClaim)} must not be blank.");
+                    }
+                }
+                else
+                {
+                    if (SuperAdminRecognizer.ConfiguredEntryCount(superAdmins) == 0)
+                    {
+                        throw new InvalidOperationException(
+                            $"{nameof(HubOptions)}.{nameof(HubOptions.SuperAdmins)} needs at least one entry in {nameof(SuperAdminOptions.ObjectIds)}, " +
+                            $"{nameof(SuperAdminOptions.Emails)} or {nameof(SuperAdminOptions.GroupIds)}: a hub nobody can administer is refused.");
+                    }
+
+                    if (SuperAdminRecognizer.ConfiguredTenantCount(superAdmins) == 0)
+                    {
+                        throw new InvalidOperationException(
+                            $"{nameof(HubOptions)}.{nameof(HubOptions.SuperAdmins)}.{nameof(SuperAdminOptions.TenantIds)} needs at least one tenant id: " +
+                            "an object id or email is only meaningful inside the tenant that issued it.");
+                    }
+                }
+            }
+
+            AddHubSession(services, options.Hub);
+            services.AddSingleton<SuperAdminSignInCodes>();
+            services.AddSingleton<ISuperAdminCodeIssuer, SuperAdminCodeIssuer>();
+            services.AddSingleton<IStartupFilter>(sp => new HubSettingsWarningStartupFilter(
+                sp.GetRequiredService<ILoggerFactory>().CreateLogger("QueryBuilder.Hub"), options.Hub));
+        }
 
         services.AddApplication();
-        services.AddInfrastructure(options.ConnectionString, options.ApplyMigrations);
+        services.AddInfrastructure(options.ConnectionString, options.ApplyMigrations, secretKey, previousKeys, options.Hub.Enabled);
 
         services.AddExceptionHandler<GlobalExceptionHandler>();
         services.AddProblemDetails();
@@ -68,5 +251,58 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IStartupFilter, SetupDiagnosticsStartupFilter>();
 
         return services;
+    }
+
+    private static void AddHubSession(IServiceCollection services, HubOptions hub)
+    {
+        services.TryAddSingleton(TimeProvider.System);
+        services.AddSingleton<HubAppEnabledCache>();
+        services.AddScoped<IAppSessionSource, HubAppSessionSource>();
+        services.AddSingleton<IStartupFilter, HubSessionStartupFilter>();
+        services.AddSingleton<IStartupFilter, QueryBuilder.Editor.Middleware.HubRequestHeaderStartupFilter>();
+
+        // A cookie scheme of our own, not the host's default: the host keeps whatever sign-in it already has.
+        services.AddAuthentication().AddCookie(HubSession.Scheme, cookie => HubSessionCookie.Configure(cookie, hub));
+        services.AddAuthentication().AddCookie(HubSession.ExternalScheme, HubSessionCookie.ConfigureExternal);
+        services.AddOptions<CookieAuthenticationOptions>(HubSession.Scheme)
+            .Configure<TimeProvider>((cookie, clock) => cookie.TimeProvider = clock);
+
+        services.AddSingleton<MetadataXmlRepository>();
+        services.AddDataProtection().SetApplicationName("QueryBuilder.Hub");
+        services.AddOptions<KeyManagementOptions>()
+            .Configure<MetadataXmlRepository, ConnectionSecretKey>((keys, repository, secret) =>
+            {
+                keys.XmlRepository = repository;
+                keys.XmlEncryptor = new HubKeyEncryptor(secret);
+            });
+    }
+}
+
+/// <summary>Logs, once at startup, super admin settings that the chosen provider kind ignores.</summary>
+internal sealed class HubSettingsWarningStartupFilter(ILogger logger, HubOptions hub) : IStartupFilter
+{
+    public Action<IApplicationBuilder> Configure(Action<IApplicationBuilder> next)
+    {
+        var a = hub.SuperAdmins;
+        if (!string.IsNullOrWhiteSpace(hub.SuperAdminSignInScheme) && a.ProviderKind == SuperAdminProviderKind.OpenIdConnect)
+        {
+            var ignored = new List<string>();
+            if (SuperAdminRecognizer.ConfiguredTenantCount(a) > 0)
+            {
+                ignored.Add(nameof(SuperAdminOptions.TenantIds));
+            }
+
+            if (a.ObjectIds.Any(e => !string.IsNullOrWhiteSpace(e)))
+            {
+                ignored.Add(nameof(SuperAdminOptions.ObjectIds));
+            }
+
+            if (ignored.Count > 0)
+            {
+                logger.LogWarning("Hub:SuperAdmins:ProviderKind is OpenIdConnect, so {Ignored} are ignored; remove them or use ProviderKind Entra.", string.Join(", ", ignored));
+            }
+        }
+
+        return next;
     }
 }

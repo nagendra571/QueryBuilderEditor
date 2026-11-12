@@ -5,17 +5,22 @@ import type { ApiProblemDetails } from '@/types'
 // under the same /querybuilder prefix as the UI so it never collides with a host app's own /api.
 export const apiClient = axios.create({
   baseURL: '/querybuilder/api',
-  headers: { 'Content-Type': 'application/json' },
+  // Hub mode refuses state-changing calls without this; a cross-site form or fetch cannot add a custom header.
+  headers: { 'Content-Type': 'application/json', 'X-QueryBuilder-Request': '1' },
 })
 
 export class ApiError extends Error {
   status: number
+  title: string
   errors?: Record<string, string[]>
+  counts?: Record<string, number>
 
   constructor(problem: ApiProblemDetails) {
     super(problem.detail || problem.title || 'Request failed')
     this.status = problem.status
+    this.title = problem.title
     this.errors = problem.errors
+    this.counts = problem.counts
   }
 }
 

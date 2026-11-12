@@ -1,4 +1,4 @@
-import { Check, ChevronRight, ChevronsDownUp, ChevronsUpDown, Database, Eye, Plus, Search, Table2 } from 'lucide-react'
+import { AlertTriangle, Check, ChevronRight, ChevronsDownUp, ChevronsUpDown, Database, Eye, Plus, Search, Table2 } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -10,10 +10,12 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 import { useBuilderStore, columnKey } from '@/features/builder/builder-store'
+import { buildCatalogView, countLabel } from '@/features/catalog/catalog-view'
+import { BUSINESS_UNAVAILABLE_REASON, objectRowKey, qualifiedName } from '@/features/catalog/unavailable'
 import { useDataSourceCatalog } from '@/hooks/useDataSources'
 import { DataTypeIcon } from '@/lib/data-type-icons'
 import { cn } from '@/lib/utils'
-import type { SchemaObjectMetadata } from '@/types'
+import type { SchemaObjectMetadata, UnavailableObject } from '@/types'
 
 function objectKey(schemaName: string, objectName: string) {
   return `${schemaName}.${objectName}`
@@ -30,21 +32,7 @@ export function CatalogSidebar({ dataSourceId }: { dataSourceId: string }) {
 
   const term = search.trim().toLowerCase()
 
-  const filtered = useMemo(() => {
-    if (!catalog) return []
-    if (!term) return catalog.schemas
-
-    return catalog.schemas
-      .map((schema) => ({
-        ...schema,
-        objects: schema.objects.filter(
-          (obj) =>
-            obj.name.toLowerCase().includes(term) ||
-            obj.columns.some((c) => c.name.toLowerCase().includes(term)),
-        ),
-      }))
-      .filter((schema) => schema.objects.length > 0)
-  }, [catalog, term])
+  const filtered = useMemo(() => (catalog ? buildCatalogView(catalog, term) : []), [catalog, term])
 
   const totalCount = useMemo(() => catalog?.schemas.reduce((n, s) => n + s.objects.length, 0) ?? 0, [catalog])
   const hasSource = !!source.objectName
@@ -74,7 +62,7 @@ export function CatalogSidebar({ dataSourceId }: { dataSourceId: string }) {
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col border-r border-border bg-sidebar/40">
+    <div className="flex h-full min-h-0 flex-col border-r border-border bg-card">
       <div className="border-b border-border p-3">
         <div className="relative">
           <Search className="absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
@@ -86,11 +74,9 @@ export function CatalogSidebar({ dataSourceId }: { dataSourceId: string }) {
           />
         </div>
 
-        {!isLoading && totalCount > 0 && (
+        {!isLoading && catalog && (totalCount > 0 || (catalog.unavailableObjects?.length ?? 0) > 0) && (
           <div className="mt-2 flex items-center justify-between">
-            <span className="text-[11px] text-muted-foreground">
-              {totalCount} {totalCount === 1 ? 'object' : 'objects'}
-            </span>
+            <span className="text-[11px] text-muted-foreground">{countLabel(catalog)}</span>
             <div className="flex items-center gap-0.5">
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -146,6 +132,9 @@ export function CatalogSidebar({ dataSourceId }: { dataSourceId: string }) {
                   />
                 )
               })}
+              {schema.unavailable.map((u) => (
+                <UnavailableCatalogObject key={objectRowKey(u.schemaName, u.name)} object={u} />
+              ))}
             </div>
           ))}
         </div>
@@ -246,6 +235,20 @@ function CatalogObject({
           })}
         </div>
       )}
+    </div>
+  )
+}
+
+function UnavailableCatalogObject({ object }: { object: UnavailableObject }) {
+  const ObjectIcon = object.kind === 'view' ? Eye : Table2
+  return (
+    <div className="mb-0.5 rounded-md px-2 py-1.5 text-xs text-muted-foreground">
+      <div className="flex items-center gap-1.5 font-medium">
+        <AlertTriangle className="size-3.5 shrink-0 text-warning" aria-hidden="true" />
+        <ObjectIcon className="size-3.5 shrink-0" aria-hidden="true" />
+        <span className="min-w-0 flex-1 truncate">{object.name.includes('.') || object.schemaName.includes('.') ? qualifiedName(object.schemaName, object.name) : object.name}</span>
+      </div>
+      <p className="mt-0.5 pl-5 text-[11px] leading-snug">{BUSINESS_UNAVAILABLE_REASON}</p>
     </div>
   )
 }

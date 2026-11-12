@@ -2,6 +2,7 @@
 
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <InternalsVisibleTo Include="QueryBuilder.Tests" />
   </ItemGroup>
 
   <!-- Domain/Application/Infrastructure are internal layers (IsPackable=false) — bundled into this
@@ -20,16 +21,26 @@
   <ItemGroup>
     <PackageReference Include="FluentValidation" Version="12.1.1" />
     <PackageReference Include="FluentValidation.DependencyInjectionExtensions" Version="12.1.1" />
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.12" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.14" />
     <PackageReference Include="ClosedXML" Version="0.105.1" />
     <PackageReference Include="CsvHelper" Version="33.1.0" />
     <PackageReference Include="Microsoft.Data.SqlClient" Version="7.1.0" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="9.0.9" />
-    <PackageReference Include="Microsoft.Extensions.Caching.Memory" Version="10.0.12" />
+    <PackageReference Include="Microsoft.Extensions.Caching.Memory" Version="10.0.14" />
+    <PackageReference Include="Microsoft.IdentityModel.JsonWebTokens" Version="8.16.0" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(TargetFramework)' == 'net8.0'">
+    <PackageReference Include="System.Security.Cryptography.Pkcs" Version="8.0.2" />
+    <PackageReference Include="Npgsql" Version="9.0.5" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="9.0.22" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(TargetFramework)' == 'net10.0'">
+    <PackageReference Include="System.Security.Cryptography.Pkcs" Version="10.0.14" />
+    <PackageReference Include="Npgsql" Version="10.0.3" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="10.0.14" />
   </ItemGroup>
 
   <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <ClientAppDir>$(MSBuildThisFileDirectory)..\..\client</ClientAppDir>
@@ -40,7 +51,7 @@
     <PackageId>QueryBuilder.Editor</PackageId>
     <!-- Bump alongside a new EF Core migration, then regenerate Scripts/QueryBuilder.schema.<version>.sql
          (see Scripts/README.md) so DBA-managed deployments have a matching provisioning script. -->
-    <Version>1.0.13</Version>
+    <Version>1.5.0</Version>
     <Authors>Nagendra Chinnam</Authors>
     <Description>Visual, no-SQL-required query builder for business users: browse a catalog of SQL Server views/tables, build queries by dragging columns and setting filters/sorts, preview generated SQL, run and export results, with a full audit trail. Ships as an embeddable ASP.NET Core component with its UI built in — call AddQueryBuilderEditor() then app.UseQueryBuilderEditorUI() + app.MapQueryBuilderEditor().</Description>
     <PackageTags>query-builder;sql;low-code;reporting;data-analytics;aspnetcore</PackageTags>
@@ -55,6 +66,7 @@
 
   <ItemGroup>
     <None Include="README.md" Pack="true" PackagePath="\" />
+    <None Include="..\..\MANAGING-KEYS.md" Pack="true" PackagePath="\" Link="MANAGING-KEYS.md" />
   </ItemGroup>
 
   <!-- The built React app is embedded into this assembly and served by UseQueryBuilderEditorUI(),
@@ -66,7 +78,7 @@
     <EmbeddedResource Include="wwwroot\**" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="Microsoft.Extensions.FileProviders.Embedded" Version="10.0.12" />
+    <PackageReference Include="Microsoft.Extensions.FileProviders.Embedded" Version="10.0.14" />
   </ItemGroup>
 
   <!-- Shipped alongside the assembly (not embedded — a DBA needs to open and run these directly)
@@ -78,20 +90,24 @@
 
   <!-- Bundles the internal layers' compiled DLLs directly into this package's lib folder instead of
        referencing them as separate NuGet packages (which don't exist — they're IsPackable=false).
-       Mirrors the same technique used by TemplateBuilder.Editor. -->
-  <Target Name="BundleInternalAssemblies" BeforeTargets="_GetPackageFiles">
+       Runs once per target framework: NuGet's outer pack has no $(TargetFramework) or per-framework output path. -->
+  <PropertyGroup>
+    <TargetsForTfmSpecificBuildOutput>$(TargetsForTfmSpecificBuildOutput);BundleInternalAssemblies</TargetsForTfmSpecificBuildOutput>
+  </PropertyGroup>
+  <Target Name="BundleInternalAssemblies">
     <ItemGroup>
-      <None Include="$(OutputPath)QueryBuilder.Domain.dll" Pack="true" PackagePath="lib\$(TargetFramework)\" Visible="false" />
-      <None Include="$(OutputPath)QueryBuilder.Application.dll" Pack="true" PackagePath="lib\$(TargetFramework)\" Visible="false" />
-      <None Include="$(OutputPath)QueryBuilder.Infrastructure.dll" Pack="true" PackagePath="lib\$(TargetFramework)\" Visible="false" />
+      <BuildOutputInPackage Include="$(OutputPath)QueryBuilder.Domain.dll" />
+      <BuildOutputInPackage Include="$(OutputPath)QueryBuilder.Application.dll" />
+      <BuildOutputInPackage Include="$(OutputPath)QueryBuilder.Infrastructure.dll" />
     </ItemGroup>
   </Target>
 
   <!-- Dev convenience only, opt-in: pass -p:BuildClientApp=true to rebuild the SPA from source and
        refresh wwwroot before this project builds (skipped by default so routine backend builds stay
        fast). A real NuGet consumer never has the client source, so this never runs for them either
-       way — they always get whatever wwwroot was baked into the package at pack time. -->
-  <Target Name="BuildClientApp" BeforeTargets="BeforeBuild" Condition="'$(BuildClientApp)' == 'true' And Exists('$(ClientAppDir)\package.json')">
+       way — they always get whatever wwwroot was baked into the package at pack time.
+       Hooked to the outer build so the per-framework builds, which run in parallel, don't each rewrite wwwroot. -->
+  <Target Name="BuildClientApp" BeforeTargets="DispatchToInnerBuilds" Condition="'$(BuildClientApp)' == 'true' And Exists('$(ClientAppDir)\package.json')">
     <Exec Command="npm run build" WorkingDirectory="$(ClientAppDir)" />
     <ItemGroup>
       <_BuiltClientFiles Include="$(ClientAppDir)\dist\**\*" />

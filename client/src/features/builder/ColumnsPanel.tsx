@@ -86,7 +86,7 @@ function SortableColumnRow({ column }: { column: QueryColumn }) {
       ref={setNodeRef}
       style={style}
       className={cn(
-        'flex items-center gap-2 rounded-md border border-border bg-card px-2 py-(--space-row-y)',
+        'flex flex-wrap items-center gap-2 rounded-md border border-border bg-card px-2 py-(--space-row-y) sm:flex-nowrap',
         isDragging && 'opacity-60 shadow-lg',
         !column.isVisible && 'opacity-50',
       )}
@@ -103,7 +103,7 @@ function SortableColumnRow({ column }: { column: QueryColumn }) {
 
       <DataTypeIcon dataType={column.dataType} />
 
-      <span className="w-36 shrink-0 truncate text-xs text-muted-foreground" title={column.columnName}>
+      <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground sm:w-36 sm:flex-none sm:shrink-0" title={column.columnName}>
         {column.columnName}
       </span>
 
@@ -125,7 +125,7 @@ function SortableColumnRow({ column }: { column: QueryColumn }) {
         value={column.alias ?? ''}
         onChange={(e) => renameColumnAlias(key, e.target.value)}
         placeholder={column.columnName}
-        className="h-7 flex-1 text-xs"
+        className="h-7 min-w-40 flex-1 text-xs"
         aria-label={`Alias for ${column.columnName}`}
       />
 

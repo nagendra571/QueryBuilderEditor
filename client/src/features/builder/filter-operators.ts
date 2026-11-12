@@ -20,11 +20,11 @@ export const OPERATOR_LABELS: Record<FilterOperator, string> = {
   isFalse: 'Is false',
 }
 
-const TEXT_OPERATORS: FilterOperator[] = ['equals', 'notEquals', 'contains', 'notContains', 'startsWith', 'endsWith', 'isNull', 'isNotNull']
-const NUMBER_OPERATORS: FilterOperator[] = ['equals', 'notEquals', 'greaterThan', 'greaterOrEqual', 'lessThan', 'lessOrEqual', 'between', 'isNull', 'isNotNull']
+const TEXT_OPERATORS: FilterOperator[] = ['equals', 'notEquals', 'contains', 'notContains', 'startsWith', 'endsWith', 'in', 'notIn', 'isNull', 'isNotNull']
+const NUMBER_OPERATORS: FilterOperator[] = ['equals', 'notEquals', 'greaterThan', 'greaterOrEqual', 'lessThan', 'lessOrEqual', 'between', 'in', 'notIn', 'isNull', 'isNotNull']
 const DATE_OPERATORS: FilterOperator[] = ['equals', 'notEquals', 'greaterThan', 'greaterOrEqual', 'lessThan', 'lessOrEqual', 'between', 'isNull', 'isNotNull']
 const BOOLEAN_OPERATORS: FilterOperator[] = ['isTrue', 'isFalse']
-const GUID_OPERATORS: FilterOperator[] = ['equals', 'notEquals', 'isNull', 'isNotNull']
+const GUID_OPERATORS: FilterOperator[] = ['equals', 'notEquals', 'in', 'notIn', 'isNull', 'isNotNull']
 
 export function operatorsForDataType(dataType: ColumnDataType): FilterOperator[] {
   switch (dataType) {

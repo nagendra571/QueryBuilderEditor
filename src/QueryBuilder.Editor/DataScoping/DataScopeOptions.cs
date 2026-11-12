@@ -11,12 +11,15 @@ namespace QueryBuilder.Editor;
 ///     ? DataScope.Unrestricted
 ///     : DataScope.For("ProgramId", GetProgramIds(ctx));
 /// </code>
+/// Keys can also be added per data source in the admin UI, so <see cref="Keys"/> may be empty when a resolver
+/// is set. Either way the resolver supplies every user's values; a key it doesn't supply hides the views mapped to it.
 /// Admins then decide, per view in the admin UI, which column each key filters on — or mark the
 /// view "not scoped". Views without a decision are hidden from scoped users (fail closed).
 /// </summary>
 public sealed partial class DataScopeOptions
 {
-    /// <summary>The scope keys admins can map view columns to (e.g. "ProgramId", "ModuleId").</summary>
+    /// <summary>Scope keys declared in code, which admins can map view columns to (e.g. "ProgramId", "ModuleId").
+    /// Admins can add more per data source in the admin UI; the resolver supplies the values for all of them.</summary>
     public IList<string> Keys { get; set; } = [];
 
     /// <summary>Resolves the current user's scope, once per request. Return
@@ -36,11 +39,6 @@ public sealed partial class DataScopeOptions
         {
             throw new InvalidOperationException(
                 $"Set only one of {nameof(QueryBuilderEditorOptions)}.DataScope.{nameof(Resolver)} and .{nameof(ResolverAsync)}.");
-        }
-        if (IsEnabled && Keys.Count == 0)
-        {
-            throw new InvalidOperationException(
-                $"{nameof(QueryBuilderEditorOptions)}.DataScope.{nameof(Keys)} must list at least one scope key when a resolver is set.");
         }
         if (!IsEnabled && Keys.Count > 0)
         {

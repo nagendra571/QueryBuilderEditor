@@ -1,9 +1,11 @@
 using System.Reflection;
 using FluentValidation;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using QueryBuilder.Application.Abstractions;
 using QueryBuilder.Application.Common;
 using QueryBuilder.Application.DataScoping;
+using QueryBuilder.Application.Parameters;
 
 namespace QueryBuilder.Application;
 
@@ -15,6 +17,12 @@ public static class DependencyInjection
 
         services.AddScoped<ISender, Sender>();
         services.AddScoped<IDataScopeGuard, DataScopeGuard>();
+        services.TryAddSingleton(TimeProvider.System);
+        services.AddScoped<IParameterBinder, ParameterBinder>();
+        services.AddScoped<Hub.ShareTargets>();
+        services.AddScoped<IParameterOptionsService, ParameterOptionsService>();
+        services.AddScoped<Dashboards.IDashboardGrant, Dashboards.DashboardGrant>();
+        services.AddScoped<Dashboards.DashboardGrantResolver>();
         RegisterHandlers(services, assembly);
 
         services.AddValidatorsFromAssembly(assembly);

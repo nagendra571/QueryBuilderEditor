@@ -1,3 +1,4 @@
+using QueryBuilder.Application.Visualizations;
 using FluentValidation;
 using QueryBuilder.Application.Abstractions;
 using QueryBuilder.Application.Common;
@@ -13,7 +14,9 @@ public sealed record ShareQueryCommand(
     Guid SavedQueryId,
     string SharedWithUserId,
     string SharedWithUserEmail,
-    QueryAccessLevel AccessLevel) : IRequest<Guid>;
+    QueryAccessLevel AccessLevel,
+    // Set only by the dashboard share, which has already checked the person against every data source it uses.
+    bool TargetChecked = false) : IRequest<Guid>;
 
 public sealed class ShareQueryCommandValidator : AbstractValidator<ShareQueryCommand>
 {
@@ -29,7 +32,7 @@ public sealed class ShareQueryCommandValidator : AbstractValidator<ShareQueryCom
 }
 
 public sealed class ShareQueryCommandHandler(
-    ISavedQueryRepository repository, ICurrentUserService currentUser, IAuditLogger auditLogger)
+    ISavedQueryRepository repository, ICurrentUserService currentUser, IAuditLogger auditLogger, Hub.ShareTargets targets)
     : IRequestHandler<ShareQueryCommand, Guid>
 {
     public async Task<Guid> Handle(ShareQueryCommand request, CancellationToken cancellationToken)
@@ -37,9 +40,9 @@ public sealed class ShareQueryCommandHandler(
         var query = await repository.GetByIdAsync(request.SavedQueryId, cancellationToken)
             ?? throw new NotFoundException(nameof(SavedQuery), request.SavedQueryId);
 
-        if (query.OwnerId != currentUser.UserId)
+        if (!SavedQueryAccess.CanManage(query, AccessActor.From(currentUser)))
         {
-            throw new ForbiddenException("Only the owner can share this query.");
+            throw new ForbiddenException("You don't have permission to share this query.");
         }
 
         if (request.SharedWithUserId == query.OwnerId)
@@ -50,6 +53,13 @@ public sealed class ShareQueryCommandHandler(
         var share = query.Shares.FirstOrDefault(s => s.SharedWithUserId == request.SharedWithUserId);
         if (share is null)
         {
+            // Only a new share needs a known person: changing the level of an existing one must work for someone who has since left the list.
+            if (AccessActor.From(currentUser).InHub && !request.TargetChecked
+                && !await targets.IsKnownAsync(request.SharedWithUserId, [query.DataSourceId], cancellationToken))
+            {
+                throw new ValidationException(Hub.ShareTargets.NotKnownMessage);
+            }
+
             share = new QueryShare
             {
                 SavedQueryId = query.Id,

@@ -4,8 +4,8 @@ namespace QueryBuilder.Application.Common;
 public sealed record RecordLimitSettings(int? DefaultMaxRecords);
 
 /// <summary>
-/// Resolves how many records a query may return: the data source's own admin-set limit, else the
-/// host's package-wide default. When neither is set there is no limit and the pre-1.0.13 behavior
+/// Resolves how many records a query may return: the data source's own admin-set limit, else the host's
+/// package-wide default, then capped by the app ceiling in hub mode. When neither is set there is no limit and the pre-1.0.13 behavior
 /// is kept exactly (grid capped at the client's requested rows, export at 100,000, both silently)
 /// so upgrading the package can never start refusing exports on its own.
 /// </summary>
@@ -18,12 +18,24 @@ public static class RecordLimits
     public const int LegacyGridMaxRows = 10_000;
     public const int LegacyExportRows = 100_000;
 
-    public static int? Effective(int? dataSourceMaxRecords, RecordLimitSettings settings) =>
-        dataSourceMaxRecords ?? settings.DefaultMaxRecords;
+    /// <summary>Hard ceiling on points a chart will draw, whatever the record limit says.</summary>
+    public const int ChartMaxRows = 1_000;
+
+    /// <summary>A hub app's ceiling caps whatever the data source resolves to; the data source's own limit still
+    /// overrides the host default, even when it is higher (as since 1.0.13).</summary>
+    public static int? Effective(int? dataSourceMaxRecords, int? appCeiling, RecordLimitSettings settings)
+    {
+        var resolved = dataSourceMaxRecords ?? settings.DefaultMaxRecords;
+        return appCeiling is { } ceiling && (resolved is null || ceiling < resolved) ? ceiling : resolved;
+    }
 
     /// <summary>With a limit set the browser's requested row count is ignored — the limit is the cap.</summary>
     public static int GridRows(int? effectiveLimit, int? requestedRows) =>
         effectiveLimit ?? (requestedRows is > 0 and <= LegacyGridMaxRows ? requestedRows.Value : LegacyGridDefaultRows);
+
+    /// <summary>A chart is never given more rows than <see cref="ChartMaxRows"/>; a lower record limit wins.</summary>
+    public static int ChartRows(int? effectiveLimit) =>
+        effectiveLimit is { } limit && limit < ChartMaxRows ? limit : ChartMaxRows;
 
     public static bool IsValid(int value) => value is >= Min and <= Max;
 }

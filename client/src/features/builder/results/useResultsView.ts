@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { QueryResultDto } from '@/types'
+import { compareCells } from './compare-cells.ts'
 
 export type SortDirection = 'asc' | 'desc'
 export type PageSize = 25 | 50 | 100 | 250 | 'all'
@@ -9,18 +10,6 @@ export const PAGE_SIZE_OPTIONS: PageSize[] = [25, 50, 100, 250, 'all']
 interface SortState {
   column: string
   direction: SortDirection
-}
-
-function compareCells(a: unknown, b: unknown): number {
-  const aNull = a === null || a === undefined
-  const bNull = b === null || b === undefined
-  if (aNull && bNull) return 0
-  if (aNull) return 1 // nulls always sort last
-  if (bNull) return -1
-
-  if (typeof a === 'number' && typeof b === 'number') return a - b
-  if (typeof a === 'boolean' && typeof b === 'boolean') return a === b ? 0 : a ? 1 : -1
-  return String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: 'base' })
 }
 
 export function useResultsView(result: QueryResultDto) {
@@ -60,8 +49,9 @@ export function useResultsView(result: QueryResultDto) {
   const sortedRows = useMemo(() => {
     if (!sort) return filteredRows
     const direction = sort.direction === 'asc' ? 1 : -1
-    return [...filteredRows].sort((a, b) => direction * compareCells(a[sort.column], b[sort.column]))
-  }, [filteredRows, sort])
+    const numeric = columnsByName.get(sort.column)?.dataType === 'number'
+    return [...filteredRows].sort((a, b) => direction * compareCells(a[sort.column], b[sort.column], numeric))
+  }, [filteredRows, sort, columnsByName])
 
   const pageCount = pageSize === 'all' ? 1 : Math.max(1, Math.ceil(sortedRows.length / pageSize))
   const currentPage = Math.min(page, pageCount)

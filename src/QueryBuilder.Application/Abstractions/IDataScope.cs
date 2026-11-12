@@ -15,6 +15,18 @@ public sealed record ResolvedDataScope(bool IsUnrestricted, IReadOnlyDictionary<
     /// <summary>Scoped with no values at all — sees only objects an admin marked "not scoped".</summary>
     public static ResolvedDataScope Denied { get; } = new(false, NoValues);
 
+    /// <summary>Largest serialised scope (UTF-8 bytes) a hub session may carry: it rides in a cookie, and browsers send
+    /// cookies on every request. About 150 to 300 values.</summary>
+    public const int MaxSessionBytes = 6144;
+
+    public const string UnrestrictedMarker = "*";
+
+    private static readonly System.Text.Json.JsonSerializerOptions SessionJson = new(System.Text.Json.JsonSerializerDefaults.Web);
+
+    /// <summary>Exactly what a hub session stores for this scope, so the launch budget measures the real thing.</summary>
+    public string SerializeForSession() =>
+        IsUnrestricted ? UnrestrictedMarker : System.Text.Json.JsonSerializer.Serialize(Values, SessionJson);
+
     public IReadOnlyList<string> ValuesFor(string key) =>
         Values.TryGetValue(key, out var values) ? values : [];
 
@@ -27,8 +39,9 @@ public interface ICurrentDataScope
     /// <summary>False when the host configured no scope resolver — everyone is unrestricted.</summary>
     bool IsEnabled { get; }
 
-    /// <summary>The scope keys the host declared (what admins can map columns to).</summary>
-    IReadOnlyList<string> DeclaredKeys { get; }
+    /// <summary>The scope keys the host declared in code. A data source can have more, added by admins
+    /// (see <see cref="DataScoping.DataScopeKeys.Effective"/>), so this alone is never the set to enforce.</summary>
+    IReadOnlyList<string> HostKeys { get; }
 
     /// <summary>Resolved once per request and cached.</summary>
     Task<ResolvedDataScope> GetAsync(CancellationToken cancellationToken);

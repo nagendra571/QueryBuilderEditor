@@ -13,12 +13,47 @@ namespace QueryBuilder.Tests;
 public class RecordLimitTests
 {
     [Theory]
-    [InlineData(500, 2000, 500)]
-    [InlineData(null, 2000, 2000)]
-    [InlineData(500, null, 500)]
-    [InlineData(null, null, null)]
+    [InlineData(500, 2000, null, 500)]
+    [InlineData(null, 2000, null, 2000)]
+    [InlineData(500, null, null, 500)]
+    [InlineData(null, null, null, null)]
+    [InlineData(500, 2000, 100, 100)]
+    [InlineData(null, null, 100, 100)]
+    [InlineData(5000, 300, 2000, 2000)]   // the data source overrides the host default; the ceiling only caps
+    [InlineData(5000, null, 2000, 2000)]
+    [InlineData(null, 300, 2000, 300)]
+    [InlineData(null, 3000, 2000, 2000)]
+    public void Effective_is_the_lowest_set_limit(int? dataSource, int? hostDefault, int? appCeiling, int? expected) =>
+        Assert.Equal(expected, RecordLimits.Effective(dataSource, appCeiling, new RecordLimitSettings(hostDefault)));
+
+    [Theory]
+    [InlineData(5000, 300, 5000)]
+    [InlineData(100, 300, 100)]
+    [InlineData(null, 300, 300)]
     public void Data_source_limit_wins_over_host_default(int? dataSource, int? hostDefault, int? expected) =>
-        Assert.Equal(expected, RecordLimits.Effective(dataSource, new RecordLimitSettings(hostDefault)));
+        Assert.Equal(expected, RecordLimits.Effective(dataSource, null, new RecordLimitSettings(hostDefault)));
+
+    [Fact]
+    public async Task App_ceiling_caps_run_and_export()
+    {
+        var execution = new FakeExecution(truncated: true);
+        var run = new RunQueryCommandHandler(
+            new FakeDataSources(maxRecords: 50), null!, new NoopCatalog(), new FakeBuilders(), execution,
+            new NoScopeGuard(), new UnrestrictedScope(), new RecordLimitSettings(null), new FakeAppSettings(5), new NoopAudit(),
+            new QueryBuilder.Application.Parameters.ParameterBinder(null!, TimeProvider.System));
+
+        var result = await run.Handle(new RunQueryCommand(TestData.DataSourceId, TestData.Definition(), [], 1000, null), default);
+
+        Assert.Equal(5, execution.RequestedMaxRows);
+        Assert.Equal(5, result.RowLimit);
+        Assert.True(result.Truncated);
+
+        var export = new ExportQueryCommandHandler(
+            new FakeDataSources(maxRecords: 50), null!, new NoopCatalog(), new FakeBuilders(), execution, new NoopExport(),
+            new NoScopeGuard(), new UnrestrictedScope(), new RecordLimitSettings(null), new FakeAppSettings(5), new NoopAudit(),
+            new QueryBuilder.Application.Parameters.ParameterBinder(null!, TimeProvider.System));
+        await Assert.ThrowsAsync<RecordLimitExceededException>(() => export.Handle(ExportCommand(), default));
+    }
 
     [Theory]
     [InlineData(5000, 1000, 5000)]     // limit set: the browser's requested rows are ignored
@@ -54,7 +89,8 @@ public class RecordLimitTests
         var execution = new FakeExecution(truncated: true);
         var handler = new RunQueryCommandHandler(
             new FakeDataSources(maxRecords: 5), null!, new NoopCatalog(), new FakeBuilders(), execution,
-            new NoScopeGuard(), new UnrestrictedScope(), new RecordLimitSettings(null), new NoopAudit());
+            new NoScopeGuard(), new UnrestrictedScope(), new RecordLimitSettings(null), new FakeAppSettings(), new NoopAudit(),
+            new QueryBuilder.Application.Parameters.ParameterBinder(null!, TimeProvider.System));
 
         var result = await handler.Handle(new RunQueryCommand(TestData.DataSourceId, TestData.Definition(), [], 1000, null), default);
 
@@ -100,7 +136,8 @@ public class RecordLimitTests
 
     private static ExportQueryCommandHandler ExportHandler(FakeDataSources dataSources, FakeExecution execution, int? hostDefault) =>
         new(dataSources, null!, new NoopCatalog(), new FakeBuilders(), execution, new NoopExport(),
-            new NoScopeGuard(), new UnrestrictedScope(), new RecordLimitSettings(hostDefault), new NoopAudit());
+            new NoScopeGuard(), new UnrestrictedScope(), new RecordLimitSettings(hostDefault), new FakeAppSettings(), new NoopAudit(),
+            new QueryBuilder.Application.Parameters.ParameterBinder(null!, TimeProvider.System));
 
     private sealed class FakeDataSources(int? maxRecords) : IDataSourceRepository
     {
@@ -108,7 +145,10 @@ public class RecordLimitTests
             Task.FromResult<DataSource?>(new DataSource { Id = id, Name = "Test", MaxRecords = maxRecords });
         public Task<List<DataSource>> GetActiveAsync(CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<List<DataSource>> GetAllAsync(CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task AddAsync(DataSource dataSource, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public void UpdateOnly(DataSource dataSource, params string[] propertyNames) { }
         public void Update(DataSource dataSource) => throw new NotSupportedException();
+        public Task<bool> TryReplaceEncryptedConnectionAsync(Guid id, string expected, string replacement, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<int> SaveChangesAsync(CancellationToken cancellationToken) => throw new NotSupportedException();
     }
 
@@ -134,6 +174,7 @@ public class RecordLimitTests
         public Task<DataSourceCatalog> GetCatalogAsync(Guid dataSourceId, CancellationToken cancellationToken) => Task.FromResult(TestData.Catalog());
         public Task ValidateAsync(Guid dataSourceId, QueryDefinition definition, CancellationToken cancellationToken) => Task.CompletedTask;
         public Task<List<SchemaObjectMetadata>> GetRawObjectsAsync(Guid dataSourceId, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<List<AdminUnavailableObject>> GetUnavailableObjectsAsync(Guid dataSourceId, CancellationToken cancellationToken) => Task.FromResult(new List<AdminUnavailableObject>());
         public void InvalidateCatalogCache(Guid dataSourceId) { }
     }
 
@@ -147,7 +188,7 @@ public class RecordLimitTests
     private sealed class UnrestrictedScope : ICurrentDataScope
     {
         public bool IsEnabled => false;
-        public IReadOnlyList<string> DeclaredKeys => [];
+        public IReadOnlyList<string> HostKeys => [];
         public Task<ResolvedDataScope> GetAsync(CancellationToken cancellationToken) => Task.FromResult(ResolvedDataScope.Unrestricted);
     }
 

@@ -16,7 +16,27 @@ public sealed class DataSourceRepository(AppDbContext db) : IDataSourceRepositor
     public Task<List<DataSource>> GetAllAsync(CancellationToken cancellationToken) =>
         db.DataSources.AsNoTracking().OrderBy(x => x.Name).ToListAsync(cancellationToken);
 
-    public void Update(DataSource dataSource) => db.DataSources.Update(dataSource);
+    public async Task AddAsync(DataSource dataSource, CancellationToken cancellationToken) =>
+        await db.DataSources.AddAsync(dataSource, cancellationToken);
+
+    public void UpdateOnly(DataSource dataSource, params string[] propertyNames)
+    {
+        var entry = db.Entry(dataSource);
+        if (entry.State == EntityState.Detached)
+        {
+            entry = db.Attach(dataSource);
+        }
+
+        foreach (var name in propertyNames.Concat([nameof(DataSource.UpdatedBy), nameof(DataSource.UpdatedAtUtc)]).Distinct())
+        {
+            entry.Property(name).IsModified = true;
+        }
+    }
+
+    public async Task<bool> TryReplaceEncryptedConnectionAsync(Guid id, string expected, string replacement, CancellationToken cancellationToken) =>
+        await db.DataSources
+            .Where(d => d.Id == id && d.EncryptedConnection == expected)
+            .ExecuteUpdateAsync(s => s.SetProperty(d => d.EncryptedConnection, replacement), cancellationToken) == 1;
 
     public Task<int> SaveChangesAsync(CancellationToken cancellationToken) => db.SaveChangesAsync(cancellationToken);
 }

@@ -105,6 +105,23 @@ public sealed class QueryParameter
     public string Name { get; set; } = string.Empty;
     public string Label { get; set; } = string.Empty;
     public ColumnDataType DataType { get; set; } = ColumnDataType.Text;
+
+    /// <summary>How the value is entered and validated. Null on definitions saved before parameter
+    /// types existed — they are read as the type implied by <see cref="DataType"/>.</summary>
+    public ParameterType? Type { get; set; }
+
+    /// <summary>Single value, a JSON array string for multiple values, "start~end" for ranges, or a relative-date token.</summary>
     public string? DefaultValue { get; set; }
     public bool IsRequired { get; set; } = true;
+
+    /// <summary>Fixed choices for <see cref="ParameterType.List"/>.</summary>
+    public List<string> Options { get; set; } = [];
+
+    /// <summary>Saved query whose results supply the choices for <see cref="ParameterType.QueryList"/>.</summary>
+    public Guid? OptionsQueryId { get; set; }
+    public string? OptionsLabelColumn { get; set; }
+    public string? OptionsValueColumn { get; set; }
+
+    /// <summary>Several values may be picked; only meaningful on an is-one-of / is-not-one-of filter.</summary>
+    public bool AllowMultiple { get; set; }
 }

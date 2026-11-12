@@ -18,4 +18,10 @@ public static class DataSourceEndpoints
         group.MapGet("/{id:guid}/app-users", async (Guid id, ISender sender, CancellationToken ct) =>
             Results.Json(await sender.Send(new GetAppUsersQuery(id), ct), QueryBuilderJson.Options));
     }
+
+    /// <summary>Hub mode only (not mapped when embedded): the people launched into the caller's app, for dashboard sharing.</summary>
+    internal static void MapPeopleEndpoints(this IEndpointRouteBuilder app) =>
+        app.MapGet("/api/people", async (ISender sender, CancellationToken ct) =>
+            Results.Json(await sender.Send(new GetPeopleQuery(), ct), QueryBuilderJson.Options))
+            .WithTags("Data Sources");
 }

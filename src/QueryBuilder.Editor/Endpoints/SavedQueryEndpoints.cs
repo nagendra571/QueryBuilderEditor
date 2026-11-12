@@ -1,8 +1,10 @@
+using QueryBuilder.Editor.Hub;
 using QueryBuilder.Application.Common;
 using QueryBuilder.Application.Abstractions;
 using QueryBuilder.Application.Commands.SavedQueries;
 using QueryBuilder.Application.DataSources;
 using QueryBuilder.Application.Dtos;
+using QueryBuilder.Application.Parameters;
 using QueryBuilder.Application.Queries.SavedQueries;
 
 namespace QueryBuilder.Editor.Endpoints;
@@ -45,6 +47,10 @@ public static class SavedQueryEndpoints
             return Results.Json(new { isDisabled }, QueryBuilderJson.Options);
         });
 
+        group.MapGet("/{id:guid}/parameters/{name}/options", async (Guid id, string name, Guid? dashboardId, Guid? tileId, ISender sender, CancellationToken ct) =>
+            Results.Json(await sender.Send(new GetParameterOptionsQuery(id, name, dashboardId, tileId), ct), QueryBuilderJson.Options))
+            .AllowViewers();
+
         group.MapGet("/{id:guid}/shares", async (Guid id, ISender sender, CancellationToken ct) =>
             Results.Json(await sender.Send(new GetQuerySharesQuery(id), ct), QueryBuilderJson.Options));
 
@@ -67,7 +73,7 @@ public static class SavedQueryEndpoints
         {
             var request = await http.Request.ReadFromJsonAsync<RunQueryRequest>(QueryBuilderJson.Options, ct)
                 ?? throw new BadHttpRequestException("Request body is required.");
-            return Results.Json(await sender.Send(new BuildQuerySqlQuery(request.DataSourceId, request.Definition), ct), QueryBuilderJson.Options);
+            return Results.Json(await sender.Send(new BuildQuerySqlQuery(request.DataSourceId, request.Definition, request.ParameterValues), ct), QueryBuilderJson.Options);
         });
 
         group.MapPost("/run", async (HttpContext http, ISender sender, CancellationToken ct) =>

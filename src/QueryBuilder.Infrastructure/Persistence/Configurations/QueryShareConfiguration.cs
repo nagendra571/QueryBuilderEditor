@@ -10,6 +10,8 @@ public sealed class QueryShareConfiguration : IEntityTypeConfiguration<QueryShar
     {
         builder.ToTable("QueryShares");
         builder.HasKey(x => x.Id);
+        builder.Property(x => x.AppId).IsRequired();
+        builder.HasOne<App>().WithMany().HasForeignKey(x => x.AppId).OnDelete(DeleteBehavior.Restrict);
 
         builder.Property(x => x.SharedWithUserId).HasMaxLength(450).IsRequired();
         builder.Property(x => x.SharedWithUserEmail).HasMaxLength(256).IsRequired();

@@ -1,15 +1,24 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { adminApi } from '@/lib/api'
+import { adminApi, hubApi } from '@/lib/api'
 import { ApiError } from '@/lib/api-client'
-import type { UpdateCatalogPolicyRequest, UpdateDataScopeRequest, UpdateRecordLimitRequest } from '@/types'
+import type {
+  CreateDataSourceRequest,
+  TestConnectionRequest,
+  UpdateCatalogPolicyRequest,
+  UpdateDataScopeRequest,
+  UpdateDataSourceRequest,
+  UpdateScopeKeysRequest,
+  UpdateRecordLimitRequest,
+} from '@/types'
 
 export const adminDataSourcesKey = ['admin-data-sources'] as const
 const adminDataSourceDetailKey = (id: string) => ['admin-data-source', id] as const
 const adminDataScopeKey = (id: string) => ['admin-data-scope', id] as const
 
-export function useAdminAccess() {
+export function useAdminAccess(enabled = true) {
   return useQuery({
+    enabled,
     queryKey: ['admin-access'],
     // queryFn must resolve to a defined value — TanStack Query v5 throws
     // "<queryHash> data is undefined" and forces the query into an error
@@ -78,6 +87,22 @@ export function useUpdateDataScope(id: string) {
   })
 }
 
+// Errors are shown inline by the section, so there is no toast here.
+export function useUpdateScopeKeys(id: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (request: UpdateScopeKeysRequest) => adminApi.updateScopeKeys(id, request),
+    onSuccess: (data) => {
+      queryClient.setQueryData(adminDataScopeKey(id), data)
+      // Keys decide which views a scoped user sees, so the business-facing catalog changes with them;
+      // its client-side staleTime would otherwise keep serving the old one on in-SPA navigation.
+      queryClient.invalidateQueries({ queryKey: adminDataScopeKey(id) })
+      queryClient.invalidateQueries({ queryKey: ['data-source-catalog', id] })
+      queryClient.invalidateQueries({ queryKey: ['data-sources'] })
+    },
+  })
+}
+
 export function useUpdateRecordLimit(id: string) {
   const queryClient = useQueryClient()
   return useMutation({
@@ -88,4 +113,95 @@ export function useUpdateRecordLimit(id: string) {
     },
     onError: (error) => toast.error(error instanceof ApiError ? error.message : 'Could not update the record limit.'),
   })
+}
+
+export function useDataSourceManagement() {
+  return useQuery({ queryKey: ['admin-data-source-management'], queryFn: adminApi.dataSourceManagement, retry: false })
+}
+
+// Everything that reads a data source's name, status or connection, so no screen keeps serving the old one
+// (the business-facing picker and catalog are cached client-side for minutes and would otherwise outlive a change).
+function invalidateDataSource(queryClient: ReturnType<typeof useQueryClient>, id: string) {
+  queryClient.invalidateQueries({ queryKey: adminDataSourcesKey })
+  queryClient.invalidateQueries({ queryKey: adminDataSourceDetailKey(id) })
+  queryClient.invalidateQueries({ queryKey: adminDataScopeKey(id) })
+  queryClient.invalidateQueries({ queryKey: ['data-source-catalog', id] })
+  queryClient.invalidateQueries({ queryKey: ['data-sources'] })
+  // Turning a source off or changing its connection changes what these show or can still load.
+  queryClient.invalidateQueries({ queryKey: ['app-users', id] })
+  queryClient.invalidateQueries({ queryKey: ['visualization-data'] })
+  queryClient.invalidateQueries({ queryKey: ['pickable-visualizations'] })
+  queryClient.invalidateQueries({ queryKey: ['parameter-options'] })
+}
+
+export const encryptionKeyStatusKey = ['admin-encryption-key'] as const
+export const hubEncryptionKeyStatusKey = ['hub-encryption-key'] as const
+
+/** Under the hub the key is shared by every app, so its status and rotation live on the hub-wide routes. */
+export function useEncryptionKeyStatus(hub = false) {
+  return useQuery({
+    queryKey: hub ? hubEncryptionKeyStatusKey : encryptionKeyStatusKey,
+    queryFn: hub ? hubApi.encryptionKeyStatus : adminApi.encryptionKeyStatus,
+    retry: false,
+  })
+}
+
+export function useReencrypt(hub = false) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: () => (hub ? hubApi.reencrypt() : adminApi.reencrypt()),
+    onSuccess: () => {
+      // The counts and the list of sources on an old key change; so can what a source's own page says about its
+      // connection being readable.
+      queryClient.invalidateQueries({ queryKey: hub ? hubEncryptionKeyStatusKey : encryptionKeyStatusKey })
+      queryClient.invalidateQueries({ queryKey: adminDataSourcesKey })
+      queryClient.invalidateQueries({ queryKey: ['admin-data-source'] })
+    },
+    onError: (error) => toast.error(error instanceof ApiError ? error.message : 'Could not re-encrypt the data sources.'),
+  })
+}
+
+export function useCreateDataSource() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (request: CreateDataSourceRequest) => adminApi.createDataSource(request),
+    // The request holds the password; don't let the mutation cache keep it after the call settles.
+    gcTime: 0,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: adminDataSourcesKey })
+      queryClient.invalidateQueries({ queryKey: ['data-sources'] })
+    },
+  })
+}
+
+export function useUpdateDataSource(id: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (request: UpdateDataSourceRequest) => adminApi.updateDataSource(id, request),
+    gcTime: 0,
+    onSuccess: () => {
+      invalidateDataSource(queryClient, id)
+      toast.success('Data source saved.')
+    },
+  })
+}
+
+export function useSetDataSourceActive(id: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (isActive: boolean) => adminApi.setDataSourceActive(id, isActive),
+    onSuccess: (_data, isActive) => {
+      invalidateDataSource(queryClient, id)
+      toast.success(isActive ? 'Data source turned on.' : 'Data source turned off.')
+    },
+    onError: (error) => toast.error(error instanceof ApiError ? error.message : 'Could not change the data source.'),
+  })
+}
+
+export function useTestConnection() {
+  return useMutation({ mutationFn: (request: TestConnectionRequest) => adminApi.testConnection(request), gcTime: 0 })
+}
+
+export function useTestStoredConnection(id: string) {
+  return useMutation({ mutationFn: () => adminApi.testStoredConnection(id) })
 }

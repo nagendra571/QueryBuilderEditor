@@ -1,5 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using QueryBuilder.Application.Abstractions;
+using QueryBuilder.Domain.Entities;
 using QueryBuilder.Infrastructure.Persistence;
 
 namespace QueryBuilder.Api.Seed;
@@ -15,6 +17,7 @@ public sealed class DemoDataSeederHostedService(IServiceScopeFactory scopeFactor
     public async Task StartAsync(CancellationToken cancellationToken)
     {
         using var scope = scopeFactory.CreateScope();
+        scope.ServiceProvider.GetRequiredService<IAppContextScope>().UseApp(App.DefaultId);
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         await AppDbSeeder.SeedAsync(db, cancellationToken);
         await demoSourceSeeder.SeedAsync(cancellationToken);

@@ -2,6 +2,7 @@ using System.Globalization;
 using ClosedXML.Excel;
 using CsvHelper;
 using QueryBuilder.Application.Abstractions;
+using QueryBuilder.Application.Exceptions;
 
 namespace QueryBuilder.Infrastructure.Export;
 
@@ -75,7 +76,7 @@ public sealed class ExportService : IExportService
             for (var c = 0; c < resultSet.Columns.Count; c++)
             {
                 var value = row.GetValueOrDefault(resultSet.Columns[c].Name);
-                worksheet.Cell(r + 2, c + 1).Value = XLCellValue.FromObject(value);
+                worksheet.Cell(r + 2, c + 1).Value = ToCellValue(value, r + 1, resultSet.Columns[c].Name);
             }
         }
 
@@ -84,5 +85,24 @@ public sealed class ExportService : IExportService
         using var memoryStream = new MemoryStream();
         workbook.SaveAs(memoryStream);
         return memoryStream.ToArray();
+    }
+
+    private const int MaxExcelTextLength = 32767;
+    private static readonly DateTime FirstExcelDate = new(1900, 1, 1);
+
+    private static XLCellValue ToCellValue(object? value, int dataRow, string columnName)
+    {
+        switch (value)
+        {
+            case DateTime date when date < FirstExcelDate:
+                // Excel has no date before 1900, and FromObject throws for 0001-01-02 to 0099-12-31.
+                return date.TimeOfDay == TimeSpan.Zero
+                    ? date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)
+                    : date.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture);
+            case string text when text.Length > MaxExcelTextLength:
+                throw new QueryExecutionException($"Row {dataRow}, column '{columnName}' is too long for Excel. Export as CSV instead.");
+        }
+
+        return XLCellValue.FromObject(value);
     }
 }

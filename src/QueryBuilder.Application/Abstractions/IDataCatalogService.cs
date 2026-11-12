@@ -10,12 +10,17 @@ public interface IDataCatalogService
     /// <summary>Throws <see cref="Exceptions.CatalogValidationException"/> if any referenced table/column does not exist.</summary>
     Task ValidateAsync(Guid dataSourceId, QueryDefinition definition, CancellationToken cancellationToken);
 
-    /// <summary>Every table/view the data source's connection can see (system-schema-excluded,
-    /// <see cref="Entities.DataSource.AllowedSchemas"/>-scoped), bypassing
+    /// <summary>Every usable table/view the data source's connection can see (system-schema-excluded,
+    /// <see cref="Entities.DataSource.AllowedSchemas"/>-scoped; objects with a name clash are in
+    /// <see cref="GetUnavailableObjectsAsync"/> instead), bypassing
     /// <see cref="Entities.DataSource.CatalogScope"/>/<see cref="Entities.DataSource.AllowedObjects"/>
     /// entirely — for the admin picker, which needs to see everything to choose from. No column
     /// metadata is populated (not needed for picking, and this path isn't cached).</summary>
     Task<List<SchemaObjectMetadata>> GetRawObjectsAsync(Guid dataSourceId, CancellationToken cancellationToken);
+
+    /// <summary>Every object whose name clashes with another's, before any allowlist or kind filter, for admin
+    /// screens and for carrying forward decisions made on them. Never expose it to business users.</summary>
+    Task<List<AdminUnavailableObject>> GetUnavailableObjectsAsync(Guid dataSourceId, CancellationToken cancellationToken);
 
     /// <summary>Evicts the cached catalog for a data source so the next read reflects a recent
     /// change (e.g. an admin catalog-policy update) immediately instead of waiting out the cache TTL.</summary>

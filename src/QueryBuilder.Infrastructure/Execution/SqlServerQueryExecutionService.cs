@@ -1,16 +1,18 @@
 using System.Diagnostics;
-using System.Globalization;
 using Microsoft.Data.SqlClient;
 using QueryBuilder.Application.Abstractions;
 using QueryBuilder.Application.Exceptions;
 using QueryBuilder.Domain.Entities;
 using QueryBuilder.Domain.Enums;
 using QueryBuilder.Infrastructure.Persistence;
+using QueryBuilder.Infrastructure.Sql;
 
 namespace QueryBuilder.Infrastructure.Execution;
 
 public sealed class SqlServerQueryExecutionService(IConnectionStringResolver connectionStringResolver) : IQueryExecutionService
 {
+    private static readonly SqlServerDialect Dialect = new();
+
     public async Task<QueryResultSet> ExecuteAsync(
         DataSource dataSource,
         GeneratedQuery generatedQuery,
@@ -19,19 +21,21 @@ public sealed class SqlServerQueryExecutionService(IConnectionStringResolver con
         CancellationToken cancellationToken)
     {
         var connectionString = connectionStringResolver.Resolve(dataSource);
-        var sql = maxRows is > 0 ? ApplyRowLimit(generatedQuery.Sql, maxRows.Value + 1) : generatedQuery.Sql;
+        var sql = maxRows is > 0 ? Dialect.ApplyRowLimit(generatedQuery.Sql, maxRows.Value + 1) : generatedQuery.Sql;
 
         var stopwatch = Stopwatch.StartNew();
+        var opened = false;
 
         try
         {
             await using var connection = new SqlConnection(connectionString);
             await connection.OpenAsync(cancellationToken);
+            opened = true;
 
             await using var command = new SqlCommand(sql, connection) { CommandTimeout = 60 };
             foreach (var parameter in generatedQuery.Parameters)
             {
-                command.Parameters.Add(BuildParameter(parameter, runtimeParameterValues));
+                command.Parameters.Add(new SqlParameter(parameter.Name, QueryParameterValues.Resolve(parameter, runtimeParameterValues)));
             }
 
             await using var reader = await command.ExecuteReaderAsync(cancellationToken);
@@ -71,58 +75,22 @@ public sealed class SqlServerQueryExecutionService(IConnectionStringResolver con
                 Truncated = truncated
             };
         }
+        catch (ArgumentException ex) when (!opened && dataSource.IsManaged)
+        {
+            // A row saved some other way can hold a string the driver rejects; that is a failed connection, not a 500.
+            throw new QueryExecutionException(ConnectionStringResolver.ConnectFailed, ex);
+        }
+        catch (SqlException ex) when (!opened && dataSource.IsManaged)
+        {
+            // The login and server were typed by an admin; business users get the short message, not the driver's.
+            throw new QueryExecutionException(ConnectionStringResolver.ConnectFailed, ex);
+        }
         catch (SqlException ex)
         {
             throw new QueryExecutionException(
                 $"The database rejected the query: {ex.Message.Split('\n')[0]}", ex);
         }
     }
-
-    private static string ApplyRowLimit(string sql, int rowLimit)
-    {
-        var selectIndex = sql.IndexOf("SELECT", StringComparison.OrdinalIgnoreCase);
-        return sql.Insert(selectIndex + "SELECT".Length, $" TOP ({rowLimit})");
-    }
-
-    private static SqlParameter BuildParameter(GeneratedQueryParameter parameter, IReadOnlyDictionary<string, string?> runtimeValues)
-    {
-        string? rawValue = parameter.LiteralValue;
-        if (parameter.IsRuntimeParameter && parameter.RuntimeParameterName is not null &&
-            runtimeValues.TryGetValue(parameter.RuntimeParameterName, out var supplied))
-        {
-            rawValue = supplied;
-        }
-
-        var sqlParameter = new SqlParameter(parameter.Name, ConvertValue(parameter.DataType, rawValue));
-        return sqlParameter;
-    }
-
-    private static object ConvertValue(ColumnDataType dataType, string? rawValue)
-    {
-        if (string.IsNullOrEmpty(rawValue))
-        {
-            return DBNull.Value;
-        }
-
-        try
-        {
-            return dataType switch
-            {
-                ColumnDataType.Number => decimal.Parse(rawValue, CultureInfo.InvariantCulture),
-                ColumnDataType.Boolean => ParseBool(rawValue),
-                ColumnDataType.Date => DateTime.Parse(rawValue, CultureInfo.InvariantCulture, DateTimeStyles.None).Date,
-                ColumnDataType.DateTime => DateTime.Parse(rawValue, CultureInfo.InvariantCulture, DateTimeStyles.None),
-                ColumnDataType.Guid => Guid.Parse(rawValue),
-                _ => rawValue
-            };
-        }
-        catch (FormatException ex)
-        {
-            throw new QueryExecutionException($"Value '{rawValue}' is not a valid {dataType}.", ex);
-        }
-    }
-
-    private static bool ParseBool(string value) => value is "1" or "true" or "True" or "TRUE";
 
     private static ColumnDataType InferDataType(Type clrType) => Type.GetTypeCode(clrType) switch
     {

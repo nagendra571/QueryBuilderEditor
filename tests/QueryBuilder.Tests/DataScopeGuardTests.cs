@@ -10,7 +10,7 @@ namespace QueryBuilder.Tests;
 public class DataScopeGuardTests
 {
     private static DataScopeGuard Guard(ResolvedDataScope scope, params DataScopeRule[] rules) =>
-        new(new FakeScope(scope), new FakeRules(rules), new FakeCatalog(TestData.Catalog()));
+        new(new FakeScope(scope), new ActiveDataSources(), new FakeRules(rules), new FakeCatalog(TestData.Catalog()));
 
     [Fact]
     public async Task Catalog_for_scoped_user_contains_only_decided_and_usable_objects()
@@ -95,7 +95,7 @@ public class DataScopeGuardTests
     private sealed class FakeScope(ResolvedDataScope scope) : ICurrentDataScope
     {
         public bool IsEnabled => true;
-        public IReadOnlyList<string> DeclaredKeys => ["ProgramId", "Region"];
+        public IReadOnlyList<string> HostKeys => ["ProgramId", "Region"];
         public Task<ResolvedDataScope> GetAsync(CancellationToken cancellationToken) => Task.FromResult(scope);
     }
 
@@ -113,6 +113,7 @@ public class DataScopeGuardTests
         public Task<DataSourceCatalog> GetCatalogAsync(Guid dataSourceId, CancellationToken cancellationToken) => Task.FromResult(catalog);
         public Task ValidateAsync(Guid dataSourceId, QueryDefinition definition, CancellationToken cancellationToken) => Task.CompletedTask;
         public Task<List<SchemaObjectMetadata>> GetRawObjectsAsync(Guid dataSourceId, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<List<AdminUnavailableObject>> GetUnavailableObjectsAsync(Guid dataSourceId, CancellationToken cancellationToken) => Task.FromResult(new List<AdminUnavailableObject>());
         public void InvalidateCatalogCache(Guid dataSourceId) { }
     }
 }

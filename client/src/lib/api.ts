@@ -1,14 +1,38 @@
+import { dropOrphanParameters } from '@/features/parameters/param-values'
+import { auditQueryParams } from '@/features/hub/audit-filter'
 import { apiClient } from '@/lib/api-client'
 import type {
   AdminDataScopeDto,
+  ConnectionTestResult,
+  CreateDataSourceRequest,
+  TestConnectionRequest,
+  UpdateDataSourceRequest,
   AdminDataSourceDetailDto,
+  EncryptionKeyStatusDto,
+  ReencryptResultDto,
   AdminDataSourceSummaryDto,
+  AppUserDto,
   AppUsersResult,
   AuditLogEntryDto,
   DataSourceCatalog,
+  DashboardDetailDto,
+  DashboardSharePreviewDto,
+  DashboardSummaryDto,
   DataSourceDto,
   ExportQueryRequest,
+  ParameterOption,
+  PickableVisualizationDto,
+  QueryParameter,
   QueryShareDto,
+  RenderVisualizationRequest,
+  DashboardContext,
+  TileChartDto,
+  SaveDashboardRequest,
+  SaveDashboardTilesRequest,
+  SaveVisualizationRequest,
+  ShareDashboardRequest,
+  VisualizationDataDto,
+  VisualizationDto,
   RunQueryRequest,
   SaveQueryRequest,
   SavedQueryDetailDto,
@@ -18,6 +42,7 @@ import type {
   QuerySqlPreviewDto,
   UpdateCatalogPolicyRequest,
   UpdateDataScopeRequest,
+  UpdateScopeKeysRequest,
   UpdateRecordLimitRequest,
 } from '@/types'
 
@@ -27,11 +52,18 @@ export const dataSourcesApi = {
     (await apiClient.get(`/data-sources/${dataSourceId}/catalog`)).data,
   appUsers: async (dataSourceId: string): Promise<AppUsersResult> =>
     (await apiClient.get(`/data-sources/${dataSourceId}/app-users`)).data,
+  /** Hub mode only: the people launched into the caller's app. */
+  people: async (): Promise<AppUserDto[]> => (await apiClient.get('/people')).data,
 }
 
 export const savedQueriesApi = {
   list: async (): Promise<SavedQuerySummaryDto[]> => (await apiClient.get('/queries')).data,
-  getById: async (id: string): Promise<SavedQueryDetailDto> => (await apiClient.get(`/queries/${id}`)).data,
+  // Queries saved before removing a filter also removed its parameter can still hold orphans. The server
+  // ignores them, but every screen reading this would ask for a value that nothing uses.
+  getById: async (id: string): Promise<SavedQueryDetailDto> => {
+    const query: SavedQueryDetailDto = (await apiClient.get(`/queries/${id}`)).data
+    return { ...query, definition: dropOrphanParameters(query.definition) }
+  },
   save: async (request: SaveQueryRequest): Promise<{ id: string }> =>
     (await apiClient.post('/queries', request)).data,
   remove: async (id: string): Promise<void> => {
@@ -47,12 +79,24 @@ export const savedQueriesApi = {
     (await apiClient.post('/queries/run', request)).data,
   export: async (request: ExportQueryRequest): Promise<Blob> =>
     (await apiClient.post('/queries/export', request, { responseType: 'blob' })).data,
+  parameterOptions: async (id: string, name: string, context?: DashboardContext): Promise<ParameterOption[]> =>
+    (
+      await apiClient.get(`/queries/${id}/parameters/${encodeURIComponent(name)}/options`, {
+        params: context ? { dashboardId: context.dashboardId, tileId: context.tileId } : undefined,
+      })
+    ).data,
   getShares: async (id: string): Promise<QueryShareDto[]> => (await apiClient.get(`/queries/${id}/shares`)).data,
   share: async (id: string, request: ShareQueryRequest): Promise<{ id: string }> =>
     (await apiClient.post(`/queries/${id}/shares`, request)).data,
   removeShare: async (id: string, shareId: string): Promise<void> => {
     await apiClient.delete(`/queries/${id}/shares/${shareId}`)
   },
+}
+
+export const parametersApi = {
+  /** Choices for a query-list parameter that is still being edited (not saved yet). */
+  previewOptions: async (parameter: QueryParameter, dataSourceId?: string | null): Promise<ParameterOption[]> =>
+    (await apiClient.post('/parameters/options', { dataSourceId: dataSourceId ?? null, parameter })).data,
 }
 
 export const auditApi = {
@@ -72,8 +116,173 @@ export const adminApi = {
   updateRecordLimit: async (id: string, request: UpdateRecordLimitRequest): Promise<void> => {
     await apiClient.put(`/admin/data-sources/${id}/record-limit`, request)
   },
+  encryptionKeyStatus: async (): Promise<EncryptionKeyStatusDto> => (await apiClient.get('/admin/encryption-key')).data,
+  reencrypt: async (): Promise<ReencryptResultDto> => (await apiClient.post('/admin/encryption-key/reencrypt')).data,
+  dataSourceManagement: async (): Promise<{ enabled: boolean; canManageConnections?: boolean }> => (await apiClient.get('/admin/data-source-management')).data,
+  createDataSource: async (request: CreateDataSourceRequest): Promise<AdminDataSourceSummaryDto> =>
+    (await apiClient.post('/admin/data-sources', request)).data,
+  updateDataSource: async (id: string, request: UpdateDataSourceRequest): Promise<void> => {
+    await apiClient.put(`/admin/data-sources/${id}`, request)
+  },
+  setDataSourceActive: async (id: string, isActive: boolean): Promise<void> => {
+    await apiClient.put(`/admin/data-sources/${id}/active`, { isActive })
+  },
+  testConnection: async (request: TestConnectionRequest): Promise<ConnectionTestResult> =>
+    (await apiClient.post('/admin/data-sources/test', request)).data,
+  testStoredConnection: async (id: string): Promise<ConnectionTestResult> =>
+    (await apiClient.post(`/admin/data-sources/${id}/test`)).data,
   getDataScope: async (id: string): Promise<AdminDataScopeDto> => (await apiClient.get(`/admin/data-sources/${id}/data-scope`)).data,
   updateDataScope: async (id: string, request: UpdateDataScopeRequest): Promise<void> => {
     await apiClient.put(`/admin/data-sources/${id}/data-scope`, request)
   },
+  updateScopeKeys: async (id: string, request: UpdateScopeKeysRequest): Promise<AdminDataScopeDto> =>
+    (await apiClient.put(`/admin/data-sources/${id}/scope-keys`, request)).data,
+}
+
+export const visualizationsApi = {
+  list: async (queryId: string): Promise<VisualizationDto[]> =>
+    (await apiClient.get(`/queries/${queryId}/visualizations`)).data,
+  create: async (queryId: string, request: SaveVisualizationRequest): Promise<VisualizationDto> =>
+    (await apiClient.post(`/queries/${queryId}/visualizations`, request)).data,
+  update: async (queryId: string, id: string, request: SaveVisualizationRequest): Promise<VisualizationDto> =>
+    (await apiClient.put(`/queries/${queryId}/visualizations/${id}`, request)).data,
+  remove: async (queryId: string, id: string): Promise<void> => {
+    await apiClient.delete(`/queries/${queryId}/visualizations/${id}`)
+  },
+  render: async (queryId: string, id: string, request: RenderVisualizationRequest): Promise<VisualizationDataDto> =>
+    (await apiClient.post(`/queries/${queryId}/visualizations/${id}/data`, request)).data,
+}
+
+export interface MeDto {
+  userId: string
+  displayName: string
+  /** Null when the host configured no data scoping. */
+  zone: { unrestricted: boolean; values: Record<string, string[]> } | null
+  app?: { id: string; key: string; name: string } | null
+  role?: 'Admin' | 'Author' | 'Viewer'
+  isSuperAdmin?: boolean
+  returnUrl?: string | null
+  /** A super admin's chosen app; null until they pick one. */
+  viewingApp?: { id: string; key: string; name: string } | null
+  /** Present only in hub mode; its presence is how the client knows it is running under the hub. */
+  permissions?: { canBuildQueries: boolean; canManageDashboards: boolean; canPublish: boolean; canAdmin: boolean; isViewer: boolean }
+}
+
+export const meApi = {
+  get: async (): Promise<MeDto> => (await apiClient.get('/me')).data,
+}
+
+export interface HubSigningKeyDto {
+  kid: string
+  algorithm: 'RS256' | 'ES256'
+  fingerprint: string | null
+  createdAtUtc: string
+  revokedAtUtc: string | null
+}
+
+export interface HubAppDto {
+  id: string
+  key: string
+  name: string
+  isEnabled: boolean
+  version: number
+  createdAtUtc?: string
+  scopeKeys?: string[]
+  keys?: HubSigningKeyDto[]
+  returnUrls?: string[]
+  maxRecords?: number | null
+  appAdminsCanManageConnections?: boolean
+}
+
+export interface UpdateHubAppRequest {
+  version: number
+  name: string
+  isEnabled: boolean
+  scopeKeys: string[]
+  maxRecords: number | null
+  appAdminsCanManageConnections: boolean
+}
+
+export interface HubAuditEntryDto {
+  id: string
+  timestampUtc: string
+  actor: string
+  action: string
+  entityType: string
+  entityId?: string | null
+  entityName?: string | null
+  summary: string
+  detailsJson?: string | null
+  ipAddress?: string | null
+  appId?: string | null
+  appKey?: string | null
+}
+
+export interface HubAuditParams {
+  appId?: string
+  action?: string
+  before?: string
+  beforeId?: string
+  take?: number
+}
+
+export const hubApi = {
+  listApps: async (): Promise<HubAppDto[]> => (await apiClient.get('/hub/apps')).data,
+  createApp: async (request: { key: string; name: string }): Promise<HubAppDto> => (await apiClient.post('/hub/apps', request)).data,
+  updateApp: async (id: string, request: UpdateHubAppRequest): Promise<HubAppDto> => (await apiClient.put(`/hub/apps/${id}`, request)).data,
+  addKey: async (id: string, request: { kid: string; algorithm: string; publicKeyPem: string }): Promise<HubSigningKeyDto> =>
+    (await apiClient.post(`/hub/apps/${id}/keys`, request)).data,
+  revokeKey: async (id: string, kid: string): Promise<void> => {
+    await apiClient.delete(`/hub/apps/${id}/keys/${encodeURIComponent(kid)}`)
+  },
+  setReturnUrls: async (id: string, urls: string[]): Promise<{ urls: string[] }> =>
+    (await apiClient.put(`/hub/apps/${id}/return-urls`, { urls })).data,
+  audit: async (params: HubAuditParams): Promise<HubAuditEntryDto[]> => (await apiClient.get('/hub/audit', { params: auditQueryParams(params) })).data,
+  setDataSourceLock: async (id: string, locked: boolean): Promise<void> => {
+    await apiClient.put(`/admin/data-sources/${id}/lock`, { locked })
+  },
+  moveDataSource: async (appId: string, id: string, targetAppId: string): Promise<void> => {
+    await apiClient.post(`/hub/apps/${appId}/data-sources/${id}/move`, { targetAppId })
+  },
+  encryptionKeyStatus: async (): Promise<EncryptionKeyStatusDto> => (await apiClient.get('/hub/encryption-key')).data,
+  reencrypt: async (): Promise<ReencryptResultDto> => (await apiClient.post('/hub/encryption-key/reencrypt')).data,
+  viewApp: async (appId: string): Promise<void> => {
+    await apiClient.post('/hub/view-app', { appId })
+  },
+  // Outside /api on the server, so it can't use apiClient's base URL; same CSRF header.
+  logout: async (): Promise<{ redirectUrl: string }> =>
+    (await apiClient.post('/querybuilder/logout', undefined, { baseURL: '' })).data,
+}
+
+export const dashboardsApi = {
+  tileChart: async (dashboardId: string, tileId: string): Promise<TileChartDto> =>
+    (await apiClient.get(`/dashboards/${dashboardId}/tiles/${tileId}/chart`)).data,
+  parameterOptions: async (dashboardId: string, name: string): Promise<ParameterOption[]> =>
+    (await apiClient.get(`/dashboards/${dashboardId}/parameters/${encodeURIComponent(name)}/options`)).data,
+  list: async (): Promise<DashboardSummaryDto[]> => (await apiClient.get('/dashboards')).data,
+  getById: async (id: string): Promise<DashboardDetailDto> => (await apiClient.get(`/dashboards/${id}`)).data,
+  create: async (request: SaveDashboardRequest): Promise<DashboardDetailDto> =>
+    (await apiClient.post('/dashboards', request)).data,
+  rename: async (id: string, request: SaveDashboardRequest): Promise<DashboardDetailDto> =>
+    (await apiClient.put(`/dashboards/${id}`, request)).data,
+  saveTiles: async (id: string, request: SaveDashboardTilesRequest): Promise<DashboardDetailDto> =>
+    (await apiClient.put(`/dashboards/${id}/tiles`, request)).data,
+  addChart: async (id: string, visualizationId: string): Promise<DashboardSummaryDto> =>
+    (await apiClient.post(`/dashboards/${id}/tiles/chart`, { visualizationId })).data,
+  remove: async (id: string): Promise<void> => {
+    await apiClient.delete(`/dashboards/${id}`)
+  },
+  setPublished: async (id: string, published: boolean): Promise<void> => {
+    await apiClient.put(`/dashboards/${id}/published`, { published })
+  },
+  getShares: async (id: string): Promise<QueryShareDto[]> => (await apiClient.get(`/dashboards/${id}/shares`)).data,
+  share: async (id: string, request: ShareDashboardRequest): Promise<{ id: string }> =>
+    (await apiClient.post(`/dashboards/${id}/shares`, request)).data,
+  removeShare: async (id: string, shareId: string): Promise<void> => {
+    await apiClient.delete(`/dashboards/${id}/shares/${shareId}`)
+  },
+  sharePreview: async (id: string, userId: string): Promise<DashboardSharePreviewDto> =>
+    (await apiClient.get(`/dashboards/${id}/share-preview`, { params: { userId } })).data,
+  pickableVisualizations: async (): Promise<PickableVisualizationDto[]> =>
+    (await apiClient.get('/visualizations/pickable')).data,
 }

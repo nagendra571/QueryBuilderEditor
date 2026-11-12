@@ -29,6 +29,18 @@ export function FilterValueInput({ dataType, operator, value, onChange }: Props)
     )
   }
 
+  if (operator === 'in' || operator === 'notIn') {
+    return (
+      <Input
+        value={value ?? ''}
+        onChange={(e) => onChange(e.target.value)}
+        className="h-7 min-w-48 flex-1 text-xs"
+        placeholder="Comma-separated values"
+        aria-label="Comma-separated values"
+      />
+    )
+  }
+
   return <SingleValueInput dataType={dataType} value={value ?? ''} onChange={onChange} />
 }
 

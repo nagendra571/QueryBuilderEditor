@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using QueryBuilder.Application.Abstractions;
 using QueryBuilder.Domain.Entities;
 using QueryBuilder.Domain.Enums;
 
@@ -17,13 +18,22 @@ namespace QueryBuilder.Infrastructure.Persistence;
 /// </summary>
 internal sealed class DefaultDataSourceSeeder(
     IServiceScopeFactory scopeFactory,
+    MetadataMode mode,
     ILogger<DefaultDataSourceSeeder> logger) : IHostedService
 {
     public async Task StartAsync(CancellationToken cancellationToken)
     {
+        // In hub mode this database holds every app's metadata, so it must never become a queryable source.
+        if (mode.Hub)
+        {
+            logger.LogInformation("Hub mode does not seed a default data source.");
+            return;
+        }
+
         try
         {
             using var scope = scopeFactory.CreateScope();
+            scope.ServiceProvider.GetRequiredService<IAppContextScope>().UseApp(App.DefaultId);
             var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
             if (await db.DataSources.AnyAsync(cancellationToken))

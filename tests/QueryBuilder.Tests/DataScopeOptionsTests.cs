@@ -27,8 +27,8 @@ public class DataScopeOptionsTests
     });
 
     [Fact]
-    public void Resolver_without_keys_throws() =>
-        Assert.Throws<InvalidOperationException>(() => Register(o => o.DataScope.Resolver = _ => DataScope.Unrestricted));
+    public void Resolver_without_keys_is_valid_because_admins_can_add_keys() =>
+        Register(o => o.DataScope.Resolver = _ => DataScope.Unrestricted);
 
     [Fact]
     public void Keys_without_resolver_throws() =>

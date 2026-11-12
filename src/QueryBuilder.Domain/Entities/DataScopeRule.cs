@@ -7,8 +7,10 @@ namespace QueryBuilder.Domain.Entities;
 /// otherwise each rule binds a host-declared scope key (e.g. "ProgramId") to one of the object's
 /// columns, and a scoped user sees only rows whose column value is in their values for that key.
 /// </summary>
-public sealed class DataScopeRule : AuditableEntity
+public sealed class DataScopeRule : AuditableEntity, IAppOwned
 {
+    public Guid AppId { get; set; }
+
     public Guid DataSourceId { get; set; }
 
     /// <summary>"SchemaName.ObjectName", same format as <see cref="DataSource.AllowedObjects"/>.</summary>
