@@ -37,6 +37,7 @@
     <ProjectReference Include="..\..\src\QueryBuilder.Application\QueryBuilder.Application.csproj" />
     <ProjectReference Include="..\..\src\QueryBuilder.Infrastructure\QueryBuilder.Infrastructure.csproj" />
     <ProjectReference Include="..\..\src\QueryBuilder.Editor\QueryBuilder.Editor.csproj" />
+    <ProjectReference Include="..\..\src\QueryBuilder.Launch\QueryBuilder.Launch.csproj" />
   </ItemGroup>
 
 </Project>
