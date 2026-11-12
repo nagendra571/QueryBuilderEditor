@@ -2,7 +2,7 @@ using System.Security.Claims;
 
 namespace QueryBuilder.Editor.Hub;
 
-internal enum SuperAdminMatchKind { ObjectId, Email, Group }
+internal enum SuperAdminMatchKind { ObjectId, Email, Group, UserId, Code }
 
 internal enum SuperAdminRefusalReason { NotAllowlisted, WrongTenant, GroupsOverage, WrongScheme, NoStableId }
 
@@ -28,11 +28,59 @@ internal static class SuperAdminRecognizer
     private static readonly string[] ObjectIdClaims = ["oid", "http://schemas.microsoft.com/identity/claims/objectidentifier"];
     private static readonly string[] TenantClaims = ["tid", "http://schemas.microsoft.com/identity/claims/tenantid"];
     private static readonly string[] EmailClaims = ["email", "preferred_username", "upn", ClaimTypes.Email, ClaimTypes.Upn];
+    private static readonly string[] OidcEmailClaims = ["email", ClaimTypes.Email];
+    private static readonly string[] EmailVerifiedClaims = ["email_verified"];
     private static readonly string[] NameClaims = ["name", ClaimTypes.Name];
     private static readonly string[] GroupClaims = ["groups"];
     private static readonly string[] SubjectClaims = ["sub", ClaimTypes.NameIdentifier];
 
-    public static SuperAdminRecognition Recognize(ClaimsPrincipal principal, SuperAdminOptions allowed)
+    public static SuperAdminRecognition Recognize(ClaimsPrincipal principal, SuperAdminOptions allowed) =>
+        allowed.ProviderKind == SuperAdminProviderKind.OpenIdConnect ? RecognizeOpenIdConnect(principal, allowed) : RecognizeEntra(principal, allowed);
+
+    // Any OpenID Connect provider: no tenant, and the only identifier trusted is the `sub` the provider issued. An email
+    // counts only when the provider vouches for it, since many providers let users set an unverified one.
+    private static SuperAdminRecognition RecognizeOpenIdConnect(ClaimsPrincipal principal, SuperAdminOptions allowed)
+    {
+        var subjects = Distinct(Values(principal, SubjectClaims));
+        var subject = subjects.Count == 1 ? subjects[0] : null;
+        if (subject is null || subject.Length > MaxIdLength)
+        {
+            return new SuperAdminRecognition(null, SuperAdminRefusalReason.NoStableId, null, null);
+        }
+
+        var verified = Values(principal, EmailVerifiedClaims);
+        var emailsVerified = verified.Count > 0 && verified.All(v => string.Equals(v, "true", StringComparison.OrdinalIgnoreCase));
+        var emails = emailsVerified ? Values(principal, OidcEmailClaims) : [];
+        var groups = Values(principal, [allowed.GroupsClaim]);
+
+        SuperAdminMatchKind? kind = null;
+        var matched = "";
+        if (Listed(allowed.UserIds).Any(e => Same(e, subject)))
+        {
+            kind = SuperAdminMatchKind.UserId;
+            matched = subject;
+        }
+        else if (emails.FirstOrDefault(v => Listed(allowed.Emails).Contains(v, StringComparer.OrdinalIgnoreCase)) is { } email)
+        {
+            kind = SuperAdminMatchKind.Email;
+            matched = email;
+        }
+        else if (groups.FirstOrDefault(v => Listed(allowed.GroupIds).Any(g => Same(g, v))) is { } group)
+        {
+            kind = SuperAdminMatchKind.Group;
+            matched = group;
+        }
+
+        if (kind is not { } k)
+        {
+            return new SuperAdminRecognition(null, SuperAdminRefusalReason.NotAllowlisted, subject, null);
+        }
+
+        var match = new SuperAdminMatch(subject, Values(principal, NameClaims).FirstOrDefault(), Values(principal, OidcEmailClaims).FirstOrDefault(), k, matched);
+        return new SuperAdminRecognition(match, null, subject, null);
+    }
+
+    private static SuperAdminRecognition RecognizeEntra(ClaimsPrincipal principal, SuperAdminOptions allowed)
     {
         var objectIds = Distinct(Values(principal, ObjectIdClaims));
         var tenants = Distinct(Values(principal, TenantClaims));
@@ -104,14 +152,27 @@ internal static class SuperAdminRecognizer
     /// </summary>
     public static bool StillAllowed(SuperAdminMatchKind kind, string value, string tenantId, SuperAdminOptions allowed)
     {
-        if (string.IsNullOrEmpty(value) || string.IsNullOrEmpty(tenantId) || !Listed(allowed.TenantIds).Any(t => Same(t, tenantId)))
+        if (string.IsNullOrEmpty(value))
+        {
+            return false;
+        }
+
+        // A code names no provider and no tenant; it stands or falls with the name list.
+        if (kind == SuperAdminMatchKind.Code)
+        {
+            return Listed(allowed.CodeNames).Any(n => string.Equals(n, value, StringComparison.Ordinal));
+        }
+
+        var oidc = allowed.ProviderKind == SuperAdminProviderKind.OpenIdConnect;
+        if (!oidc && (string.IsNullOrEmpty(tenantId) || !Listed(allowed.TenantIds).Any(t => Same(t, tenantId))))
         {
             return false;
         }
 
         return kind switch
         {
-            SuperAdminMatchKind.ObjectId => Listed(allowed.ObjectIds).Any(e => Same(e, value)),
+            SuperAdminMatchKind.ObjectId => !oidc && Listed(allowed.ObjectIds).Any(e => Same(e, value)),
+            SuperAdminMatchKind.UserId => oidc && Listed(allowed.UserIds).Any(e => Same(e, value)),
             SuperAdminMatchKind.Email => Listed(allowed.Emails).Contains(value, StringComparer.OrdinalIgnoreCase),
             SuperAdminMatchKind.Group => Listed(allowed.GroupIds).Any(g => Same(g, value)),
             _ => false,
@@ -126,7 +187,10 @@ internal static class SuperAdminRecognizer
         principal.FindAll("_claim_names").Any(c => c.Value.Contains("groups", StringComparison.OrdinalIgnoreCase));
 
     public static int ConfiguredEntryCount(SuperAdminOptions options) =>
-        Listed(options.ObjectIds).Count() + Listed(options.Emails).Count() + Listed(options.GroupIds).Count();
+        (options.ProviderKind == SuperAdminProviderKind.OpenIdConnect ? Listed(options.UserIds).Count() : Listed(options.ObjectIds).Count())
+        + Listed(options.Emails).Count() + Listed(options.GroupIds).Count();
+
+    public static int ConfiguredCodeNameCount(SuperAdminOptions options) => Listed(options.CodeNames).Count();
 
     public static int ConfiguredTenantCount(SuperAdminOptions options) => Listed(options.TenantIds).Count();
 

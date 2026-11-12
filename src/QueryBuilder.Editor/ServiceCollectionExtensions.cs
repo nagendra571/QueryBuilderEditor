@@ -173,23 +173,55 @@ public static class ServiceCollectionExtensions
                 throw new InvalidOperationException($"{nameof(HubOptions)}.{nameof(HubOptions.Audience)} is required in hub mode.");
             }
 
-            if (string.IsNullOrWhiteSpace(options.Hub.SuperAdminSignInScheme))
-            {
-                throw new InvalidOperationException($"{nameof(HubOptions)}.{nameof(HubOptions.SuperAdminSignInScheme)} is required in hub mode.");
-            }
-
-            if (SuperAdminRecognizer.ConfiguredEntryCount(options.Hub.SuperAdmins) == 0)
+            var superAdmins = options.Hub.SuperAdmins;
+            var providerSet = !string.IsNullOrWhiteSpace(options.Hub.SuperAdminSignInScheme);
+            var codeNamesSet = SuperAdminRecognizer.ConfiguredCodeNameCount(superAdmins) > 0;
+            if (options.Hub.SignInCodes.Enabled && !codeNamesSet)
             {
                 throw new InvalidOperationException(
-                    $"{nameof(HubOptions)}.{nameof(HubOptions.SuperAdmins)} needs at least one entry in {nameof(SuperAdminOptions.ObjectIds)}, " +
-                    $"{nameof(SuperAdminOptions.Emails)} or {nameof(SuperAdminOptions.GroupIds)}: a hub nobody can administer is refused.");
+                    $"{nameof(HubOptions)}.{nameof(HubOptions.SignInCodes)} is enabled but {nameof(HubOptions)}.{nameof(HubOptions.SuperAdmins)}.{nameof(SuperAdminOptions.CodeNames)} " +
+                    "has no entry: nobody could be issued a code.");
             }
 
-            if (SuperAdminRecognizer.ConfiguredTenantCount(options.Hub.SuperAdmins) == 0)
+            if (!providerSet && !options.Hub.SignInCodes.Enabled)
             {
                 throw new InvalidOperationException(
-                    $"{nameof(HubOptions)}.{nameof(HubOptions.SuperAdmins)}.{nameof(SuperAdminOptions.TenantIds)} needs at least one tenant id: " +
-                    "an object id or email is only meaningful inside the tenant that issued it.");
+                    $"{nameof(HubOptions)}.{nameof(HubOptions.SuperAdminSignInScheme)} is required in hub mode unless {nameof(HubOptions)}.{nameof(HubOptions.SignInCodes)} " +
+                    "is enabled: a hub nobody can sign in to as a super admin is refused.");
+            }
+
+            if (providerSet)
+            {
+                if (superAdmins.ProviderKind == SuperAdminProviderKind.OpenIdConnect)
+                {
+                    if (SuperAdminRecognizer.ConfiguredEntryCount(superAdmins) == 0)
+                    {
+                        throw new InvalidOperationException(
+                            $"{nameof(HubOptions)}.{nameof(HubOptions.SuperAdmins)} needs at least one entry in {nameof(SuperAdminOptions.UserIds)}, " +
+                            $"{nameof(SuperAdminOptions.Emails)} or {nameof(SuperAdminOptions.GroupIds)}: a hub nobody can administer is refused.");
+                    }
+
+                    if (string.IsNullOrWhiteSpace(superAdmins.GroupsClaim))
+                    {
+                        throw new InvalidOperationException($"{nameof(HubOptions)}.{nameof(HubOptions.SuperAdmins)}.{nameof(SuperAdminOptions.GroupsClaim)} must not be blank.");
+                    }
+                }
+                else
+                {
+                    if (SuperAdminRecognizer.ConfiguredEntryCount(superAdmins) == 0)
+                    {
+                        throw new InvalidOperationException(
+                            $"{nameof(HubOptions)}.{nameof(HubOptions.SuperAdmins)} needs at least one entry in {nameof(SuperAdminOptions.ObjectIds)}, " +
+                            $"{nameof(SuperAdminOptions.Emails)} or {nameof(SuperAdminOptions.GroupIds)}: a hub nobody can administer is refused.");
+                    }
+
+                    if (SuperAdminRecognizer.ConfiguredTenantCount(superAdmins) == 0)
+                    {
+                        throw new InvalidOperationException(
+                            $"{nameof(HubOptions)}.{nameof(HubOptions.SuperAdmins)}.{nameof(SuperAdminOptions.TenantIds)} needs at least one tenant id: " +
+                            "an object id or email is only meaningful inside the tenant that issued it.");
+                    }
+                }
             }
 
             AddHubSession(services, options.Hub);

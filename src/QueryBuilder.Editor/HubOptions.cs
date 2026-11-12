@@ -30,13 +30,38 @@ public sealed class HubOptions
     /// token carries them; when it omits them for being too many, such a user can only match by object id or email.
     /// </summary>
     public string? SuperAdminSignInScheme { get; set; }
+
+    /// <summary>One-time sign-in codes an operator creates on the server, as a second way (or the only way) to sign in as a super admin.</summary>
+    public SignInCodeOptions SignInCodes { get; set; } = new();
 }
 
-/// <summary>The allowlist for super admin sign-in: Entra object ids, emails or group ids.</summary>
+/// <summary>Settings for super admin sign-in with a one-time code. Off by default; needs <see cref="SuperAdminOptions.CodeNames"/>.</summary>
+public sealed class SignInCodeOptions
+{
+    public bool Enabled { get; set; }
+
+    /// <summary>How long a new code lives when the operator does not say (1 to 60).</summary>
+    public int DefaultMinutes { get; set; } = 15;
+}
+
+/// <summary>Which kind of identity provider the host's super admin sign-in scheme is.</summary>
+public enum SuperAdminProviderKind
+{
+    /// <summary>Microsoft Entra ID: the tenant is checked, and the object id, email or group id may match.</summary>
+    Entra,
+
+    /// <summary>Any OpenID Connect provider: the <c>sub</c> claim, a verified email or a group may match; no tenant.</summary>
+    OpenIdConnect,
+}
+
+/// <summary>The allowlist for super admin sign-in: ids, emails or group ids of the provider, and names for one-time codes.</summary>
 public sealed class SuperAdminOptions
 {
+    /// <summary>Decides which of the lists below apply. Default <see cref="SuperAdminProviderKind.Entra"/>.</summary>
+    public SuperAdminProviderKind ProviderKind { get; set; } = SuperAdminProviderKind.Entra;
+
     /// <summary>
-    /// Entra tenant ids (the <c>tid</c> claim) a super admin may sign in from. Required: an email or object id means
+    /// Entra only: tenant ids (the <c>tid</c> claim) a super admin may sign in from. Required: an email or object id means
     /// nothing outside the tenant that issued it, and a multi-tenant app registration lets any tenant's users in.
     /// </summary>
     public List<string> TenantIds { get; set; } = [];
@@ -44,4 +69,13 @@ public sealed class SuperAdminOptions
     public List<string> ObjectIds { get; set; } = [];
     public List<string> Emails { get; set; } = [];
     public List<string> GroupIds { get; set; } = [];
+
+    /// <summary>OpenID Connect only: the provider's <c>sub</c> values that may sign in. Emails count only when the provider says they are verified.</summary>
+    public List<string> UserIds { get; set; } = [];
+
+    /// <summary>OpenID Connect only: the claim that carries group ids.</summary>
+    public string GroupsClaim { get; set; } = "groups";
+
+    /// <summary>Names a one-time sign-in code may be issued for (compared exactly, case-sensitive).</summary>
+    public List<string> CodeNames { get; set; } = [];
 }

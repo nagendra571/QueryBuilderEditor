@@ -64,8 +64,9 @@ internal static class HubSession
             // What matched the allowlist, so every request can check it is still there.
             new(MatchKind, matchKind.ToString()),
             new(MatchValue, matchValue),
-            new(TenantId, tenantId),
         };
+        // Only Entra sessions have one; an OpenID Connect or code session carries none.
+        AddIfPresent(claims, TenantId, tenantId);
         AddIfPresent(claims, Name, name);
         AddIfPresent(claims, Email, email);
         if (viewingAppId is { } viewing)
@@ -129,7 +130,7 @@ internal static class HubSession
         value = principal.FindFirst(MatchValue)?.Value ?? "";
         tenantId = principal.FindFirst(TenantId)?.Value ?? "";
         return Enum.TryParse(principal.FindFirst(MatchKind)?.Value, out kind) && Enum.IsDefined(kind)
-            && value.Length > 0 && tenantId.Length > 0;
+            && value.Length > 0;
     }
 
     public static bool TryReadIssued(ClaimsPrincipal principal, out DateTimeOffset issuedAt)
