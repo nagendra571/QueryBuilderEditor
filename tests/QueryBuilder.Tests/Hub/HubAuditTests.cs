@@ -86,6 +86,7 @@ public class HubAuditTests
         Assert.Single(page);
         var newest = page[0].GetProperty("timestampUtc").GetDateTimeOffset();
         var older = (await HubApiHost.Browser.JsonAsync(await super.GetAsync($"{Mount}/api/hub/audit?take=200&before={Uri.EscapeDataString(newest.ToString("O"))}"))).EnumerateArray().ToList();
+        Assert.NotEmpty(older);
         Assert.All(older, e => Assert.True(e.GetProperty("timestampUtc").GetDateTimeOffset() < newest));
 
         Assert.Equal(HttpStatusCode.BadRequest, (await super.GetAsync($"{Mount}/api/hub/audit?take=201")).StatusCode);
@@ -115,6 +116,44 @@ public class HubAuditTests
             .First(e => e.GetProperty("summary").GetString() == "viewed A");
         Assert.Equal("super:admin-oid", raw.GetProperty("actor").GetString());
         Assert.Contains("admin-oid", raw.GetProperty("detailsJson").GetString());
+    });
+
+    [MetadataSqlFact]
+    public Task App_admin_sees_super_admin_owner_masked_on_queries_and_dashboards() => HubApiHost.RunAsync(async env =>
+    {
+        Guid queryId, dashboardId;
+        await using (var db = env.HubWideDb())
+        {
+            var source = new DataSource { AppId = env.AppA, Name = "src", ConnectionStringName = "biz", AllowedObjects = ["dbo.v"] };
+            db.DataSources.Add(source);
+            await db.SaveChangesAsync();
+            var query = new SavedQuery { AppId = env.AppA, Name = "staff-query", DataSourceId = source.Id, OwnerId = "super:admin-oid", OwnerName = "admin-oid", DefinitionJson = "{}" };
+            var dashboard = new Dashboard { AppId = env.AppA, Name = "staff-dashboard", OwnerId = "super:admin-oid", OwnerName = "admin-oid" };
+            db.SavedQueries.Add(query);
+            db.Dashboards.Add(dashboard);
+            await db.SaveChangesAsync();
+            queryId = query.Id;
+            dashboardId = dashboard.Id;
+        }
+
+        var admin = env.NewBrowser();
+        await admin.SignInAppAsync(env.AppA, HubRole.Admin);
+        foreach (var url in new[] { $"{Mount}/api/queries", $"{Mount}/api/dashboards" })
+        {
+            var row = (await HubApiHost.Browser.JsonAsync(await admin.GetAsync(url))).EnumerateArray().Single();
+            Assert.Equal("Super admin", row.GetProperty("ownerId").GetString());
+            Assert.Equal("Super admin", row.GetProperty("ownerName").GetString());
+        }
+
+        var detail = await HubApiHost.Browser.JsonAsync(await admin.GetAsync($"{Mount}/api/queries/{queryId}"));
+        Assert.Equal("Super admin", detail.GetProperty("ownerId").GetString());
+        var dash = await HubApiHost.Browser.JsonAsync(await admin.GetAsync($"{Mount}/api/dashboards/{dashboardId}"));
+        Assert.Equal("Super admin", dash.GetProperty("ownerName").GetString());
+
+        var super = await SuperAsync(env, env.AppA);
+        var raw = (await HubApiHost.Browser.JsonAsync(await super.GetAsync($"{Mount}/api/queries"))).EnumerateArray().Single();
+        Assert.Equal("super:admin-oid", raw.GetProperty("ownerId").GetString());
+        Assert.Equal("admin-oid", raw.GetProperty("ownerName").GetString());
     });
 
     [MetadataSqlFact]

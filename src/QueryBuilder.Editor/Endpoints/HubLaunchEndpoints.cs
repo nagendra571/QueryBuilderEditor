@@ -34,7 +34,7 @@ internal static class HubLaunchEndpoints
     {
         // Any method is routed here (and checked inside) so a GET is a 405, not the single-page app's fallback page.
         endpoints.Map(LaunchPath, LaunchAsync).AllowAnonymous();
-        endpoints.MapGet(LogoutPath, LogoutAsync).AllowAnonymous();
+        endpoints.Map(LogoutPath, LogoutAsync).AllowAnonymous();
     }
 
     private static async Task<IResult> LaunchAsync(HttpContext context, CancellationToken ct)
@@ -133,6 +133,19 @@ internal static class HubLaunchEndpoints
 
     private static async Task<IResult> LogoutAsync(HttpContext context, CancellationToken ct)
     {
+        if (!HttpMethods.IsPost(context.Request.Method))
+        {
+            context.Response.Headers.Allow = "POST";
+            return Results.StatusCode(StatusCodes.Status405MethodNotAllowed);
+        }
+
+        // The global header filter only covers /api; a cross-site form must not be able to sign someone out.
+        if (context.Request.Headers[Middleware.HubRequestHeaderStartupFilter.HeaderName] != "1")
+        {
+            return Results.Problem(statusCode: StatusCodes.Status400BadRequest, title: "Invalid request",
+                detail: $"The {Middleware.HubRequestHeaderStartupFilter.HeaderName} header is required.");
+        }
+
         var session = HubSession.TryRead(context.Items[HubSessionStartupFilter.PrincipalItemKey] as System.Security.Claims.ClaimsPrincipal);
         await context.SignOutAsync(HubSession.Scheme);
         context.Response.Headers.CacheControl = "no-store";
@@ -150,10 +163,10 @@ internal static class HubLaunchEndpoints
                 .ToListAsync(ct);
             if (registered.Any(u => string.Equals(u, returnUrl, StringComparison.Ordinal)))
             {
-                return Results.Redirect(returnUrl);
+                return Results.Json(new { redirectUrl = returnUrl }, QueryBuilderJson.Options);
             }
         }
 
-        return Results.Redirect(Home);
+        return Results.Json(new { redirectUrl = Home }, QueryBuilderJson.Options);
     }
 }

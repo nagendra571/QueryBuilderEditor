@@ -466,13 +466,48 @@ public class HubLaunchEndpointTests
         Assert.Equal(env.AppB, (await db.AuditLogEntries.IgnoreQueryFilters().SingleAsync(a => a.Actor == "user-b")).AppId);
     });
 
+    private static HttpRequestMessage LogoutRequest(bool header = true)
+    {
+        var request = new HttpRequestMessage(HttpMethod.Post, "/querybuilder/logout");
+        if (header)
+        {
+            request.Headers.Add("X-QueryBuilder-Request", "1");
+        }
+
+        return request;
+    }
+
+    private static async Task<string?> RedirectUrlAsync(HttpResponseMessage response)
+    {
+        using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        return doc.RootElement.GetProperty("redirectUrl").GetString();
+    }
+
     [MetadataSqlFact]
-    public Task Logout_redirects_to_a_registered_return_url_only() => RunAsync(async env =>
+    public Task Logout_is_post_only_and_needs_the_header() => RunAsync(async env =>
+    {
+        await env.LaunchAsync(env.TokenA());
+
+        var get = await env.GetAsync("/querybuilder/logout");
+        Assert.Equal(HttpStatusCode.MethodNotAllowed, get.StatusCode);
+        Assert.Equal("user-1", await env.MeUserAsync());
+
+        var noHeader = await env.SendAsync(LogoutRequest(header: false));
+        Assert.Equal(HttpStatusCode.BadRequest, noHeader.StatusCode);
+        Assert.Equal("user-1", await env.MeUserAsync());
+
+        var ok = await env.SendAsync(LogoutRequest());
+        Assert.Equal(HttpStatusCode.OK, ok.StatusCode);
+        Assert.Null(await env.MeUserAsync());
+    });
+
+    [MetadataSqlFact]
+    public Task Logout_returns_registered_return_url_only() => RunAsync(async env =>
     {
         await env.LaunchAsync(env.TokenA(change: c => c["returnUrl"] = ReturnUrl));
-        var logout = await env.GetAsync("/querybuilder/logout");
-        Assert.Equal(HttpStatusCode.Found, logout.StatusCode);
-        Assert.Equal(ReturnUrl, logout.Headers.Location!.OriginalString);
+        var logout = await env.SendAsync(LogoutRequest());
+        Assert.Equal(HttpStatusCode.OK, logout.StatusCode);
+        Assert.Equal(ReturnUrl, await RedirectUrlAsync(logout));
         Assert.Null(await env.MeUserAsync());
 
         // The session's copy of the URL is a snapshot: once the app drops it, logout no longer follows it.
@@ -483,12 +518,12 @@ public class HubLaunchEndpointTests
             await db.SaveChangesAsync();
         }
 
-        var after = await env.GetAsync("/querybuilder/logout");
-        Assert.Equal(HttpStatusCode.Found, after.StatusCode);
-        Assert.Equal("/querybuilder/", after.Headers.Location!.OriginalString);
+        var after = await env.SendAsync(LogoutRequest());
+        Assert.Equal(HttpStatusCode.OK, after.StatusCode);
+        Assert.Equal("/querybuilder/", await RedirectUrlAsync(after));
 
-        var noSession = await env.GetAsync("/querybuilder/logout");
-        Assert.Equal("/querybuilder/", noSession.Headers.Location!.OriginalString);
+        var noSession = await env.SendAsync(LogoutRequest());
+        Assert.Equal("/querybuilder/", await RedirectUrlAsync(noSession));
     });
 
     [MetadataSqlFact]
@@ -520,7 +555,7 @@ public class HubLaunchEndpointTests
     public Task Embedded_mode_has_no_launch_endpoint_and_no_header_rule() => RunAsync(async env =>
     {
         Assert.Equal(HttpStatusCode.NotFound, (await env.LaunchAsync("x")).StatusCode);
-        Assert.Equal(HttpStatusCode.NotFound, (await env.GetAsync("/querybuilder/logout")).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await env.SendAsync(LogoutRequest())).StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, (await env.SendAsync(new HttpRequestMessage(HttpMethod.Post, "/querybuilder/api/nothing-here"))).StatusCode);
     }, hub: false);
 

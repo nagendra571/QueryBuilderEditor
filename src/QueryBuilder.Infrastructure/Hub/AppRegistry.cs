@@ -130,7 +130,7 @@ internal sealed class AppRegistry(AppDbContext db, ICurrentUserService user, IHt
         app.SessionsValidAfterUtc = Latest(app.SessionsValidAfterUtc, key.RevokedAtUtc.Value);
         Audit(app, $"Revoked signing key '{kid}' of '{app.Key}'",
             new { revoked = new { kid, key.Algorithm, fingerprint = RegistryRules.FingerprintOrNull(key.Algorithm, key.PublicKeyPem) } });
-        await SaveAsync(ct);
+        await SaveAsync(ct, concurrencyMessage: "This app was changed by someone else. Reload and try again.");
     }
 
     public async Task<ReturnUrlsDto> SetReturnUrlsAsync(Guid appId, List<string> urls, CancellationToken ct)

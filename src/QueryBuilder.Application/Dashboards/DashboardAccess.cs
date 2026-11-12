@@ -53,11 +53,11 @@ public static class DashboardAccess
 public static class DashboardMapper
 {
     public static DashboardSummaryDto ToSummary(Dashboard d, AccessActor actor) => new(
-        d.Id, d.Name, d.Description, d.OwnerId, d.OwnerName, DashboardAccess.IsOwner(d, actor),
+        d.Id, d.Name, d.Description, SuperAdminMask.Actor(d.OwnerId, actor), SuperAdminMask.Name(d.OwnerId, d.OwnerName, actor), DashboardAccess.IsOwner(d, actor),
         DashboardAccess.AccessLevelFor(d, actor), d.Tiles.Count, d.CreatedAtUtc, d.UpdatedAtUtc, d.PublishedToApp);
 
     public static DashboardDetailDto ToDetail(Dashboard d, AccessActor actor) => new(
-        d.Id, d.Name, d.Description, d.OwnerId, d.OwnerName, DashboardAccess.IsOwner(d, actor),
+        d.Id, d.Name, d.Description, SuperAdminMask.Actor(d.OwnerId, actor), SuperAdminMask.Name(d.OwnerId, d.OwnerName, actor), DashboardAccess.IsOwner(d, actor),
         DashboardAccess.AccessLevelFor(d, actor), d.Version,
         ResolveBoxes(d).Select(r => ToTile(r.Item, r.Box, actor, viaDashboard: actor.InHub && DashboardAccess.CanView(d, actor))).ToList(),
         DashboardParameterStore.ReadParameters(d.ParametersJson), d.PublishedToApp);

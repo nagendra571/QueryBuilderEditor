@@ -45,7 +45,7 @@ public sealed class GetAuditLogQueryHandler(
         return all.Where(e => wholeApp || e.Actor == currentUser.UserId).Select(e => ToDto(e, mask)).ToList();
     }
 
-    public const string SuperAdminLabel = "Super admin";
+    public const string SuperAdminLabel = SuperAdminMask.Label;
 
     private static AuditLogEntryDto ToDto(AuditLogEntry e, bool mask) => new(
         e.Id, e.TimestampUtc, mask ? MaskActor(e.Actor) : e.Actor, e.Action, e.EntityType, e.EntityId, e.EntityName, e.DataSourceId, e.Summary,

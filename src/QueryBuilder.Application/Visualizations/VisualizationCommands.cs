@@ -13,9 +13,9 @@ public static class VisualizationMapper
 {
     public const int MaxPerQuery = 20;
 
-    public static VisualizationDto ToDto(QueryVisualization v) => new(
+    public static VisualizationDto ToDto(QueryVisualization v, AccessActor viewer) => new(
         v.Id, v.SavedQueryId, v.Name, v.Type, VisualizationOptionsSerializer.Deserialize(v.OptionsJson),
-        v.DisplayOrder, v.CreatedBy, v.CreatedAtUtc, v.UpdatedBy, v.UpdatedAtUtc);
+        v.DisplayOrder, SuperAdminMask.Actor(v.CreatedBy, viewer), v.CreatedAtUtc, SuperAdminMask.Actor(v.UpdatedBy, viewer), v.UpdatedAtUtc);
 }
 
 public sealed record GetVisualizationsQuery(Guid SavedQueryId) : IRequest<List<VisualizationDto>>;
@@ -35,7 +35,7 @@ public sealed class GetVisualizationsQueryHandler(
         }
 
         var items = await visualizations.GetForQueryAsync(query.Id, cancellationToken);
-        return items.Select(VisualizationMapper.ToDto).ToList();
+        return items.Select(i => VisualizationMapper.ToDto(i, AccessActor.From(currentUser))).ToList();
     }
 }
 
@@ -106,7 +106,7 @@ public sealed class SaveVisualizationCommandHandler(
                     $"Updated chart '{existing.Name}' on query '{query.Name}'", new { VisualizationId = existing.Id }),
                 cancellationToken);
 
-            return VisualizationMapper.ToDto(existing);
+            return VisualizationMapper.ToDto(existing, AccessActor.From(currentUser));
         }
 
         var current = await visualizations.GetForQueryAsync(query.Id, cancellationToken);
@@ -134,7 +134,7 @@ public sealed class SaveVisualizationCommandHandler(
                 $"Created chart '{created.Name}' on query '{query.Name}'", new { VisualizationId = created.Id }),
             cancellationToken);
 
-        return VisualizationMapper.ToDto(created);
+        return VisualizationMapper.ToDto(created, AccessActor.From(currentUser));
     }
 }
 

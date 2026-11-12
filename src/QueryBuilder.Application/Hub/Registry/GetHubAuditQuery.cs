@@ -47,7 +47,8 @@ public sealed class GetHubAuditQueryHandler(ICurrentUserService user, IHubWideSc
         }
 
         await using var scope = factory.Create();
-        var reader = (IHubAuditReader)scope.ServiceProvider.GetService(typeof(IHubAuditReader))!;
+        var reader = (IHubAuditReader?)scope.ServiceProvider.GetService(typeof(IHubAuditReader))
+            ?? throw new InvalidOperationException("IHubAuditReader is not registered.");
         return await reader.ListAsync(request.AppId, request.Action, request.Before, take, ct);
     }
 }
