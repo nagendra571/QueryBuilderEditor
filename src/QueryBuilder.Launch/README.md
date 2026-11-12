@@ -34,7 +34,9 @@ Use RSA 2048 to 8192 bits (RS256) or ECDSA on the NIST P-256 curve (ES256). Keep
 can read it (a key store, a certificate store, or a file outside the web root that only the app's account can read). Never put
 it in `web.config`, `appsettings.json` or source control. Only the **public** key goes to the hub.
 
-### PowerShell 7
+### PowerShell 7.4 or later
+
+`ExportPkcs8PrivateKeyPem` and `ExportSubjectPublicKeyInfoPem` are not available before PowerShell 7.4; on older 7.x use openssl.
 
 ```powershell
 $rsa = [System.Security.Cryptography.RSA]::Create(2048)
@@ -226,7 +228,7 @@ public class QueryBuilderController : Controller
         });
 
         var token = LaunchToken.Create("my-app", hub, Key, user, LaunchRole.Author, scope);
-        Response.Cache.SetCacheability(System.Web.HttpCacheability.NoStore);
+        Response.Cache.SetNoStore();
         return Content(LaunchForm.Html(hub, token), "text/html");
     }
 
@@ -346,7 +348,7 @@ by default). Everyone behind one office network address shares that limit; the h
 
 | Reason in the audit log | What it means | What to do |
 |---|---|---|
-| `Malformed` | Not a JWT, a wrong type for a claim, a missing or oversized form field, a fractional `iat`/`exp`, a `sub` over 256 characters or starting with `super:`, a `name` or `email` over its limit | Compare with the claims table; check your JWT library writes `iat`/`exp` as integers |
+| `Malformed` | Not a JWT, a wrong type for a claim, a missing or oversized form field, a fractional `iat`/`exp`, a `sub` over 256 characters or starting with `super:`, a `jti` over 200 characters, a `name` or `email` over its limit, `unrestricted` set to anything but `true` (send `true` or leave it out), an empty string as a scope value | Compare with the claims table; check your JWT library writes `iat`/`exp` as integers |
 | `UnknownApp` | `iss` is not a registered app key | Check the app key, character for character |
 | `AppDisabled` | The app is turned off in the console | Ask a super admin to turn it on |
 | `UnknownKey` | No key with that `kid` for that app | Register the public key under that exact key id |
@@ -363,7 +365,7 @@ by default). Everyone behind one office network address shares that limit; the h
 | `UndeclaredScopeKey` | A scope key the app (or one of its data sources) has not declared | Ask a super admin to add it to the app's scope keys |
 | `ScopeMissing` | Neither `scope` nor `unrestricted`, or a scope with no keys | Send one of them |
 | `ScopeAndUnrestricted` | Both were sent | Send only one |
-| `ScopeTooLarge` | Too many keys, too many values, a value over 200 characters, an empty value list, or more than 6,144 bytes serialised | Send fewer values (this library checks before signing) |
+| `ScopeTooLarge` | Too many keys, too many values, a value over 200 characters, an empty value list (an array with no values), or more than 6,144 bytes serialised | Send fewer values (this library checks before signing) |
 | `UserIdCaseConflict` | The hub already knows an id that differs from `sub` only by case (as a previous user, an owner or a share) | Send the id exactly as before; the hub treats ids as case-sensitive and will not merge two spellings |
 
 `LaunchToken.Create` and `LaunchScope.For` check most of these before signing and throw with a message that says what to change.
@@ -374,7 +376,7 @@ by default). Everyone behind one office network address shares that limit; the h
 |---|---|
 | Token lifetime | 1 to 120 seconds, default 60; `iat`/`exp` in whole seconds; 30 seconds clock skew allowed |
 | Scope | at most 20 keys, 1,000 values per key, 200 characters per value, 6,144 UTF-8 bytes serialised (`LaunchScope.SerializedByteCount`) |
-| Scope key name | starts with a letter; letters, digits and `_`; up to 128 characters |
+| Scope key name | starts with a letter or `_`; letters, digits and `_`; up to 128 characters (this library accepts only a leading letter) |
 | `kid` | `^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$` |
 | Keys | RSA 2048 to 8192 bits, or ECDSA P-256; public key PEM up to 4,000 characters |
 | User id / name / email | 256 / 200 / 320 characters |

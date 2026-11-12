@@ -100,11 +100,19 @@ public static class HubHost
         }
     }
 
-    private static void ConfigureForwardedHeaders(IServiceCollection services, ForwardedHeadersSettings settings) =>
+    private static void ConfigureForwardedHeaders(IServiceCollection services, ForwardedHeadersSettings settings)
+    {
+        // Checked here, not inside Configure: that callback only runs when the first request resolves the options.
+        if (settings.ForwardLimit < 1)
+        {
+            throw new InvalidOperationException("Hub:ForwardedHeaders:ForwardLimit must be at least 1.");
+        }
+
         services.Configure<ForwardedHeadersOptions>(options =>
         {
             // X-Forwarded-Prefix is deliberately not honoured: the hub has no path base.
             options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+            options.ForwardLimit = settings.ForwardLimit;
             if (settings.KnownProxies.Length == 0 && settings.KnownNetworks.Length == 0)
             {
                 return; // ASP.NET Core's default: loopback only.
@@ -126,6 +134,7 @@ public static class HubHost
                     : throw new InvalidOperationException("Hub:ForwardedHeaders:KnownNetworks has an entry that is not a CIDR range."));
             }
         });
+    }
 
     // Routing has already run here (WebApplication puts it first), so the endpoint is known.
     private static bool IsLaunch(HttpContext context) =>

@@ -20,6 +20,7 @@ it costs to change. Answer any you disagree with; nothing here is pushed or rele
    uses a lot of memory, so I didn't. Required before the 2.0.0 release.
 7. **Drop net8.0?** (open since 2026-11-10; .NET 8 support ended then). Still multi-targeted.
 8. **Release 2.0.0**: version bump, DBA script regeneration, packing and pushes are waiting for your ask, as always.
+9. **Merge `feature/hub` to `main` (or link a tag) before pushing 2.0.0 to NuGet.** The NuGet-facing `QueryBuilder.Editor` README links to the hub and launch guides at `github.com/nagendra571/QueryBuilderEditor/blob/main/...`, which do not exist until then.
 
 ## Decided by me in Part 3 (review when convenient)
 
@@ -43,3 +44,4 @@ it costs to change. Answer any you disagree with; nothing here is pushed or rele
 ## Decided by me in Part 4 (review when convenient)
 
 - **`Hub:ApplyMigrations` (hub host, default true):** set false and the host never runs migrations, for DBA-run upgrades from the schema script. Undo cost: one setting.
+- **`Hub:ForwardedHeaders:ForwardLimit` (hub host, int, default 1, at least 1):** how many `X-Forwarded-For` hops are read from the right, for chained proxies (list every hop in `KnownProxies`/`KnownNetworks`, set the limit to the hop count). Undo cost: one setting.

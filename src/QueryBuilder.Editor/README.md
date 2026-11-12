@@ -670,8 +670,8 @@ A person's role comes from the **latest launch token only**; it is never stored 
 - **Data sources.** A data source added by a super admin is **locked**: the app's admins and users can use it, but only a
   super admin changes it, until a super admin unlocks it (and a super admin can lock it again). The per-app switch **App admins
   can add data sources** (off by default) lets app admins add, edit, test and turn off the unlocked sources of their own app.
-  A super admin can **move** a data source to another app (refused while a saved query or dashboard uses it, and when the
-  target app already has one with that name). A data source that points at the hub's own metadata database is refused,
+  A super admin can **move** a data source to another app (refused while a saved query, a dashboard tile, a data scope rule or a parameter dropdown
+  uses it, when the target app already has one with that name, and when the target app is turned off). A data source that points at the hub's own metadata database is refused,
   compared by server identity; if the target is unreachable at that moment the check lets it pass, and the catalog load
   checks again. After a move, other instances can keep the old data scope rules for up to 5 minutes.
 - **Record limits.** A super admin can give each app a **record ceiling**. The limit that applies is the lower of the ceiling
@@ -704,8 +704,8 @@ refused.
 - **Group-based super admins are re-checked against Entra only at sign-in.** The allowlist itself is checked on every request,
   but removing someone from an Entra group ends their session only when it expires (8 hours at most) or when you remove the
   group id and restart. Prefer `ObjectIds`: an email can be changed by a tenant administrator.
-- **Do not start hosted services concurrently** (`HostOptions.ServicesStartConcurrently`): the checks that claim the database
-  and the key ring depend on starting in order.
+- **Do not start hosted services concurrently** (`HostOptions.ServicesStartConcurrently`): the steps that migrate and claim the
+  database depend on starting in order.
 - **The hub needs its own empty metadata database.** See the next section.
 
 ### Upgrading the database to 2.0.0

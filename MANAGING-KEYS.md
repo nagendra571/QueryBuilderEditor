@@ -11,6 +11,7 @@ admin page. Read the first section; jump to the rest only when you need it.
   database **locked** with one key: the data source key.
 - **Why it matters.** Someone who copies the database sees only scrambled text. Only an app that has the key can unlock it.
 - **The key never expires.** It works until you lose it or change it.
+- **Running the QueryBuilder hub?** The key is a hub setting and the old key must be kept longer than below: see section 6.
 - **Losing the key** means retyping every saved data source's password. Nothing else is lost.
 - **Keep the key in one place per app, outside the code**, and keep a backup in a password manager.
 - **Data sources from `appsettings.json` connection strings don't use the key at all.** It only matters for sources added
@@ -135,6 +136,7 @@ Do this if the key may have leaked, someone who knew it left, or on a regular sc
 4. **Click Re-encrypt with the current key** in `/admin`. Sources are saved again under the new key. It is safe to
    click twice: the second run changes nothing.
 5. When the page shows **0 on a previous key**, **remove the old key** from `PreviousDataSourceKeys` everywhere and restart.
+   (**In hub mode, don't yet:** keep the old key for at least 90 days plus 8 hours. See section 6.)
 
 > **Warning:** running step 4 before every app sharing the database has the new key leaves those apps unable to read
 > the sources until they get it. That's why Re-encrypt is turned off on a site whose admin pages need no sign-in: run it
@@ -154,7 +156,7 @@ Data sources from `appsettings.json` connection strings, saved queries, charts a
 
 ---
 
-## Hub mode (2.0.0): the key is a hub setting
+## 6. Hub mode (2.0.0): the key is a hub setting
 
 If you run the QueryBuilder hub (`src/QueryBuilder.Hub`, see its README) instead of an embedded QueryBuilder, three things differ:
 
@@ -172,14 +174,14 @@ If you run the QueryBuilder hub (`src/QueryBuilder.Hub`, see its README) instead
 **Keep the old key for at least 90 days plus 8 hours.** Re-encrypt re-saves data source passwords only. The stored session keys
 stay encrypted with the key that wrote them and are read with the old one for as long as they are valid (90 days, plus an
 8-hour session that may have started on the last day). Remove the old key from `PreviousDataSourceKeys` earlier and those
-sessions stop working, so users are asked to launch again. Section 4's "step 5" (new key only) must wait that long in hub mode.
+sessions stop working, so users are asked to launch again. Section 4's step 5 (new key only) must wait that long in hub mode.
 
 All instances of a hub must carry the same `Hub:DataSourceKey` and `Hub:PreviousDataSourceKeys`; one instance with an older
 list cannot read what another wrote.
 
 ---
 
-## 6. Troubleshooting
+## 7. Troubleshooting
 
 | What you see | Why | Fix |
 |---|---|---|

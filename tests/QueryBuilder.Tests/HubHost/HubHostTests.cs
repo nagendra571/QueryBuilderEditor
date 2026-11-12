@@ -257,6 +257,43 @@ public class HubHostTests
     }, new() { ["Hub:ForwardedHeaders:KnownProxies:0"] = "10.9.9.9" });
 
     [MetadataSqlFact]
+    public Task Forward_limit_two_reads_the_client_two_hops_back() => RunAsync(async (_, client) =>
+    {
+        async Task<HttpResponseMessage> Launch(string forwardedFor)
+        {
+            var request = Request(HttpMethod.Post, "/querybuilder/launch", "10.9.9.9", ("X-Forwarded-For", forwardedFor));
+            request.Content = new FormUrlEncodedContent([]);
+            return await client.SendAsync(request);
+        }
+
+        for (var i = 0; i < 2; i++)
+        {
+            Assert.NotEqual(HttpStatusCode.TooManyRequests, (await Launch("203.0.113.5, 10.7.7.7")).StatusCode);
+        }
+
+        Assert.Equal(HttpStatusCode.TooManyRequests, (await Launch("203.0.113.5, 10.7.7.7")).StatusCode);
+        // A different client behind the same two proxies has its own allowance: the partition is the client, not the first proxy.
+        Assert.NotEqual(HttpStatusCode.TooManyRequests, (await Launch("203.0.113.6, 10.7.7.7")).StatusCode);
+    }, new()
+    {
+        ["Hub:ForwardedHeaders:KnownProxies:0"] = "10.9.9.9",
+        ["Hub:ForwardedHeaders:KnownProxies:1"] = "10.7.7.7",
+        ["Hub:ForwardedHeaders:ForwardLimit"] = "2",
+        ["Hub:LaunchRateLimit:PermitLimit"] = "2",
+    });
+
+    [Fact]
+    public void Forward_limit_must_be_at_least_one()
+    {
+        var settings = Settings("Server=unused");
+        settings["Hub:ForwardedHeaders:ForwardLimit"] = "0";
+
+        var ex = Assert.Throws<InvalidOperationException>(() => Build(settings));
+
+        Assert.Contains("Hub:ForwardedHeaders:ForwardLimit", ex.Message);
+    }
+
+    [MetadataSqlFact]
     public Task Host_does_not_configure_data_protection_persistence() => RunAsync((app, _) =>
     {
         var repository = app.Services.GetRequiredService<IOptions<KeyManagementOptions>>().Value.XmlRepository;

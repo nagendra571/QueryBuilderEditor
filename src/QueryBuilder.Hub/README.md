@@ -26,7 +26,8 @@ In the Azure portal, **Microsoft Entra ID**, **App registrations**, **New regist
    when it expires, sign-in stops until you replace it. The host authenticates with a client secret; certificate
    authentication is not supported.
 5. Under **Enterprise applications**, open the same app, **Properties**, and set **Assignment required?** to **Yes**. Then
-   **Users and groups**: assign only the people (or the one security group) who may use the hub. Without this, anyone in your
+   **Users and groups**: assign only the people (or the one security group) who may use the hub. Assigning a group needs Microsoft Entra ID P1 or higher (assigning individual
+   users works on the Free tier). Without this, anyone in your
    tenant can complete the Entra sign-in; the hub's own allowlist (below) would still refuse them, but they would show up in
    the audit log as refusals.
 6. Optional, only if you allow super admins by **group** (`Hub:SuperAdmins:GroupIds`): in the app registration's
@@ -60,13 +61,15 @@ in environment variables or a file that exists only on the server (see section 3
 | `Hub:LaunchRateLimit:WindowSeconds` | no | `60` | The window length. Must be at least 1. |
 | `Hub:ForwardedHeaders:KnownProxies` | no | none | IP addresses of reverse proxies whose `X-Forwarded-*` headers are trusted. |
 | `Hub:ForwardedHeaders:KnownNetworks` | no | none | The same, as CIDR ranges such as `10.0.0.0/8`. |
+| `Hub:ForwardedHeaders:ForwardLimit` | no | `1` | How many proxy hops to read from `X-Forwarded-For`, counted from the right. Must be at least 1. Set it to the number of proxies in front of the hub (section 4). |
 | `Hub:DefaultMaxRecords` | no | none | The row limit (1 to 100,000) for data sources that have none of their own. An app's record ceiling still applies on top. |
 | `Hub:ApplyMigrations` | no | `true` | Set to `false` when a DBA applies the schema script (section 7): the host then never runs DDL. |
 | `AllowedHosts` | no | `*` | Set to the hub's public host name, for example `hub.example.com`. |
 
-The host refuses to start, with a message that names the setting, if a required one is missing, the data source key is not
-base64 of 32 bytes, an old key repeats the current one, or the allowlist has a tenant but no object id, email or group (a hub
-nobody can administer is refused).
+The host refuses to start if a required setting is missing, the data source key is not base64 of 32 bytes, an old key
+repeats the current one, or the allowlist has a tenant but no object id, email or group (a hub nobody can administer is
+refused). A missing `Hub:*` value names that setting; the other refusals name the package's option instead (see the
+troubleshooting table).
 
 Super admins are checked against `Hub:SuperAdmins` on every request, not only at sign-in. The options are read once when the
 process starts, so removing someone means editing the setting and restarting. A user matched through a **group** is checked
@@ -109,9 +112,12 @@ If a reverse proxy, load balancer or an Azure service terminates TLS in front of
   if the proxy runs beside the hub.
 - Wrong values have two effects at once: every request looks like plain http (so the `__Host-` cookies fail and sign-in
   loops), and every user appears to come from the proxy's address, so they all share one launch rate-limit allowance.
-- `ForwardLimit` is 1: only the last proxy hop is read. With chained proxies (for example Front Door in front of an
-  Application Gateway) list the address of the **last** hop, the one that connects to the hub, and make sure it passes on the
-  client address. `X-Forwarded-Prefix` is ignored.
+- `Hub:ForwardedHeaders:ForwardLimit` (default 1) is how many hops of `X-Forwarded-For` are read, counted from the right,
+  and every hop it reads must be a known proxy. With **chained proxies** (for example Front Door in front of an Application
+  Gateway) list every proxy hop in `KnownProxies`/`KnownNetworks` and set `ForwardLimit` to the number of hops, so the client
+  address two hops back is the one used. Alternatively, have the last hop replace `X-Forwarded-For` with the original client
+  address. Leave it at 1 with a chain and every user appears to come from the first proxy's address: one shared launch
+  rate-limit allowance and wrong addresses in the audit log. `X-Forwarded-Prefix` is ignored.
 - **To check it**: open `https://<hub>/healthz` (must answer `ok`), then sign in as a super admin. If sign-in returns to the
   sign-in page, or the audit log shows one address for every user, the proxy settings are wrong.
 
@@ -135,8 +141,8 @@ keep the old one in `Hub:PreviousDataSourceKeys` for **at least 90 days plus 8 h
 session lasts up to 8 hours), not only until **Re-encrypt** is done. Remove it sooner and sessions signed with an
 older key ring entry stop working. See [`MANAGING-KEYS.md`](../../MANAGING-KEYS.md).
 
-If you start all hosted services at once (`HostOptions.ServicesStartConcurrently = true`), the startup checks that claim the
-database and the key ring can run out of order; keep the default.
+If you start all hosted services at once (`HostOptions.ServicesStartConcurrently = true`), the startup steps that migrate and claim the
+database can run out of order; keep the default.
 
 ## 6. First run
 
@@ -174,6 +180,7 @@ and the hub then only reads it), `LaunchReplays` and `DataProtectionKeys`.
 | What you see | Why | Fix |
 |---|---|---|
 | Host won't start, `Hub:... is required` | A required setting is empty | Set it (environment variable names are in section 3) |
+| Host won't start and the message names `DataSourceManagement.EncryptionKey`, `HubOptions.SuperAdmins.TenantIds`, `HubOptions.SuperAdmins` (object ids, emails or groups) or `HubOptions.Audience` | Those are the package's option names; the host fills them from `Hub:DataSourceKey` (and `Hub:PreviousDataSourceKeys`), `Hub:SuperAdmins:TenantIds`, `Hub:SuperAdmins:ObjectIds` / `Emails` / `GroupIds` and `Hub:Audience` | Set the matching `Hub:*` setting |
 | Host won't start, "needs its own empty metadata database" | The database holds QueryBuilder data from an embedded app | Give the hub a new empty database |
 | Host won't start, "belongs to an Embedded-mode installation" | The database was claimed by an embedded host | Same: a separate database |
 | After Entra sign-in you are sent back to sign in again | The proxy's headers are not trusted, so the app believes it is on http | Fix `KnownProxies`/`KnownNetworks` (section 4) |

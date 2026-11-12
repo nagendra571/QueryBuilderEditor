@@ -56,4 +56,7 @@ public sealed class ForwardedHeadersSettings
 
     /// <summary>CIDR ranges (for example <c>10.0.0.0/8</c>) of proxies whose headers are trusted.</summary>
     public string[] KnownNetworks { get; set; } = [];
+
+    /// <summary>How many proxy hops to read from <c>X-Forwarded-For</c>, counted from the right. Every hop must be a known proxy; at least 1.</summary>
+    public int ForwardLimit { get; set; } = 1;
 }
