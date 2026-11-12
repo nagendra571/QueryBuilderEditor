@@ -140,7 +140,8 @@ public enum AuditAction
     DashboardPublished = 32,
     DashboardUnpublished = 33,
     DataSourceLockChanged = 34,
-    DataSourceMoved = 35
+    DataSourceMoved = 35,
+    SuperAdminCodeIssued = 36
 }
 
 /// <summary>How a managed data source's connection is encrypted in transit.</summary>

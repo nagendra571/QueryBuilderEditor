@@ -31,6 +31,9 @@ public sealed class HubOptions
     /// </summary>
     public string? SuperAdminSignInScheme { get; set; }
 
+    /// <summary>What the sign-in page calls the identity provider button ("Sign in with ..."). Default "your organisation".</summary>
+    public string ProviderDisplayName { get; set; } = "your organisation";
+
     /// <summary>One-time sign-in codes an operator creates on the server, as a second way (or the only way) to sign in as a super admin.</summary>
     public SignInCodeOptions SignInCodes { get; set; } = new();
 }

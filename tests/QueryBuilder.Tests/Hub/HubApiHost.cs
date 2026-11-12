@@ -53,7 +53,7 @@ internal sealed class HubApiHost : IAsyncDisposable
 
         public IReadOnlyDictionary<string, string> Cookies => _jar;
 
-        public async Task<HttpResponseMessage> SendAsync(HttpMethod method, string url, object? body = null, bool csrf = true)
+        public async Task<HttpResponseMessage> SendAsync(HttpMethod method, string url, object? body = null, bool csrf = true, HttpContent? content = null, IDictionary<string, string>? headers = null)
         {
             var request = new HttpRequestMessage(method, url);
             if (_jar.Count > 0)
@@ -64,6 +64,16 @@ internal sealed class HubApiHost : IAsyncDisposable
             if (csrf)
             {
                 request.Headers.Add("X-QueryBuilder-Request", "1");
+            }
+
+            foreach (var h in headers ?? new Dictionary<string, string>())
+            {
+                request.Headers.Add(h.Key, h.Value);
+            }
+
+            if (content is not null)
+            {
+                request.Content = content;
             }
 
             if (body is not null)
@@ -95,6 +105,11 @@ internal sealed class HubApiHost : IAsyncDisposable
         }
 
         public Task<HttpResponseMessage> GetAsync(string url) => SendAsync(HttpMethod.Get, url);
+
+        /// <summary>A browser form post: urlencoded, no CSRF header, with whatever Origin the test wants (none when null).</summary>
+        public Task<HttpResponseMessage> PostFormAsync(string url, string field, string value, string? origin = "http://localhost") =>
+            SendAsync(HttpMethod.Post, url, csrf: false, content: new FormUrlEncodedContent([new(field, value)]),
+                headers: origin is null ? null : new Dictionary<string, string> { ["Origin"] = origin });
         public Task<HttpResponseMessage> PostAsync(string url, object? body) => SendAsync(HttpMethod.Post, url, body);
         public Task<HttpResponseMessage> PutAsync(string url, object? body) => SendAsync(HttpMethod.Put, url, body);
 

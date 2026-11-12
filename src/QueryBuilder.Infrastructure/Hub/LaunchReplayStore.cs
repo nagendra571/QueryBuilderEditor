@@ -16,7 +16,7 @@ public sealed class LaunchReplayStore
     private long _lastCleanupTicks;
 
     /// <summary>True when the id was new. A duplicate (app, jti) means the token was already used.</summary>
-    internal async Task<bool> TryRecordAsync(AppDbContext db, Guid appId, string jti, DateTimeOffset expiresUtc, CancellationToken ct)
+    public async Task<bool> TryRecordAsync(AppDbContext db, Guid appId, string jti, DateTimeOffset expiresUtc, CancellationToken ct)
     {
         // A conditional insert, not insert-and-catch: a replay is expected traffic, and a thrown key violation is logged
         // by EF at error level every time. HOLDLOCK keeps two concurrent copies of one id from both passing the check.
@@ -35,7 +35,7 @@ public sealed class LaunchReplayStore
     }
 
     /// <summary>At most once a minute per process; a failure only delays cleanup.</summary>
-    internal async Task CleanUpAsync(AppDbContext db, DateTimeOffset now, CancellationToken ct)
+    public async Task CleanUpAsync(AppDbContext db, DateTimeOffset now, CancellationToken ct)
     {
         var last = Interlocked.Read(ref _lastCleanupTicks);
         if (now.UtcTicks - last < CleanupEvery.Ticks

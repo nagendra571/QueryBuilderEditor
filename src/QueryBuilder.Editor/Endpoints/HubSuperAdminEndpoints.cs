@@ -1,6 +1,10 @@
 using System.Security.Claims;
 using System.Text.Json;
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Http.Features;
+using Microsoft.AspNetCore.WebUtilities;
+using Microsoft.Net.Http.Headers;
+using QueryBuilder.Infrastructure.Hub;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -22,12 +26,16 @@ internal static class HubSuperAdminEndpoints
 {
     public const string SignInPath = QueryBuilderRoutes.BasePath + "/signin";
     public const string CompletePath = QueryBuilderRoutes.BasePath + "/signin/complete";
+    public const string ProviderPath = QueryBuilderRoutes.BasePath + "/signin/provider";
+    public const string CodePath = QueryBuilderRoutes.BasePath + "/signin/code";
     public const string ViewAppPath = QueryBuilderRoutes.BasePath + "/api/hub/view-app";
     private const string Home = QueryBuilderRoutes.BasePath + "/";
 
     public static void MapHubSuperAdminEndpoints(this IEndpointRouteBuilder endpoints)
     {
         endpoints.MapGet(SignInPath, SignIn).AllowAnonymous();
+        endpoints.MapPost(ProviderPath, StartProvider).AllowAnonymous();
+        endpoints.MapPost(CodePath, SignInWithCodeAsync).AllowAnonymous();
         endpoints.MapGet(CompletePath, CompleteAsync).AllowAnonymous();
         endpoints.MapPost(ViewAppPath, ViewAppAsync).AllowAnonymous();
     }
@@ -35,11 +43,172 @@ internal static class HubSuperAdminEndpoints
     private static IResult SignIn(HttpContext context, QueryBuilderEditorOptions options)
     {
         context.Response.Headers.CacheControl = "no-store";
-        return Results.Challenge(
+        var hub = options.Hub;
+        if (!hub.SignInCodes.Enabled)
+        {
+            return Challenge(options);
+        }
+
+        var provider = !string.IsNullOrWhiteSpace(hub.SuperAdminSignInScheme);
+        return Results.Content(SignInPage.Render(hub.ProviderDisplayName, provider, true, ProviderPath, CodePath), "text/html; charset=utf-8");
+    }
+
+    private static IResult StartProvider(HttpContext context, QueryBuilderEditorOptions options)
+    {
+        context.Response.Headers.CacheControl = "no-store";
+        return string.IsNullOrWhiteSpace(options.Hub.SuperAdminSignInScheme) ? Results.NotFound() : Challenge(options);
+    }
+
+    private static IResult Challenge(QueryBuilderEditorOptions options) =>
+        Results.Challenge(
             // The marker travels with the host handler's ticket, so a ticket someone else's handler left in the
             // external cookie is recognisable as not ours.
             new AuthenticationProperties(new Dictionary<string, string?> { [StartedMarker] = "1" }) { RedirectUri = CompletePath },
             [options.Hub.SuperAdminSignInScheme!]);
+
+    private static async Task<IResult> SignInWithCodeAsync(HttpContext context, QueryBuilderEditorOptions options, CancellationToken ct)
+    {
+        context.Response.Headers.CacheControl = "no-store";
+        if (!options.Hub.SignInCodes.Enabled)
+        {
+            return Results.NotFound();
+        }
+
+        var request = context.Request;
+        if (!MediaTypeHeaderValue.TryParse(request.ContentType, out var contentType)
+            || !contentType.MediaType.Equals("application/x-www-form-urlencoded", StringComparison.OrdinalIgnoreCase))
+        {
+            return Results.StatusCode(StatusCodes.Status415UnsupportedMediaType);
+        }
+
+        var services = context.RequestServices;
+        string? reason = null;
+        CodeCheck? check = null;
+
+        // A form posted from another site carries that site's origin, not ours; a missing header is refused too.
+        var expectedOrigin = $"{request.Scheme}://{request.Host}";
+        if (!request.Headers.TryGetValue("Origin", out var origin) || origin.Count != 1
+            || !string.Equals(origin[0], expectedOrigin, StringComparison.OrdinalIgnoreCase))
+        {
+            reason = "OriginMismatch";
+        }
+        else
+        {
+            var code = await ReadCodeAsync(context, ct);
+            if (code is null)
+            {
+                reason = nameof(CodeRefusal.Malformed);
+            }
+            else
+            {
+                check = services.GetRequiredService<SuperAdminSignInCodes>().Verify(code);
+                if (check.Refusal is { } refusal)
+                {
+                    reason = refusal.ToString();
+                }
+            }
+        }
+
+        var clock = services.GetRequiredService<TimeProvider>();
+        if (reason is null && check is { Jti: { } jti, ExpiresUtc: { } expires })
+        {
+            // Single use: the id is recorded before anything else happens, and a second try finds it there.
+            bool first;
+            await using (var scope = services.GetRequiredService<IHubWideScopeFactory>().Create())
+            {
+                var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+                var replays = services.GetRequiredService<LaunchReplayStore>();
+                await replays.CleanUpAsync(db, clock.GetUtcNow(), ct);
+                first = await replays.TryRecordAsync(db, App.NoneId, jti, expires.AddSeconds(SuperAdminSignInCodes.SkewSeconds), ct);
+            }
+
+            if (!first)
+            {
+                reason = "Replayed";
+            }
+        }
+
+        if (reason is not null || check?.Name is null)
+        {
+            // Signed out first: if the audit write fails, the visitor must not be left holding a session.
+            await context.SignOutAsync(HubSession.Scheme);
+            await RecordCodeRefusalAsync(context, reason ?? nameof(CodeRefusal.Malformed), clock, ct);
+            return Results.Content(HubLaunchEndpoints.RefusalPage, "text/html; charset=utf-8", statusCode: StatusCodes.Status403Forbidden);
+        }
+
+        var codeName = check.Name;
+        var now = clock.GetUtcNow();
+        var userId = "code:" + codeName;
+        await using (var scope = services.GetRequiredService<IHubWideScopeFactory>().Create())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            db.AuditLogEntries.Add(new AuditLogEntry
+            {
+                Actor = $"super:{userId}",
+                Action = AuditAction.SuperAdminSignedIn,
+                EntityType = "SuperAdmin",
+                EntityName = userId,
+                Summary = "Super admin signed in",
+                DetailsJson = JsonSerializer.Serialize(new { objectId = userId, matchedBy = SuperAdminMatchKind.Code.ToString(), method = "code", jti = check.Jti }, QueryDefinitionSerializer.Options),
+                IpAddress = context.Connection.RemoteIpAddress?.ToString(),
+                TimestampUtc = now,
+            });
+            await db.SaveChangesAsync(ct);
+        }
+
+        var session = HubSession.ForSuperAdmin(userId, codeName, null, null, now, SuperAdminMatchKind.Code, codeName, "", SuperAdminRecognizer.CodeProvider);
+        await context.SignOutAsync(HubSession.Scheme);
+        await context.SignInAsync(HubSession.Scheme, session, new AuthenticationProperties { IsPersistent = false });
+
+        context.Response.Headers.Location = Home;
+        return Results.StatusCode(StatusCodes.Status303SeeOther);
+    }
+
+    private static async Task<string?> ReadCodeAsync(HttpContext context, CancellationToken ct)
+    {
+        var request = context.Request;
+        var limit = SuperAdminSignInCodes.MaxCodeLength;
+        if (request.ContentLength is { } length && length > limit + 64)
+        {
+            return null;
+        }
+
+        var sizeLimit = context.Features.Get<IHttpMaxRequestBodySizeFeature>();
+        if (sizeLimit is { IsReadOnly: false })
+        {
+            sizeLimit.MaxRequestBodySize = limit + 1024;
+        }
+
+        try
+        {
+            var form = await new FormFeature(request, new FormOptions
+            {
+                ValueLengthLimit = limit, KeyLengthLimit = 64, ValueCountLimit = 4, BufferBody = false,
+            }).ReadFormAsync(ct);
+            return form.TryGetValue("code", out var values) && values.Count == 1 && !string.IsNullOrWhiteSpace(values[0]) ? values[0]!.Trim() : null;
+        }
+        catch (Exception ex) when (ex is InvalidDataException or BadHttpRequestException or IOException)
+        {
+            return null;
+        }
+    }
+
+    private static async Task RecordCodeRefusalAsync(HttpContext context, string reason, TimeProvider clock, CancellationToken ct)
+    {
+        await using var scope = context.RequestServices.GetRequiredService<IHubWideScopeFactory>().Create();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        db.AuditLogEntries.Add(new AuditLogEntry
+        {
+            Actor = "anonymous",
+            Action = AuditAction.SuperAdminSignInRefused,
+            EntityType = "SuperAdmin",
+            // The reason is a fixed name; the code itself is never written anywhere.
+            Summary = $"Super admin sign-in refused: {reason}",
+            DetailsJson = JsonSerializer.Serialize(new { method = "code", reason }, QueryDefinitionSerializer.Options),
+            IpAddress = context.Connection.RemoteIpAddress?.ToString(),
+            TimestampUtc = clock.GetUtcNow(),
+        });
+        await db.SaveChangesAsync(ct);
     }
 
     private const string StartedMarker = "qb:superadmin";

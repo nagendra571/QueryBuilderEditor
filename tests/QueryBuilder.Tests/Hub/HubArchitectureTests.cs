@@ -17,6 +17,7 @@ public class HubArchitectureTests
         "src/QueryBuilder.Editor/Endpoints/HubRegistryEndpoints.cs",
         "src/QueryBuilder.Editor/Endpoints/HubSuperAdminEndpoints.cs",
         "src/QueryBuilder.Editor/Hub/HubSessionCookie.cs",
+        "src/QueryBuilder.Editor/Hub/SuperAdminCodeIssuer.cs",
         "src/QueryBuilder.Infrastructure/DependencyInjection.cs",
         "src/QueryBuilder.Infrastructure/Hub/LaunchTokenValidator.cs",
         "src/QueryBuilder.Infrastructure/Persistence/AppContextAccessor.cs",

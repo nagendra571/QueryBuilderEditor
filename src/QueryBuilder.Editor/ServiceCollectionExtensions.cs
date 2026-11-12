@@ -185,6 +185,12 @@ public static class ServiceCollectionExtensions
                     "has no entry: nobody could be issued a code.");
             }
 
+            if (options.Hub.SignInCodes.DefaultMinutes is < 1 or > SuperAdminSignInCodes.MaxMinutes)
+            {
+                throw new InvalidOperationException(
+                    $"{nameof(HubOptions)}.{nameof(HubOptions.SignInCodes)}.{nameof(SignInCodeOptions.DefaultMinutes)} must be between 1 and {SuperAdminSignInCodes.MaxMinutes}.");
+            }
+
             if (!providerSet && !options.Hub.SignInCodes.Enabled)
             {
                 throw new InvalidOperationException(
@@ -227,6 +233,8 @@ public static class ServiceCollectionExtensions
             }
 
             AddHubSession(services, options.Hub);
+            services.AddSingleton<SuperAdminSignInCodes>();
+            services.AddSingleton<ISuperAdminCodeIssuer, SuperAdminCodeIssuer>();
             services.AddSingleton<IStartupFilter>(sp => new HubSettingsWarningStartupFilter(
                 sp.GetRequiredService<ILoggerFactory>().CreateLogger("QueryBuilder.Hub"), options.Hub));
         }
