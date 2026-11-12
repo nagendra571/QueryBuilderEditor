@@ -599,7 +599,8 @@ create/update/delete/share/unshare are recorded in the audit log.
 ## Hub mode (2.0.0)
 
 Hub mode turns one QueryBuilder into a **hub** that serves several apps. Each app (a tenant) hands its signed-in users
-over with a short-lived, signed **launch token**; your own staff, the **super admins**, sign in with Microsoft Entra ID.
+over with a short-lived, signed **launch token**; your own staff, the **super admins**, sign in with Microsoft Entra ID,
+any other OpenID Connect provider, or a one-time code an operator creates on the server (either way, or both).
 It is opt-in: with `options.Hub.Enabled` left `false`, QueryBuilder behaves as in every earlier release, and an existing
 embedded installation needs nothing but the database upgrade described below.
 
@@ -608,7 +609,7 @@ Three pieces make it work:
 | Piece | What it is | Guide |
 |---|---|---|
 | `QueryBuilder.Editor` | this package; hub mode is switched on with `options.Hub` | this section |
-| `QueryBuilder.Hub` | a ready-made `net10.0` host you deploy (not a NuGet package): Entra sign-in, HTTPS and HSTS, forwarded headers, a launch rate limit | [deployment guide](https://github.com/nagendra571/QueryBuilderEditor/blob/main/src/QueryBuilder.Hub/README.md) |
+| `QueryBuilder.Hub` | a ready-made `net10.0` host you deploy (not a NuGet package): identity provider and sign-in code sign-in for super admins, HTTPS and HSTS, forwarded headers, a launch rate limit | [deployment guide](https://github.com/nagendra571/QueryBuilderEditor/blob/main/src/QueryBuilder.Hub/README.md) |
 | `QueryBuilder.Launch` | a small `netstandard2.0` package your apps use to sign the token and render the launch form; works from .NET Framework 4.7.2+ | [integration guide](https://github.com/nagendra571/QueryBuilderEditor/blob/main/src/QueryBuilder.Launch/README.md) |
 
 ### Turning it on in your own host
@@ -634,11 +635,33 @@ builder.Services.AddAuthentication().AddOpenIdConnect("entra", o =>
 });
 ```
 
-Hub mode refuses to start without `Audience`, `SuperAdminSignInScheme`, at least one tenant id, at least one object id, email
-or group id, and `DataSourceManagement.EncryptionKey`. `options.Hub.CookieName` (default `__Host-qb-hub`),
+Hub mode refuses to start without `Audience` and `DataSourceManagement.EncryptionKey`, and without a way for a super admin
+to sign in (below). `options.Hub.CookieName` (default `__Host-qb-hub`),
 `AbsoluteLifetime` (8 hours) and `IdleTimeout` (1 hour) can be changed. A super admin signs in at `/querybuilder/signin`.
 A host of your own must use HTTPS, `UseForwardedHeaders` behind a proxy, `UseExceptionHandler`, no `UsePathBase`, and send
 `frame-ancestors 'self'`; `QueryBuilder.Hub` does all of that.
+
+### How super admins sign in
+
+Either way works, or both; with neither the host refuses to start (the message names `HubOptions.SuperAdminSignInScheme`).
+
+- **An identity provider.** Set `options.Hub.SuperAdminSignInScheme` to your OpenID Connect scheme (its `SignInScheme` must be
+  `"QueryBuilder.HubExternal"`) and `options.Hub.SuperAdmins.ProviderKind`:
+  - `Entra` (the default): `TenantIds` (required, one tenant: never a multi-tenant authority) plus `ObjectIds`, `Emails` or
+    `GroupIds`; the `sub` claim never matches.
+  - `OpenIdConnect`: `UserIds` (the provider's `sub`), `Emails` (counted only when the provider reports `email_verified` as
+    `true`) or `GroupIds` (from the claim named by `GroupsClaim`, default `groups`); `TenantIds` and `ObjectIds` are ignored
+    with a startup warning. Set `MapInboundClaims = false` on the handler so claim names arrive as the provider sent them, and
+    map `email_verified` and the groups claim if you read userinfo.
+  - `options.Hub.ProviderDisplayName` is the text of the button ("Sign in with ...").
+- **One-time sign-in codes.** Set `options.Hub.SignInCodes.Enabled = true` (and optionally `DefaultMinutes`, 15 by default, 1 to 60)
+  and name who may be given one in `options.Hub.SuperAdmins.CodeNames` (compared exactly, case-sensitive; required when codes are
+  on). A code is created only on the server, by your own code calling `ISuperAdminCodeIssuer.IssueAsync(name, minutes, ct)`
+  (`QueryBuilder.Hub` wraps it as the command `signin-code --name <name> [--minutes <1-60>]`). It is single use, tied to
+  `Hub.Audience` and a key derived from the encryption key, and signs the person in as the session user `super:code:<name>`.
+  The person pastes it at `/querybuilder/signin`, which posts to `POST /querybuilder/signin/code` (form field `code`, the
+  request's `Origin` must equal the hub's own origin). Rate-limit that route in your host: `QueryBuilder.Hub` allows 10 attempts per
+  minute per address. Removing a name from `CodeNames` and restarting ends that name's sessions.
 
 ### Who can do what
 
@@ -646,7 +669,7 @@ A person's role comes from the **latest launch token only**; it is never stored 
 
 | Role | Comes from | Can |
 |---|---|---|
-| Super admin | Entra sign-in plus the allowlist; never from a launch token | Everything in every app: the app registry (apps, signing keys, return URLs, scope keys, record ceiling), locking, unlocking and moving data sources, the encryption key, the hub audit log. Unrestricted data scope. |
+| Super admin | Identity provider sign-in plus the allowlist, or a one-time sign-in code; never from a launch token | Everything in every app: the app registry (apps, signing keys, return URLs, scope keys, record ceiling), locking, unlocking and moving data sources, the encryption key, the hub audit log. Unrestricted data scope. |
 | Admin | token `role` = `Admin` | Everything inside their app: sees and manages every query, dashboard and share, runs the Admin page for the app's data sources (except locked ones), publishes dashboards. |
 | Author | `Author` | The normal user, inside their app: build, save, chart, run, export, share, build dashboards. |
 | Viewer | `Viewer` | Dashboards only: the ones published to the app and the ones shared with them. Parameter controls and refresh work; there is no query list, builder, SQL, chart settings, sharing or export. |
@@ -701,8 +724,8 @@ refused.
   same metadata database and the same `EncryptionKey` and `PreviousEncryptionKeys`.
 - **After rotating the key, keep the old one for at least 90 days plus 8 hours** in `PreviousEncryptionKeys` (the key ring's
   lifetime plus the longest session), not only until Re-encrypt finishes.
-- **Group-based super admins are re-checked against Entra only at sign-in.** The allowlist itself is checked on every request,
-  but removing someone from an Entra group ends their session only when it expires (8 hours at most) or when you remove the
+- **Group-based super admins are re-checked against the identity provider only at sign-in.** The allowlist itself is checked on every request,
+  but removing someone from a provider group ends their session only when it expires (8 hours at most) or when you remove the
   group id and restart. Prefer `ObjectIds`: an email can be changed by a tenant administrator.
 - **Do not start hosted services concurrently** (`HostOptions.ServicesStartConcurrently`): the steps that migrate and claim the
   database depend on starting in order.
@@ -769,7 +792,7 @@ Every failing check includes a one-line fix. Returns 404 outside Development.
 ## What's included
 
 - Hub mode (opt-in): one QueryBuilder serving several apps through signed launch tokens, with Admin/Author/Viewer roles,
-  published dashboards and Entra-signed-in super admins (see "Hub mode (2.0.0)")
+  published dashboards and super admins who sign in with an identity provider or a one-time code (see "Hub mode (2.0.0)")
 - Business data sources on SQL Server or PostgreSQL, mixed freely on one host
 - Searchable catalog sidebar (schemas → tables/views → columns) with type-aware icons
 - Drag-and-drop column selection, reordering, and aliasing

@@ -26,6 +26,20 @@ integration ergonomics (single-call registration, embedded SPA, DBA-friendly mig
 
 ## Where we left off (update this at the end of each session)
 
+**2026-11-12, "Super admin sign-in options" (spec `docs/superpowers/specs/2026-11-12-super-admin-sign-in-options-design.md`,
+commits `57f6195..HEAD` on local `feature/hub`, never pushed).** A hub super admin can now sign in with an identity provider
+(`Hub:SignIn:Provider:Kind` = `Entra` or `OpenIdConnect`; generic OIDC matches `sub` via `SuperAdmins.UserIds`, emails only when
+`email_verified` is true, groups from `GroupsClaim`, userinfo read), with one-time codes (`Hub:SignIn:Codes:*` +
+`SuperAdmins.CodeNames`; created only by the server command `QueryBuilder.Hub signin-code --name <n> [--minutes m]`,
+`POST /querybuilder/signin/code`, single use through `LaunchReplay`, session user `super:code:<name>`, audit
+`SuperAdminCodeIssued = 36`), or both; neither = refuses to start. The old `Hub:Entra:*` section is refused at startup with a
+migration message. Docs written: hub guide `src/QueryBuilder.Hub/README.md` (section 1 plus settings and troubleshooting),
+both READMEs' "Hub mode (2.0.0)" ("How super admins sign in"). Verified for the docs: every setting, default, route, limit and
+message was checked against the source files by re-reading; no tests were run for the docs task and none of this has run
+against a real Okta/Google/Auth0/Keycloak tenant or a real Entra tenant (provider notes on `sub` shape and groups are general
+knowledge, flagged in the guide as starting points). Revocation stays restart-only. Still pending as before: Part 3 leftovers
+and the release items below (2.0.0 only after the user decides).
+
 **As of 2026-11-12: hub Parts 1–4 ALL DONE, committed LOCALLY on `feature/hub` (never pushed). Part 4 = `62aa052..17f9620`
 (plan `docs/superpowers/plans/2026-11-12-hub-part4-host-and-launch.md`). Open questions/decisions for the user:
 `docs/superpowers/plans/2026-11-12-hub-part4-questions.md` — read it first next session.** Part 4 built:
