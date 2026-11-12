@@ -60,8 +60,8 @@ public key out as PEM. This is RS256 only; use PowerShell 7 or openssl for ES256
 
 ```powershell
 $cert = New-SelfSignedCertificate -Subject "CN=my-app-querybuilder-launch" `
-    -KeyAlgorithm RSA -KeyLength 2048 -KeyExportPolicy Exportable -KeySpec Signature `
-    -HashAlgorithm SHA256 -NotAfter (Get-Date).AddYears(2) -CertStoreLocation Cert:\CurrentUser\My
+    -KeyAlgorithm RSA -KeyLength 2048 -KeyExportPolicy Exportable `
+    -Provider 'Microsoft Software Key Storage Provider' -HashAlgorithm SHA256 -NotAfter (Get-Date).AddYears(2) -CertStoreLocation Cert:\CurrentUser\My
 
 # Turn the certificate's public key into a "BEGIN PUBLIC KEY" block (SubjectPublicKeyInfo)
 function Get-DerLength([int]$n) {

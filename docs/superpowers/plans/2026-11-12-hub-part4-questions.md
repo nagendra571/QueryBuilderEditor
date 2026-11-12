@@ -20,7 +20,7 @@ it costs to change. Answer any you disagree with; nothing here is pushed or rele
    uses a lot of memory, so I didn't. Required before the 2.0.0 release.
 7. **Drop net8.0?** (open since 2026-11-10; .NET 8 support ended then). Still multi-targeted.
 8. **Release 2.0.0**: version bump, DBA script regeneration, packing and pushes are waiting for your ask, as always. A root `dotnet pack` now also packs `QueryBuilder.Launch` (independent version 1.0.0), so the push command must name both packages.
-9. **Merge `feature/hub` to `main` (or link a tag) before pushing 2.0.0 to NuGet.** The NuGet-facing `QueryBuilder.Editor` README links to the hub and launch guides at `github.com/nagendra571/QueryBuilderEditor/blob/main/...`, which do not exist until then.
+9. **Merge `feature/hub` to `main` (or link a tag) before pushing 2.0.0 to NuGet.** The NuGet-facing `QueryBuilder.Editor` README links to the hub and launch guides at `github.com/nagendra571/QueryBuilderEditor/blob/main/...`, which do not exist until then (likewise the links to `docs/hub-setup-guide.md` in the NuGet-facing `QueryBuilder.Editor` and `QueryBuilder.Launch` READMEs).
 
 10. **Sign-in codes make the data-source key a super admin credential.** With sign-in codes on, the data-source key can
    create super admin codes: keep it as secret as an admin password and use a different key per deployment. OK?

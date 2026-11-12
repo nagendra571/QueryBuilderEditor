@@ -213,7 +213,7 @@ in an environment variable name stands for `:`.
 
 The host refuses to start if a required setting is missing, the key is not base64 of 32 bytes, an old key repeats the
 current one, there is neither a provider nor codes, codes are on with no `CodeNames`, or a provider is set but its
-allowlist is empty. The message names the setting, never its value. The older `Hub:Entra:*` section is no longer read: a host
+allowlist is empty. A missing `Hub:*` value is named by that setting; the other refusals name the package option it maps to (for example `DataSourceManagement.EncryptionKey` for a missing or bad `Hub:DataSourceKey`; see Troubleshooting). A message never contains a value. The older `Hub:Entra:*` section is no longer read: a host
 that still has any `Hub:Entra` value refuses to start.
 
 Super admins are checked against `Hub:SuperAdmins` on every request. Settings are read once when the process starts, so
@@ -244,7 +244,7 @@ AllowedHosts=hub.example.com
 
 How to set them where you host:
 
-- **Windows service or a shell:** set them for the process. In PowerShell: `$env:Hub__DataSourceKey = '<key>'` (only for that window).
+- **Windows service or a shell:** set them for the process. In PowerShell 7.1 or later: `$env:Hub__DataSourceKey = Read-Host 'Key' -MaskInput` (for that window only, and nothing is typed on the command line). Windows PowerShell 5.1 has no `-MaskInput`: a value typed on the command line lands in PSReadLine's history file, so clear that history afterwards (`Clear-Content (Get-PSReadLineOption).HistorySavePath`).
 - **Azure App Service:** Settings, Environment variables (or Key Vault references). On Linux App Service the double underscore
   works as is.
 - **Container:** `-e` flags or your orchestrator's secrets.
@@ -382,6 +382,7 @@ Rules for codes:
 - A code works once and lives at most 60 minutes (default 15). Clocks may differ by up to 30 seconds.
 - A code is tied to this hub (its `Hub:Audience` and a key derived from `Hub:DataSourceKey`): another hub does not accept it.
 - Handle a code like a password. Never paste it in a chat, ticket or email.
+- **With codes on, `Hub:DataSourceKey` is a super admin credential:** anyone who holds it can make a valid code for any name in `CodeNames`. Use a different key per deployment.
 - A code session appears in the audit log as `super:code:<name>`. `SuperAdminCodeIssued` is written by the command, then
   `SuperAdminSignedIn` with method `code`.
 - Attempts are limited to 10 per 60 seconds per address by default (`Hub:SignIn:Codes:PermitLimit` and `WindowSeconds`), then `429`.
@@ -466,18 +467,36 @@ const string CodePattern = "/querybuilder/signin/code";
 var issuingCode = args.Length > 0 && args[0] == "signin-code";
 
 var builder = WebApplication.CreateBuilder(issuingCode ? [] : args);
+if (issuingCode)
+{
+    builder.Logging.ClearProviders();   // stdout must carry only the Code: and Expires: lines
+}
+
 var config = builder.Configuration;
 string Required(string key) =>
     config[key] is { Length: > 0 } value ? value : throw new InvalidOperationException($"{key} is required.");
 
-var tenantId = Required("Hub:Entra:TenantId");
+var tenantId = Required("Hub:SignIn:Provider:TenantId");
+if (tenantId.Trim().ToLowerInvariant() is "common" or "organizations" or "consumers")
+{
+    throw new InvalidOperationException("Hub:SignIn:Provider:TenantId must name one tenant.");
+}
+
+var audience = Required("Hub:Audience");
+if (!Uri.TryCreate(audience, UriKind.Absolute, out var audienceUri)
+    || audienceUri.Scheme != Uri.UriSchemeHttps
+    || audience.EndsWith('/') || audience.Contains('?') || audience.Contains('#')
+    || !string.IsNullOrEmpty(audienceUri.AbsolutePath.Trim('/')))
+{
+    throw new InvalidOperationException("Hub:Audience must be the hub's public https:// address only, with no path or trailing slash.");
+}
 
 builder.Services.AddQueryBuilderEditor(o =>
 {
     o.ConnectionString = Required("Hub:ConnectionString");
     o.ApplyMigrations = !issuingCode && config.GetValue("Hub:ApplyMigrations", true);
     o.Hub.Enabled = true;
-    o.Hub.Audience = Required("Hub:Audience");                  // https://hub.example.com, no trailing slash
+    o.Hub.Audience = audience;                                                  // https://hub.example.com, no trailing slash
     o.Hub.SuperAdminSignInScheme = ProviderScheme;
     o.Hub.ProviderDisplayName = "Contoso";
     o.Hub.SuperAdmins.ProviderKind = SuperAdminProviderKind.Entra;
@@ -493,13 +512,13 @@ builder.Services.AddQueryBuilderEditor(o =>
 builder.Services.AddAuthentication().AddOpenIdConnect(ProviderScheme, options =>
 {
     options.Authority = $"https://login.microsoftonline.com/{tenantId}/v2.0";
-    options.ClientId = Required("Hub:Entra:ClientId");
-    options.ClientSecret = Required("Hub:Entra:ClientSecret");
+    options.ClientId = Required("Hub:SignIn:Provider:ClientId");
+    options.ClientSecret = Required("Hub:SignIn:Provider:ClientSecret");
     options.CallbackPath = "/signin-oidc";
-    options.SignInScheme = "QueryBuilder.HubExternal";          // the package's short-lived cookie scheme
+    options.SignInScheme = "QueryBuilder.HubExternal";
     options.ResponseType = OpenIdConnectResponseType.Code;
     options.UsePkce = true;
-    options.MapInboundClaims = false;                           // claim names arrive as the provider sent them
+    options.MapInboundClaims = false;
     options.SaveTokens = false;
     options.Scope.Clear();
     foreach (var scope in new[] { "openid", "profile", "email" })
@@ -512,9 +531,10 @@ builder.Services.AddAuthorization();
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
 {
     options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
-    options.ForwardLimit = 1;
+    options.ForwardLimit = config.GetValue("Hub:ForwardedHeaders:ForwardLimit", 1);
     var proxies = config.GetSection("Hub:ForwardedHeaders:KnownProxies").Get<string[]>() ?? [];
-    if (proxies.Length > 0)
+    var networks = config.GetSection("Hub:ForwardedHeaders:KnownNetworks").Get<string[]>() ?? [];
+    if (proxies.Length > 0 || networks.Length > 0)
     {
         options.KnownProxies.Clear();
         options.KnownIPNetworks.Clear();
@@ -522,15 +542,23 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
         {
             options.KnownProxies.Add(IPAddress.Parse(proxy));
         }
+
+        foreach (var network in networks)
+        {
+            options.KnownIPNetworks.Add(System.Net.IPNetwork.Parse(network));   // .NET 8: KnownNetworks and Microsoft.AspNetCore.HttpOverrides.IPNetwork
+        }
     }
 });
 
-// The package maps these routes itself, so a named rate-limit policy cannot be attached to them. One global
-// limiter picks them by endpoint, each with its own allowance per client address.
 static bool IsPost(HttpContext context, string pattern) =>
     HttpMethods.IsPost(context.Request.Method)
     && context.GetEndpoint() is RouteEndpoint { RoutePattern.RawText: var raw }
     && raw == pattern;
+
+int launchPermits = config.GetValue("Hub:LaunchRateLimit:PermitLimit", 30);
+int launchWindow = config.GetValue("Hub:LaunchRateLimit:WindowSeconds", 60);
+int codePermits = config.GetValue("Hub:SignIn:Codes:PermitLimit", 10);
+int codeWindow = config.GetValue("Hub:SignIn:Codes:WindowSeconds", 60);
 
 builder.Services.AddRateLimiter(options =>
 {
@@ -541,14 +569,20 @@ builder.Services.AddRateLimiter(options =>
         if (IsPost(context, LaunchPattern))
         {
             return RateLimitPartition.GetFixedWindowLimiter("launch:" + ip,
-                _ => new FixedWindowRateLimiterOptions { PermitLimit = 30, Window = TimeSpan.FromSeconds(60), QueueLimit = 0 });
+                _ => new FixedWindowRateLimiterOptions { PermitLimit = launchPermits, Window = TimeSpan.FromSeconds(launchWindow), QueueLimit = 0 });
         }
 
         return IsPost(context, CodePattern)
             ? RateLimitPartition.GetFixedWindowLimiter("code:" + ip,
-                _ => new FixedWindowRateLimiterOptions { PermitLimit = 10, Window = TimeSpan.FromSeconds(60), QueueLimit = 0 })
+                _ => new FixedWindowRateLimiterOptions { PermitLimit = codePermits, Window = TimeSpan.FromSeconds(codeWindow), QueueLimit = 0 })
             : RateLimitPartition.GetNoLimiter("other");
     });
+    options.OnRejected = (rejected, _) =>
+    {
+        var seconds = IsPost(rejected.HttpContext, CodePattern) ? codeWindow : launchWindow;
+        rejected.HttpContext.Response.Headers.RetryAfter = seconds.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        return ValueTask.CompletedTask;
+    };
 });
 
 var app = builder.Build();
@@ -597,8 +631,9 @@ app.Run();
 
 Notes on the sample:
 
-- **Settings names.** The `Hub:*` names above are the ones the ready-made host uses, kept so the same environment variables and
-  [A3](#a3-settings) table work. Your own host may read any names. Only the `options.*` assignments matter to the package.
+- **Settings names.** The sample reads the same `Hub:*` names as the ready-made host (`Hub:SignIn:Provider:TenantId`, `ClientId`, `ClientSecret`,
+  `Hub:ForwardedHeaders:*`, `Hub:LaunchRateLimit:*`, `Hub:SignIn:Codes:*` and so on), so the environment variables in [A4](#a4-secrets-in-environment-variables) and the
+  [A3](#a3-settings) table work unchanged. It supports Entra only: `Hub:SignIn:Provider:Kind`, `Instance` and `Authority` are not read. Your own host may read any names. Only the `options.*` assignments matter to the package.
 - **Generic OpenID Connect instead of Entra.** Set `o.Hub.SuperAdmins.ProviderKind = SuperAdminProviderKind.OpenIdConnect`; fill
   `UserIds`, `Emails` or `GroupIds` (not `TenantIds`/`ObjectIds`); set `options.Authority` to the provider's issuer; and, to read
   userinfo claims as the ready-made host does, add:
@@ -612,7 +647,8 @@ Notes on the sample:
   Only claims you map reach the principal that the allowlist checks. `MapInboundClaims = false` keeps the raw claim names.
 - **Codes only.** Leave out `AddOpenIdConnect` and `SuperAdminSignInScheme`, and set `o.Hub.SignInCodes.Enabled = true` with at least one
   `CodeNames` entry.
-- **The `signin-code` branch.** It builds the services with `ApplyMigrations` off and never starts the host. Run it from the app
+- **.NET 8.** `KnownIPNetworks` and `System.Net.IPNetwork` exist from .NET 9. On .NET 8 use `options.KnownNetworks` with `Microsoft.AspNetCore.HttpOverrides.IPNetwork`.
+- **The `signin-code` branch.** It clears the log providers so standard output carries only the `Code:` and `Expires:` lines. It builds the services with `ApplyMigrations` off and never starts the host. Run it from the app
   folder with the same environment variables as the site: `dotnet MyHub.dll signin-code --name ops-alex --minutes 10`.
 
 ### B3. How a custom host issues sign-in codes
@@ -632,6 +668,8 @@ public sealed record IssuedCode(string Code, string Jti, DateTimeOffset ExpiresU
 `IssueAsync` refuses (throws) when `SignInCodes.Enabled` is off. `minutes` of `null` means `SignInCodes.DefaultMinutes`; the
 value must be 1 to 60. It writes a `SuperAdminCodeIssued` audit entry (actor `server-command`, never the code) before it returns the code. The `name`
 must be in `SuperAdmins.CodeNames` or the code will be refused at sign-in (`NotListed`).
+
+**With codes on, the `EncryptionKey` is a super admin credential:** whoever holds it can mint a code for any name in `CodeNames`, so keep it as secret as an admin password and use a different key per deployment.
 
 Do not expose this over HTTP. Call it from a command, a script or a tool that only an operator on the server can run, as the
 `signin-code` branch in B2 does. The person pastes the code at `/querybuilder/signin`, which posts to
@@ -671,7 +709,7 @@ Do these in order. Steps C1 to C3 are the hub operator's; C4 to C8 are the app o
    - **Scope keys**: the names of the row-level values the app will send in its tokens (for example `ProgramId`). At most 20. A token naming a key the hub does not know is refused.
    - **Record ceiling**: an optional upper bound on rows per query for this app. The lower of the ceiling and the data source's own limit applies.
    - **App admins can add data sources**: off by default. Turn it on only if the app's own admins should add, edit, test and turn off the unlocked data sources of their own app.
-   - **Turned on**: leave it off until the app is ready.
+   - **Turned on**: **a new app starts turned on.** Turn it off now and turn it back on in C3 step 4, once the owner is ready.
 4. Give the app owner: the **app key**, the hub **audience** (`Hub:Audience`, exactly), the **scope keys**, and a link to the
    [`QueryBuilder.Launch` guide](../src/QueryBuilder.Launch/README.md).
 
@@ -696,8 +734,8 @@ $rsa.ExportSubjectPublicKeyInfoPem() | Set-Content -Encoding ascii qb-launch-pub
 
 ```powershell
 $cert = New-SelfSignedCertificate -Subject "CN=my-app-querybuilder-launch" `
-    -KeyAlgorithm RSA -KeyLength 2048 -KeyExportPolicy Exportable -KeySpec Signature `
-    -HashAlgorithm SHA256 -NotAfter (Get-Date).AddYears(2) -CertStoreLocation Cert:\CurrentUser\My
+    -KeyAlgorithm RSA -KeyLength 2048 -KeyExportPolicy Exportable `
+    -Provider 'Microsoft Software Key Storage Provider' -HashAlgorithm SHA256 -NotAfter (Get-Date).AddYears(2) -CertStoreLocation Cert:\CurrentUser\My
 
 function Get-DerLength([int]$n) {
     if ($n -lt 128) { return [byte[]]@($n) }
@@ -748,7 +786,7 @@ operator your **key id** (`kid`): for example `2026-11`, 1 to 64 characters, let
 3. Under **Return URLs**, add where "Back to your app" and logout should send users: the canonical form, for example
    `https://app.example.com/` (https only; `http://localhost` is allowed for development), up to 800 characters, at most 20 per app.
    A token's `returnUrl` must equal one of them exactly (case-sensitive).
-4. Turn the app on once the owner is ready.
+4. Turn the app on once the owner is ready (a new app starts turned on, so this turns it back on if you turned it off in C1).
 
 ### C4. Add the package and the button (app owner): ASP.NET Core
 
@@ -923,7 +961,7 @@ The full claims table, the 6,144-byte scope limit and a decoded example are in
 |---|---|
 | `Malformed` | Compare with the claims table; check `iat`/`exp` are integers, `sub` is at most 256 characters and does not start with `super:`. |
 | `UnknownApp` | `iss` is not a registered app key. |
-| `AppDisabled` | Turn the app on in the console. |
+| `AppDisabled` | The app is turned off: turn it on in the console. |
 | `UnknownKey` | Register the public key under that exact key id. |
 | `RevokedKey` | Add a new key and sign with it. |
 | `AlgorithmNotAllowed` | Not RS256/ES256, or not the algorithm the key was registered with. |
@@ -949,12 +987,32 @@ office address shares it.
 
 1. A super admin signs in and picks the app with the switcher (or opens it from **Apps**), then opens **Admin** and adds a data source (SQL Server or PostgreSQL):
    host, port, database, login and password. The password is encrypted with the data source key. It is never returned by any screen.
-2. A data source added by a super admin is **locked**. The app's admins and users can use it, but only a super admin changes it until one unlocks it.
+2. **What the form can and cannot reach.** A SQL Server source needs **SQL authentication** over **TCP**: no Windows (integrated) authentication, no managed identity, no
+   LocalDB, no named pipes, and no `np:` or `tcp:` prefixes. For a named instance, give `host\instance` plus its port: the form always connects over TCP and does not use
+   SQL Browser lookups (see the Editor README, "Adding data sources in the admin UI"). If your source needs anything else, use the raw SQL route in step 6.
+3. A data source added by a super admin is **locked**. The app's admins and users can use it, but only a super admin changes it until one unlocks it.
    (If **App admins can add data sources** is on, an app admin can add, edit, test and turn off the unlocked data sources of their own app.)
-3. The hub never uses its own metadata database as a data source, and refuses a data source that points at it.
-4. A new data source starts as views only. Scoped users see nothing until data scope rules exist for it, so the admin page opens its policy page after you create it.
-5. Raw SQL registration of a data source by a DBA (a row in `DataSources` pointing `ConnectionStringName` at a configured connection string) is
-   the embedded-mode route. This guide does not cover it for the hub: use the form.
+4. The hub never uses its own metadata database as a data source, and refuses a data source that points at it (this applies to the raw SQL route too).
+5. A new data source starts as views only. Scoped users see nothing until data scope rules exist for it, so the admin page opens its policy page after you create it.
+6. **Advanced, for a DBA: raw SQL registration.** The connection string stays in the host's configuration instead of the database.
+   1. On **every hub instance**, set an environment variable `ConnectionStrings__<name>` (for example `ConnectionStrings__SalesDb`) to the connection string.
+      Use an environment variable or a server-only store, never a file in the repository.
+   2. Find the app's id: open the app in the console; the address ends in `/querybuilder/hub/apps/<id>`.
+   3. Insert the row with an **explicit `AppId`**. The column default (`DF_DataSources_AppId`) is the built-in Default app, which a hub turns off, so a row
+      that leaves `AppId` out belongs to an app nobody can launch into:
+
+      ```sql
+      INSERT INTO DataSources
+        (Id, AppId, Name, Provider, ConnectionStringName, AllowedSchemas, AllowedObjects, CatalogScope, ScopeKeys,
+         IsActive, LockedBySuperAdmin, CreatedBy, CreatedAtUtc)
+      VALUES
+        (NEWID(), '<app id>', 'Sales', 0, 'SalesDb', '', '', 0, '',
+         1, 1, 'dba', SYSUTCDATETIME());
+      ```
+
+      `Provider` is `0` for SQL Server and `1` for PostgreSQL; `CatalogScope` `0` is views only and `2` is tables and views; `LockedBySuperAdmin` `1` makes it a
+      locked source. The column list was taken from the `DataSource` entity (`src/QueryBuilder.Domain/Entities/DataSource.cs`); check it against the schema script you
+      ran, and test the statement on a copy first. This route was not run end to end for this guide.
 
 ### D2. Data scope mappings
 
@@ -968,7 +1026,7 @@ Super admins and `unrestricted` tokens see all rows.
 |---|---|
 | Super admin | Everything, in the app chosen with the switcher, with no row restriction, plus the console. |
 | Admin | Every query, dashboard and share of the app; the Admin page for unlocked data sources. |
-| Author | Their own and shared queries and dashboards; the builder, charts, export. |
+| Author | Their own and shared queries and dashboards, and the dashboards published to the app; the builder, charts, export. |
 | Viewer | Published dashboards and those shared with them. Charts render with the viewer's own data scope. Never the SQL. |
 
 ### D4. Publish a dashboard for Viewers
@@ -1046,7 +1104,7 @@ plus the data source's `AppUsers` view (the picker reads its first 500 rows). Th
 
 ### Onboarding checklist for each new app
 
-- [ ] App created in the console: key, name, scope keys, record ceiling, "App admins can add data sources" decided.
+- [ ] App created in the console (it starts turned on; turn it off until ready): key, name, scope keys, record ceiling, "App admins can add data sources" decided.
 - [ ] App owner generated a key pair; private key stays with them.
 - [ ] Public key registered; **fingerprint compared**.
 - [ ] Return URLs registered (canonical form, https).
