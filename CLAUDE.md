@@ -37,8 +37,15 @@ migration message. Docs written: hub guide `src/QueryBuilder.Hub/README.md` (sec
 both READMEs' "Hub mode (2.0.0)" ("How super admins sign in"). Verified for the docs: every setting, default, route, limit and
 message was checked against the source files by re-reading; no tests were run for the docs task and none of this has run
 against a real Okta/Google/Auth0/Keycloak tenant or a real Entra tenant (provider notes on `sub` shape and groups are general
-knowledge, flagged in the guide as starting points). Revocation stays restart-only. Still pending as before: Part 3 leftovers
-and the release items below (2.0.0 only after the user decides).
+knowledge, flagged in the guide as starting points). Revocation stays restart-only. Final review fixes (`27410f7`): the code
+HMAC key is HKDF over `Hub:DataSourceKey` with info `qb-super-signin-code-v1|<Audience>`, so **with codes on, the data-source
+key is a super admin credential** (docs say: separate key per deployment; question 10 in the questions file); bad-code and
+cross-site provider posts get their own generic pages; the command's stdout is exactly `Code:`/`Expires:` (logs to stderr);
+an OIDC/Entra id starting `code:` is refused. Verified: focused classes net10 152/152, net8 65/65; a real hub host in
+codes-only mode (page shows only the code box; command refuses an unlisted name; code signs in as `super:code:priya`; reuse
+and tampering → generic 403) and both-options mode (provider button signs in). Known minor: the command-stdout test swaps
+`Console.Out` while other test collections run in parallel (possible flake). Still pending as before: the release items
+below (2.0.0 only after the user decides).
 
 **As of 2026-11-12: hub Parts 1–4 ALL DONE, committed LOCALLY on `feature/hub` (never pushed). Part 4 = `62aa052..17f9620`
 (plan `docs/superpowers/plans/2026-11-12-hub-part4-host-and-launch.md`). Open questions/decisions for the user:
