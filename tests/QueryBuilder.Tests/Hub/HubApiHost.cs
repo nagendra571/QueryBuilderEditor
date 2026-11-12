@@ -124,6 +124,7 @@ internal sealed class HubApiHost : IAsyncDisposable
     public string ConnectionString = null!;
     private bool _hub;
     private bool _realIdentity;
+    private Action<IServiceCollection>? _services;
     private readonly List<HttpClient> _clients = [];
 
     /// <summary>Stops the host and starts another on the same database (so the same Data Protection key ring) with other options.</summary>
@@ -143,10 +144,10 @@ internal sealed class HubApiHost : IAsyncDisposable
 
     public AppDbContext HubWideDb() => new(Options, new FixedAppContext(App.NoneId, hubWide: true));
 
-    public static Task RunAsync(Func<HubApiHost, Task> body, bool hub = true, Action<QueryBuilderEditorOptions>? configure = null, bool realIdentity = false) =>
+    public static Task RunAsync(Func<HubApiHost, Task> body, bool hub = true, Action<QueryBuilderEditorOptions>? configure = null, bool realIdentity = false, Action<IServiceCollection>? services = null) =>
         MetadataDb.WithDatabaseAsync(async (options, connectionString) =>
         {
-            var env = new HubApiHost { Options = options, ConnectionString = connectionString, _hub = hub, _realIdentity = realIdentity };
+            var env = new HubApiHost { Options = options, ConnectionString = connectionString, _hub = hub, _realIdentity = realIdentity, _services = services };
             await using (var db = env.HubWideDb())
             {
                 db.MetadataSettings.Add(new MetadataSetting { Key = "Mode", Value = hub ? "Hub" : "Embedded" });
@@ -181,6 +182,7 @@ internal sealed class HubApiHost : IAsyncDisposable
                 web.ConfigureServices(services =>
                 {
                     services.AddRouting();
+                    env._services?.Invoke(services);
                     services.AddProblemDetails();
                     services.AddQueryBuilderEditor(o =>
                     {

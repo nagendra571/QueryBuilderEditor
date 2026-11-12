@@ -46,12 +46,31 @@ public partial class CrossAppEndpointMatrixTests
     // Ok: 2xx. NotFound: 404. Exact: the listed status, with a reason. Refused / BadRequest: 403 / 400 AND the same status and
     // body as the twin call that names a missing id, so existence is not revealed. Same: any status below 500, identical to the
     // twin. Positive: the control with B's own ids, anything but 404 or 5xx.
-    // Hidden: 404, or 403 from a gate that runs before anything is loaded; either way nothing of A is shown.
-    private enum Expect { Ok, NotFound, Exact, Refused, BadRequest, Same, Positive, Hidden }
+    private enum Expect { Ok, NotFound, Exact, Refused, BadRequest, Same, Positive }
+
+    private const string RenderKey = "POST /api/queries/{queryId}/visualizations/{visualizationId}/data";
+
+    // A's contents, never to appear in a B response or a log line (ids are excluded from logs: the cross-app refusal warns with ids on purpose).
+    private static readonly string[] Secrets = ["alpha-source", "alpha-query", "alpha-dashboard", "alpha-viz", "alpha-owner", "alpha-audit", "alpha@x", "alpha-managed", "alpha-seen", "alpha.example", "rsa-a"];
+
+    private sealed class CapturingProvider : ILoggerProvider
+    {
+        public System.Collections.Concurrent.ConcurrentQueue<string> Lines { get; } = new();
+        public ILogger CreateLogger(string categoryName) => new Sink(categoryName, Lines);
+        public void Dispose() { }
+
+        private sealed class Sink(string category, System.Collections.Concurrent.ConcurrentQueue<string> lines) : ILogger
+        {
+            public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+            public bool IsEnabled(LogLevel logLevel) => true;
+            public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter) =>
+                lines.Enqueue($"{category} {logLevel}: {formatter(state, exception)} {exception}");
+        }
+    }
 
     private enum Who { Viewer, Author, Admin, Super }
 
-    private sealed record Call(string Label, HttpMethod Method, string Url, object? Body, Expect Expect, Call? Twin = null, int Status = 0, string? Why = null, string? Key = null);
+    private sealed record Call(string Label, HttpMethod Method, string Url, object? Body, Expect Expect, Call? Twin = null, int Status = 0, string? Why = null, string? Key = null, bool Mixed = false, bool Gate = false);
 
     // The only endpoints a hub Viewer reaches; every other route must answer a Viewer 403 before any handler runs.
     private static readonly HashSet<string> ViewerRoutes =
@@ -59,7 +78,7 @@ public partial class CrossAppEndpointMatrixTests
         "GET /api/me",
         "GET /api/dashboards",
         "GET /api/dashboards/{id}",
-        "POST /api/queries/{queryId}/visualizations/{visualizationId}/data",
+        RenderKey,
         "GET /api/queries/{id}/parameters/{name}/options",
         "GET /api/dashboards/{id}/tiles/{tileId}/chart",
         "GET /api/dashboards/{id}/parameters/{name}/options"
@@ -232,7 +251,9 @@ public partial class CrossAppEndpointMatrixTests
             new("B dashboard, A share", HttpMethod.Delete, $"/api/dashboards/{b.Dashboard}/shares/{a.DashboardShare}", null, Expect.NotFound),
             new("B query, A visualization update", HttpMethod.Put, $"/api/queries/{b.Query}/visualizations/{a.Visualization}", new { name = "v", type = "Table", options = new { table = new { columns = new[] { "c" } } } }, Expect.NotFound),
             new("B query, A visualization delete", HttpMethod.Delete, $"/api/queries/{b.Query}/visualizations/{a.Visualization}", null, Expect.NotFound),
-            new("B query, A visualization data", HttpMethod.Post, $"/api/queries/{b.Query}/visualizations/{a.Visualization}/data", new { parameterValues = new { } }, Expect.NotFound),
+            new("B query, A visualization data", HttpMethod.Post, $"/api/queries/{b.Query}/visualizations/{a.Visualization}/data", new { parameterValues = new { } }, Expect.NotFound,
+                new("B query, missing visualization data", HttpMethod.Post, $"/api/queries/{b.Query}/visualizations/{Guid.NewGuid()}/data", new { parameterValues = new { } }, Expect.Ok),
+                Key: RenderKey, Mixed: true),
             new("A query, B visualization", HttpMethod.Delete, $"/api/queries/{a.Query}/visualizations/{b.Visualization}", null, Expect.NotFound)
         ];
     }
@@ -374,17 +395,23 @@ public partial class CrossAppEndpointMatrixTests
         var body = Bodies[$"{method} {normalized}"](a);
         var names = RouteParameter().Matches(raw).Select(m => m.Groups[1].Value).ToList();
 
-        string Url(bool mixed) => RouteParameter().Replace(raw, m =>
+        string Url(bool mixed, bool missingChild = false) => RouteParameter().Replace(raw, m =>
         {
-            var useB = mixed && m.Index == RouteParameter().Match(raw).Index;
-            return IdFor(normalized, m.Groups[1].Value, useB ? b : a);
+            var first = m.Index == RouteParameter().Match(raw).Index;
+            if (missingChild && !first && m.Groups[1].Value != "name")
+            {
+                return Guid.NewGuid().ToString();
+            }
+
+            return IdFor(normalized, m.Groups[1].Value, mixed && first ? b : a);
         });
 
         var query = normalized.EndsWith("/share-preview", StringComparison.Ordinal) ? "?userId=someone" : "";
         yield return new Call($"{method} {normalized}", new HttpMethod(method), Url(false).TrimEnd('/') + query, body, Expect.NotFound);
         if (withMixed && names.Count(n => n != "name") >= 2)
         {
-            yield return new Call($"{method} {normalized} (B parent, A child)", new HttpMethod(method), Url(true).TrimEnd('/') + query, body, Expect.NotFound);
+            var twin = new Call($"{method} {normalized} (B parent, missing child)", new HttpMethod(method), Url(true, missingChild: true).TrimEnd('/') + query, body, Expect.Ok);
+            yield return new Call($"{method} {normalized} (B parent, A child)", new HttpMethod(method), Url(true).TrimEnd('/') + query, body, Expect.NotFound, twin, Mixed: true);
         }
     }
 
@@ -402,12 +429,12 @@ public partial class CrossAppEndpointMatrixTests
     {
         if (who == Who.Viewer && !ViewerRoutes.Contains(key))
         {
-            return call with { Expect = Expect.Exact, Status = 403, Why = "Viewer gate runs before any handler", Twin = null };
+            return call with { Expect = Expect.Exact, Status = 403, Why = "Viewer gate runs before any handler", Twin = null, Gate = true };
         }
 
         if (who == Who.Author && AuthorRefused(key))
         {
-            return call with { Expect = Expect.Exact, Status = 403, Why = "Authors may not use admin routes", Twin = null };
+            return call with { Expect = Expect.Exact, Status = 403, Why = "Authors may not use admin routes", Twin = null, Gate = true };
         }
 
         // Publishing loads the dashboard first (A's id is 404), then refuses an Author on their own.
@@ -418,7 +445,9 @@ public partial class CrossAppEndpointMatrixTests
 
         if (who == Who.Viewer && !control && key.Contains('{') && call.Expect is Expect.NotFound or Expect.Ok or Expect.Refused or Expect.BadRequest or Expect.Same)
         {
-            return call with { Expect = Expect.Hidden, Twin = null };
+            // No Viewer gate on these routes, so a 403 comes from a handler. A's id as the first thing loaded must be a plain 404;
+            // with B's own parent and A's child, a 403 is only fine if it is identical to the one a missing child gets.
+            return call.Mixed ? call with { Expect = Expect.Same } : call with { Expect = Expect.NotFound, Twin = null };
         }
 
         return call;
@@ -465,24 +494,24 @@ public partial class CrossAppEndpointMatrixTests
         Assert.True(unknown.Count == 0, $"Endpoints missing from the cross-app matrix (add a body row, a NoIdCalls row or an Excluded reason): {string.Join("; ", unknown)}");
         var stale = Bodies.Keys.Concat(NoIdCalls.Keys).Where(k => !covered.Contains(k)).Concat(Excluded.Keys.Where(k => !excludedSeen.Contains(k))).ToList();
         Assert.True(stale.Count == 0, $"Matrix rows that no longer match an endpoint: {string.Join("; ", stale)}");
-        const string RenderKey = "POST /api/queries/{queryId}/visualizations/{visualizationId}/data";
-        calls.AddRange(Extras(a, b).Select(c => ForRole(role, c.Label == "B query, A visualization data" ? RenderKey : "extra", c, control: false)));
+        calls.AddRange(Extras(a, b).Select(c => ForRole(role, c.Key ?? "extra", c, control: false)));
 
-        var secrets = new[] { "alpha-source", "alpha-query", "alpha-dashboard", "alpha-viz", "alpha-owner", "alpha-audit", "alpha@x", "alpha-managed", "alpha-seen", "alpha.example", "rsa-a" };
+        var secrets = Secrets;
         var failures = new List<string>();
 
         async Task Check(Call call)
         {
             var (status, text) = await SendAsync(caller, call);
             var sent = Mount + call.Url + (call.Body is null ? "" : JsonSerializer.Serialize(call.Body));
-            // A 404 or 403 (a gate that never loaded anything) legitimately echoes the id the caller typed; anything else must not carry any of A's ids.
-            var ids = a.All.Select(i => i.ToString()).Where(i => status is not (404 or 403) || !sent.Contains(i, StringComparison.OrdinalIgnoreCase));
+            // A 404, a gate's 403 (nothing loaded) or an answer proven identical to a missing-id twin may echo the id the caller
+            // typed; anything else must not carry any of A's ids.
+            var echoOk = status == 404 || call.Gate || call.Twin is not null;
+            var ids = a.All.Select(i => i.ToString()).Where(i => !echoOk || !sent.Contains(i, StringComparison.OrdinalIgnoreCase));
             var leaked = secrets.Concat(ids).FirstOrDefault(s => text.Contains(s, StringComparison.OrdinalIgnoreCase));
 
             string? problem = call.Expect switch
             {
                 Expect.NotFound => status == 404 ? null : "expected 404",
-                Expect.Hidden => status is 404 or 403 ? null : "expected 404 (or 403 from a gate before any load)",
                 Expect.Ok => status is >= 200 and < 300 ? null : "expected 2xx",
                 Expect.Exact => status == call.Status ? null : $"expected {call.Status} ({call.Why})",
                 Expect.Positive => status == 404 || (status >= 500 && !PositiveMayFailServerSide.ContainsKey(call.Label)) ? "B's own ids must reach the handler (not 404, not 5xx)" : null,
@@ -535,7 +564,9 @@ public partial class CrossAppEndpointMatrixTests
         Assert.True(failures.Count == 0, string.Join("\n", failures));
     }
 
-    private static Task Scenario() => HubApiHost.RunAsync(async env =>
+    private static Task Scenario() => ScenarioWith(new CapturingProvider());
+
+    private static Task ScenarioWith(CapturingProvider logs) => HubApiHost.RunAsync(async env =>
     {
         // Both apps' data sources point at the metadata database and read this view, so B's own queries, options and charts
         // really run and a cross-app leak would return real rows.
@@ -623,6 +654,11 @@ public partial class CrossAppEndpointMatrixTests
             }
 
             await RunMatrixAsync(env, caller, role, a, b, NewBSet, controlOk);
+
+            var logged = logs.Lines.ToArray();
+            Assert.NotEmpty(logged);
+            var inLog = logged.SelectMany(l => Secrets.Where(x => l.Contains(x, StringComparison.OrdinalIgnoreCase)).Select(x => $"'{x}' in: {(l.Length > 200 ? l[..200] : l)}")).ToList();
+            Assert.True(inLog.Count == 0, $"[{role}] App A contents appeared in the logs: {string.Join(" | ", inLog.Take(5))}");
         }
 
         // At least one role's B-on-B call succeeds per body-id route, so a 404 on A's id can't be a broken body.
@@ -636,7 +672,7 @@ public partial class CrossAppEndpointMatrixTests
         o.DataSourceManagement.Enabled = true;
         o.DataSourceManagement.AllowAnonymousAdmins = true;
         o.DataSourceManagement.PreviousEncryptionKeys = [Convert.ToBase64String(OldKey)];
-    });
+    }, services: services => services.AddLogging(b => b.AddProvider(logs)));
 
     [MetadataSqlFact]
     public Task Every_role_in_app_b_is_kept_out_of_app_a_through_every_endpoint() => Scenario();
