@@ -45,3 +45,16 @@ it costs to change. Answer any you disagree with; nothing here is pushed or rele
 
 - **`Hub:ApplyMigrations` (hub host, default true):** set false and the host never runs migrations, for DBA-run upgrades from the schema script. Undo cost: one setting.
 - **`Hub:ForwardedHeaders:ForwardLimit` (hub host, int, default 1, at least 1):** how many `X-Forwarded-For` hops are read from the right, for chained proxies (list every hop in `KnownProxies`/`KnownNetworks`, set the limit to the hop count). Undo cost: one setting.
+- **`Hub:Audience` is scheme + host (+ port) only** — no path or trailing slash — and must equal the `aud` apps send;
+  the host refuses to start otherwise (a one-character mismatch would refuse every launch).
+- **`QueryBuilder.Launch` mirrors the hub exactly:** user id ≤ 256 characters (the hub's limit, not 450), ids starting
+  `super:` refused, scope key and kid patterns identical, scope size measured the way the hub measures it, return-URL
+  shape checked up front. `LaunchSigningKey` is not `IDisposable` (the caller owns the RSA/ECDsa key).
+- **The launch form always shows a "Continue to QueryBuilder" button** (works when the app's CSP blocks inline
+  scripts) and takes an optional CSP nonce.
+- **DBA-managed hub databases:** the docs tell the DBA to turn the Default app off themselves
+  (`UPDATE Apps SET IsEnabled = 0 WHERE Id = '…00d'`) next to inserting `('Mode','Hub')`; the package does it only when it
+  claims the database itself.
+- **Verification gaps before 2.0.0:** the net8.0 full suite hasn't run since Part 3's final fixes (the system stopped it
+  for low memory; focused net8 tests passed), the PostgreSQL group wasn't run (Docker not running), and real Entra ID
+  sign-in hasn't been tried (a stand-in handler was used).

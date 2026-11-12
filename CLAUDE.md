@@ -26,7 +26,28 @@ integration ergonomics (single-call registration, embedded SPA, DBA-friendly mig
 
 ## Where we left off (update this at the end of each session)
 
-**As of 2026-11-12: hub Part 3 of 4 DONE (local commits `8be1519..47bb409`, plan
+**As of 2026-11-12: hub Parts 1–4 ALL DONE, committed LOCALLY on `feature/hub` (never pushed). Part 4 = `62aa052..17f9620`
+(plan `docs/superpowers/plans/2026-11-12-hub-part4-host-and-launch.md`). Open questions/decisions for the user:
+`docs/superpowers/plans/2026-11-12-hub-part4-questions.md` — read it first next session.** Part 4 built:
+`src/QueryBuilder.Launch` (netstandard2.0, NO dependencies, v1.0.0, packable; hand-rolled RS256/ES256 JWT; mirrors the
+hub validator exactly — user id ≤ 256, `super:` refused, kid/scope-key patterns with `\z`, 6,144-byte scope measured like
+the hub, return-URL shape; `LaunchForm.Html(hub, token, cspNonce)` always shows a "Continue to QueryBuilder" button;
+`LaunchSigningKey` not IDisposable) and `src/QueryBuilder.Hub` (net10.0, IsPackable=false; `HubHost.Build(args, configure)`;
+settings under `Hub:*`; OIDC scheme `entra` → `QueryBuilder.HubExternal`, PKCE, MapInboundClaims=false;
+`Microsoft.AspNetCore.Authentication.OpenIdConnect` 10.0.14 added WITHOUT prior approval per the user's "don't wait" —
+question 1; HSTS, forwarded headers (KnownProxies/Networks replace loopback, `ForwardLimit` setting), security headers
+incl. `frame-ancestors 'self'`, per-IP fixed-window limit on POST `/querybuilder/launch` matched by route (default
+30/min), `/healthz`, `Hub:Audience` = https scheme+host only, `Hub:ApplyMigrations`; no host Data Protection). Docs:
+Launch integration guide, Hub deployment guide, "Hub mode (2.0.0)" in both READMEs, Scripts/README, MANAGING-KEYS §6.
+Tests: host tests compile on net10.0 only (`Compile Remove="HubHost/**"` on net8). Verified: net10 full 1166 (at
+`3b46ec0`); focused Launch/HubHost tests at HEAD (net10 60/60, net8 Launch 37/37); real-host end-to-end 17/18 (HSTS
+absent only on localhost — ASP.NET default) incl. a **.NET Framework 4.8 console** signing RS256 (RSACng) and ES256
+(ECDsaCng) tokens the hub accepted. **NOT verified before 2.0.0: net8 full suite since Part 3's final fixes (system
+killed it for low memory), PostgreSQL group (Docker not running), real Entra sign-in.** Release still needs (on the
+user's ask only): version bump to 2.0.0, DBA script regeneration, root pack now also packs QueryBuilder.Launch (push
+both), merge feature/hub → main before NuGet (READMEs link GitHub main paths).
+
+**Hub Part 3 (2026-11-12) DONE (local commits `8be1519..47bb409`, plan
 `docs/superpowers/plans/2026-11-11-hub-part3-roles-publishing-console.md`). User said: write and implement Part 4
 without waiting; note anything to decide in `docs/superpowers/plans/2026-11-12-hub-part4-questions.md` (they answer
 later).** Part 3 built: `AccessActor` (Admins/super admins see the whole app, Viewer role wins over shares, `InHub` =
