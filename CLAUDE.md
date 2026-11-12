@@ -26,8 +26,29 @@ integration ergonomics (single-call registration, embedded SPA, DBA-friendly mig
 
 ## Where we left off (update this at the end of each session)
 
-**As of 2026-11-11: hub Parts 1 and 2 of 4 DONE, committed LOCALLY on `feature/hub` (never pushed; user approved
-local commits). Next: write the Part 3 plan.** Part 1 = `769bf08`; Part 2 = `763b007..30e6fa4` (plan
+**As of 2026-11-12: hub Part 3 of 4 DONE (local commits `8be1519..47bb409`, plan
+`docs/superpowers/plans/2026-11-11-hub-part3-roles-publishing-console.md`). User said: write and implement Part 4
+without waiting; note anything to decide in `docs/superpowers/plans/2026-11-12-hub-part4-questions.md` (they answer
+later).** Part 3 built: `AccessActor` (Admins/super admins see the whole app, Viewer role wins over shares, `InHub` =
+Role non-null); Viewer gate = endpoint allowlist of 7 routes (`.AllowViewers()`); publish/unpublish (Admins/super, hub
+only); dashboard-context grant (`IDashboardGrant`, tile-chart `GET /api/dashboards/{id}/tiles/{tileId}/chart`, dashboard
+parameter options; only Fixed tile mappings override a granted Viewer's values); shares only to known people (SeenUsers
+∪ AppUsers views; level changes on existing shares allowed); user-id case rule (launch refused when the app has a SeenUser
+/owner/share id equal ignoring case; `sub` starting `super:` refused); data-source lock/switch/move (move refused while
+used, conditional atomic rewrite, same-name 400); hub-wide encryption key routes under `/api/hub/encryption-key`;
+`RecordLimits.Effective = min(appCeiling, dsLimit ?? hostDefault)` (NOT min of three — embedded unchanged);
+metadata-DB refusal by server identity (`IMetadataDatabaseIdentity`); registry `Version` concurrency + no-op no audit +
+Default rename; `SuperAdminViewedApp` audited inside the app; hub audit `GET /api/hub/audit` ((timestamp,id) cursor);
+super admins masked as "Super admin" (actor, owner, IP) for non-super callers; logout = POST (`{redirectUrl}`);
+architecture test pins the 14 `IHubWideScopeFactory` files; cross-app matrix per role with B-on-B controls and log
+secrets; client role shell, console (`/hub/apps`, `/hub/audit`), lock/move UI. Verified: net10 1115 and net8 1110 (net8
+at `a8ceed6`, before the final fix wave) with the metadata DB variable; **PostgreSQL group NOT run (Docker Desktop not
+running) — owed before 2.0.0**; client 199; packed `2.0.0-part3-test` host 37/37 end-to-end on net10.0 and net8.0;
+browser pass of every role. Release-doc notes from Part 3: app ceiling change takes ≤ 30 s; metadata-DB check fails open
+on an unreachable candidate (catalog load re-checks); `datascope:{id}` cache ≤ 5 min on other instances after a move;
+picker limited to first 500 directory rows.
+
+**Earlier (2026-11-11): hub Parts 1 and 2 of 4 DONE.** Part 1 = `769bf08`; Part 2 = `763b007..30e6fa4` (plan
 `docs/superpowers/plans/2026-11-10-hub-part2-launch-and-sessions.md`). Part 2 built (all server-side, no UI yet):
 registry/system tables (`AppSigningKey` kid `^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`, `AppReturnUrl` ≤ 800 chars canonical
 `https://…/` only, `SeenUser`, `LaunchReplay` keyed (AppId, Jti), `DataProtectionKeyRecord`; markers `IHubRegistryRecord`
