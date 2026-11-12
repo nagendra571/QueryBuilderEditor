@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { adminApi } from '@/lib/api'
+import { adminApi, hubApi } from '@/lib/api'
 import { ApiError } from '@/lib/api-client'
 import type {
   CreateDataSourceRequest,
@@ -135,19 +135,25 @@ function invalidateDataSource(queryClient: ReturnType<typeof useQueryClient>, id
 }
 
 export const encryptionKeyStatusKey = ['admin-encryption-key'] as const
+export const hubEncryptionKeyStatusKey = ['hub-encryption-key'] as const
 
-export function useEncryptionKeyStatus() {
-  return useQuery({ queryKey: encryptionKeyStatusKey, queryFn: adminApi.encryptionKeyStatus, retry: false })
+/** Under the hub the key is shared by every app, so its status and rotation live on the hub-wide routes. */
+export function useEncryptionKeyStatus(hub = false) {
+  return useQuery({
+    queryKey: hub ? hubEncryptionKeyStatusKey : encryptionKeyStatusKey,
+    queryFn: hub ? hubApi.encryptionKeyStatus : adminApi.encryptionKeyStatus,
+    retry: false,
+  })
 }
 
-export function useReencrypt() {
+export function useReencrypt(hub = false) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: () => adminApi.reencrypt(),
+    mutationFn: () => (hub ? hubApi.reencrypt() : adminApi.reencrypt()),
     onSuccess: () => {
       // The counts and the list of sources on an old key change; so can what a source's own page says about its
       // connection being readable.
-      queryClient.invalidateQueries({ queryKey: encryptionKeyStatusKey })
+      queryClient.invalidateQueries({ queryKey: hub ? hubEncryptionKeyStatusKey : encryptionKeyStatusKey })
       queryClient.invalidateQueries({ queryKey: adminDataSourcesKey })
       queryClient.invalidateQueries({ queryKey: ['admin-data-source'] })
     },

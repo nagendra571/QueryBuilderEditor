@@ -8,6 +8,9 @@ import { canSee, homeRouteFor, isHub, needsAppChoice } from '@/features/hub/perm
 import { useMe } from '@/hooks/useMe'
 import { AdminDataSourcePolicyPage } from '@/pages/AdminDataSourcePolicyPage'
 import { AdminDataSourcesPage } from '@/pages/AdminDataSourcesPage'
+import { HubAppDetailPage } from '@/pages/HubAppDetailPage'
+import { HubAppsPage } from '@/pages/HubAppsPage'
+import { HubAuditPage } from '@/pages/HubAuditPage'
 import { DashboardListPage } from '@/pages/DashboardListPage'
 import { DashboardPage } from '@/pages/DashboardPage'
 import { QueryEditorPage } from '@/pages/QueryEditorPage'
@@ -73,6 +76,9 @@ export default function App() {
         <Route path="/choose-app" element={<ChooseApp />} />
         <Route path="/admin" element={<Gate><AdminDataSourcesPage /></Gate>} />
         <Route path="/admin/data-sources/:id" element={<Gate><AdminDataSourcePolicyPage /></Gate>} />
+        <Route path="/hub/apps" element={<Gate><HubAppsPage /></Gate>} />
+        <Route path="/hub/apps/:id" element={<Gate><HubAppDetailPage /></Gate>} />
+        <Route path="/hub/audit" element={<Gate><HubAuditPage /></Gate>} />
         <Route path="/dashboards" element={<Gate><DashboardListPage /></Gate>} />
         <Route path="/dashboards/:id" element={<Gate><DashboardPage /></Gate>} />
         <Route path="/queries/new" element={<Gate><QueryEditorPage /></Gate>} />

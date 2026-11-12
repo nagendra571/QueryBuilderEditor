@@ -321,6 +321,8 @@ export interface ApiProblemDetails {
   title: string
   detail?: string
   errors?: Record<string, string[]>
+  /** Only on a 409 "In use": how many of each kind still use the object. */
+  counts?: Record<string, number>
 }
 
 export type AuditAction =

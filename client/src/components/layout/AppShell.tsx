@@ -1,4 +1,4 @@
-import { ChevronsLeft, ChevronsRight, LayoutDashboard, MapPin, Moon, Rows3, Settings2, Squircle, Sun, Table2 } from 'lucide-react'
+import { Boxes, ChevronsLeft, ChevronsRight, LayoutDashboard, MapPin, Moon, Rows3, Settings2, Squircle, Sun, Table2 } from 'lucide-react'
 import { useTheme } from 'next-themes'
 import { useSyncExternalStore, type ReactNode } from 'react'
 import { NavLink } from 'react-router-dom'
@@ -9,7 +9,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 import { HubBanner } from '@/features/hub/HubBanner'
-import { isHub, navItemsFor, type NavItemSpec } from '@/features/hub/permissions'
+import { isHub, shellNavFor, type NavItemSpec } from '@/features/hub/permissions'
 import { useAdminAccess } from '@/hooks/useAdmin'
 import { useMe, zoneLabel } from '@/hooks/useMe'
 import { cn } from '@/lib/utils'
@@ -137,6 +137,7 @@ const NAV_ICONS: Record<NavItemSpec['id'], ReactNode> = {
   queries: <Table2 className="size-4" />,
   dashboards: <LayoutDashboard className="size-4" />,
   admin: <Settings2 className="size-4" />,
+  console: <Boxes className="size-4" />,
 }
 
 const NARROW = '(max-width: 767px)'
@@ -161,7 +162,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const { data: me, isLoading: meLoading } = useMe()
   // Embedded mode finds out about Admin by probing; under the hub the server says so in /api/me.
   const adminAccess = useAdminAccess(!meLoading && !isHub(me))
-  const navItems = navItemsFor(me, adminAccess.isSuccess)
+  const navItems = shellNavFor(me, adminAccess.isSuccess)
 
   return (
     <div className="flex h-dvh w-full overflow-hidden bg-background text-foreground">

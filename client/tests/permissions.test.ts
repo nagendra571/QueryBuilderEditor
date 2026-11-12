@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { canSee, dashboardPublishLabel, connectionReason, homeRouteFor, isHub, lockReason, navItemsFor, needsAppChoice } from '../src/features/hub/permissions.ts'
+import { canSee, dashboardPublishLabel, connectionReason, homeRouteFor, isHub, lockReason, navItemsFor, needsAppChoice, shellNavFor } from '../src/features/hub/permissions.ts'
 import type { MeDto } from '../src/lib/api.ts'
 
 const app = { id: 'a1', key: 'a', name: 'App A' }
@@ -81,4 +81,24 @@ test('lock and connection reasons', () => {
   assert.notEqual(connectionReason({ canManageConnection: false }), null)
   assert.equal(connectionReason({ canManageConnection: true }), null)
   assert.equal(connectionReason({}), null)
+})
+
+test('the console link is for super admins only, even before they pick an app', () => {
+  const shell = (me: MeDto, probe = false) => shellNavFor(me, probe).map((i) => i.id)
+  assert.deepEqual(shell(embedded, true), ['queries', 'dashboards', 'admin'])
+  assert.deepEqual(shell(hubMe('Viewer')), ['dashboards'])
+  assert.deepEqual(shell(hubMe('Author')), ['queries', 'dashboards'])
+  assert.deepEqual(shell(hubMe('Admin')), ['queries', 'dashboards', 'admin'])
+  assert.deepEqual(shell(hubMe('Super')), ['queries', 'dashboards', 'admin', 'console'])
+  assert.deepEqual(shell(hubMe('Super', false)), ['console'])
+  assert.equal(shellNavFor(hubMe('Super'))[3].to, '/hub/apps')
+})
+
+test('every console page is open to a super admin and nobody else', () => {
+  for (const route of ['/hub/apps', '/hub/apps/abc', '/hub/audit']) {
+    assert.equal(canSee(route, hubMe('Super')), true, route)
+    assert.equal(canSee(route, hubMe('Super', false)), true, route)
+    for (const role of ['Admin', 'Author', 'Viewer'] as const) assert.equal(canSee(route, hubMe(role)), false, `${role} ${route}`)
+    assert.equal(canSee(route, embedded), false, `embedded ${route}`)
+  }
 })

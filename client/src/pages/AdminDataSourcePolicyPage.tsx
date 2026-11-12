@@ -12,9 +12,11 @@ import { DataScopeSection } from '@/features/admin/DataScopeSection'
 import { RecordLimitSection } from '@/features/admin/RecordLimitSection'
 import { catalogControlsLocked } from '@/features/admin/connection-form'
 import { initialAllowlist, pruneAllowlist } from '@/features/catalog/allowlist'
-import { connectionReason, lockReason } from '@/features/hub/permissions'
+import { DataSourceHubControls } from '@/features/hub/DataSourceHubControls'
+import { connectionReason, isHub, lockReason } from '@/features/hub/permissions'
 import { adminUnavailableReason, objectRowKey, qualifiedName } from '@/features/catalog/unavailable'
 import { useAdminDataSourceDetail, useUpdateCatalogPolicy } from '@/hooks/useAdmin'
+import { useMe } from '@/hooks/useMe'
 import type { CatalogScope } from '@/types'
 
 export function AdminDataSourcePolicyPage() {
@@ -23,6 +25,7 @@ export function AdminDataSourcePolicyPage() {
   const { data, isLoading, isError } = useAdminDataSourceDetail(id)
   const idPrefix = useId()
   const updatePolicy = useUpdateCatalogPolicy(id!)
+  const { data: me } = useMe()
 
   const [scope, setScope] = useState<CatalogScope | null>(null)
   const [restrict, setRestrict] = useState<boolean | null>(null)
@@ -148,6 +151,10 @@ export function AdminDataSourcePolicyPage() {
           <Lock className="size-4 shrink-0" aria-hidden />
           {readOnlyReason}. You can read everything here but not change it.
         </p>
+      )}
+
+      {isHub(me) && me?.isSuperAdmin && (
+        <DataSourceHubControls dataSourceId={data.id} name={data.name} locked={!!data.locked} appId={me.viewingApp?.id ?? null} />
       )}
 
       {/* A disabled fieldset turns off every control inside it, so nothing has to be wired one by one. */}

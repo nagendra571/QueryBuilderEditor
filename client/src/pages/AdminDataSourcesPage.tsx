@@ -18,7 +18,7 @@ export function AdminDataSourcesPage() {
   const [adding, setAdding] = useState(false)
   const { data: me } = useMe()
   const hub = isHub(me)
-  // Hub mode: whether Add shows depends on the caller; the key section is hub-wide, so only super admins see it.
+  // Hub mode: whether Add shows depends on the caller.
   const canAdd = !!management.data?.enabled && (!hub || management.data.canManageConnections === true)
 
   if (isError) {
@@ -95,7 +95,8 @@ export function AdminDataSourcesPage() {
         </Table>
       </div>
 
-      {(!hub || me?.isSuperAdmin) && <EncryptionKeySection />}
+      {/* Under the hub the key is shared by every app and is managed on the console, not inside one app. */}
+      {!hub && <EncryptionKeySection />}
     </div>
   )
 }

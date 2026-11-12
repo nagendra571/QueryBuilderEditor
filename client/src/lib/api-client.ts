@@ -13,12 +13,14 @@ export class ApiError extends Error {
   status: number
   title: string
   errors?: Record<string, string[]>
+  counts?: Record<string, number>
 
   constructor(problem: ApiProblemDetails) {
     super(problem.detail || problem.title || 'Request failed')
     this.status = problem.status
     this.title = problem.title
     this.errors = problem.errors
+    this.counts = problem.counts
   }
 }
 

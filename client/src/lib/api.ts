@@ -171,16 +171,79 @@ export const meApi = {
   get: async (): Promise<MeDto> => (await apiClient.get('/me')).data,
 }
 
+export interface HubSigningKeyDto {
+  kid: string
+  algorithm: 'RS256' | 'ES256'
+  fingerprint: string | null
+  createdAtUtc: string
+  revokedAtUtc: string | null
+}
+
 export interface HubAppDto {
   id: string
   key: string
   name: string
   isEnabled: boolean
   version: number
+  createdAtUtc?: string
+  scopeKeys?: string[]
+  keys?: HubSigningKeyDto[]
+  returnUrls?: string[]
+  maxRecords?: number | null
+  appAdminsCanManageConnections?: boolean
+}
+
+export interface UpdateHubAppRequest {
+  version: number
+  name: string
+  isEnabled: boolean
+  scopeKeys: string[]
+  maxRecords: number | null
+  appAdminsCanManageConnections: boolean
+}
+
+export interface HubAuditEntryDto {
+  id: string
+  timestampUtc: string
+  actor: string
+  action: string
+  entityType: string
+  entityId?: string | null
+  entityName?: string | null
+  summary: string
+  detailsJson?: string | null
+  ipAddress?: string | null
+  appId?: string | null
+  appKey?: string | null
+}
+
+export interface HubAuditParams {
+  appId?: string
+  action?: string
+  before?: string
+  take?: number
 }
 
 export const hubApi = {
   listApps: async (): Promise<HubAppDto[]> => (await apiClient.get('/hub/apps')).data,
+  createApp: async (request: { key: string; name: string }): Promise<HubAppDto> => (await apiClient.post('/hub/apps', request)).data,
+  updateApp: async (id: string, request: UpdateHubAppRequest): Promise<HubAppDto> => (await apiClient.put(`/hub/apps/${id}`, request)).data,
+  addKey: async (id: string, request: { kid: string; algorithm: string; publicKeyPem: string }): Promise<HubSigningKeyDto> =>
+    (await apiClient.post(`/hub/apps/${id}/keys`, request)).data,
+  revokeKey: async (id: string, kid: string): Promise<void> => {
+    await apiClient.delete(`/hub/apps/${id}/keys/${encodeURIComponent(kid)}`)
+  },
+  setReturnUrls: async (id: string, urls: string[]): Promise<{ urls: string[] }> =>
+    (await apiClient.put(`/hub/apps/${id}/return-urls`, { urls })).data,
+  audit: async (params: HubAuditParams): Promise<HubAuditEntryDto[]> => (await apiClient.get('/hub/audit', { params })).data,
+  setDataSourceLock: async (id: string, locked: boolean): Promise<void> => {
+    await apiClient.put(`/admin/data-sources/${id}/lock`, { locked })
+  },
+  moveDataSource: async (appId: string, id: string, targetAppId: string): Promise<void> => {
+    await apiClient.post(`/hub/apps/${appId}/data-sources/${id}/move`, { targetAppId })
+  },
+  encryptionKeyStatus: async (): Promise<EncryptionKeyStatusDto> => (await apiClient.get('/hub/encryption-key')).data,
+  reencrypt: async (): Promise<ReencryptResultDto> => (await apiClient.post('/hub/encryption-key/reencrypt')).data,
   viewApp: async (appId: string): Promise<void> => {
     await apiClient.post('/hub/view-app', { appId })
   },

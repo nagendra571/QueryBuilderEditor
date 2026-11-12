@@ -3,7 +3,7 @@ import type { MeDto } from '@/lib/api'
 export type HubRole = 'Admin' | 'Author' | 'Viewer'
 
 export interface NavItemSpec {
-  id: 'queries' | 'dashboards' | 'admin'
+  id: 'queries' | 'dashboards' | 'admin' | 'console'
   to: string
   label: string
 }
@@ -11,6 +11,7 @@ export interface NavItemSpec {
 const QUERIES: NavItemSpec = { id: 'queries', to: '/', label: 'Queries' }
 const DASHBOARDS: NavItemSpec = { id: 'dashboards', to: '/dashboards', label: 'Dashboards' }
 const ADMIN: NavItemSpec = { id: 'admin', to: '/admin', label: 'Admin' }
+const CONSOLE: NavItemSpec = { id: 'console', to: '/hub/apps', label: 'Console' }
 
 /** The server adds `permissions` only in hub mode, so its presence is the one hub test. */
 export function isHub(me: Pick<MeDto, 'permissions'> | undefined | null): boolean {
@@ -35,6 +36,15 @@ export function navItemsFor(me: MeDto | undefined | null, adminProbe = false): N
   items.push(DASHBOARDS)
   if (p.canAdmin) items.push(ADMIN)
   return items
+}
+
+/**
+ * The sidebar: the per-app items, then the super admin console. The console is about the hub, not an app, so it stays
+ * even before an app is chosen and never shows to anyone else or in embedded mode.
+ */
+export function shellNavFor(me: MeDto | undefined | null, adminProbe = false): NavItemSpec[] {
+  const items = navItemsFor(me, adminProbe)
+  return isHub(me) && me!.isSuperAdmin ? [...items, CONSOLE] : items
 }
 
 function section(route: string): string {

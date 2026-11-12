@@ -12,12 +12,13 @@ import type { ReencryptResultDto } from '@/types'
 const SHARED_DATABASE_WARNING =
   'Every app that shares this database must already run with the new key before you re-encrypt. An app that still has only the old key can no longer read what was re-encrypted.'
 
-export function EncryptionKeySection() {
-  const { data } = useEncryptionKeyStatus()
+/** `hub` switches to the hub-wide routes: the key is shared by every app, so its sources are not links into one app. */
+export function EncryptionKeySection({ hub = false }: { hub?: boolean }) {
+  const { data } = useEncryptionKeyStatus(hub)
   const [generating, setGenerating] = useState(false)
   const [confirming, setConfirming] = useState(false)
   const [result, setResult] = useState<ReencryptResultDto | null>(null)
-  const reencrypt = useReencrypt()
+  const reencrypt = useReencrypt(hub)
 
   // Nothing to say on a host with no key and no managed sources.
   if (!data || (!data.keyConfigured && data.managedCount === 0)) return null
@@ -96,9 +97,13 @@ export function EncryptionKeySection() {
         <ul className="flex flex-col divide-y divide-border rounded-md border border-border text-sm">
           {data.sources.map((s) => (
             <li key={s.id} className="flex items-center justify-between gap-3 px-3 py-1.5">
-              <Link to={`/admin/data-sources/${s.id}`} className="min-w-0 flex-1 truncate font-medium underline-offset-2 hover:underline">
-                {s.name}
-              </Link>
+              {hub ? (
+                <span className="min-w-0 flex-1 truncate font-medium">{s.name}</span>
+              ) : (
+                <Link to={`/admin/data-sources/${s.id}`} className="min-w-0 flex-1 truncate font-medium underline-offset-2 hover:underline">
+                  {s.name}
+                </Link>
+              )}
               {!s.isActive && (
                 <Badge variant="outline" className="text-xs font-normal">
                   Inactive
