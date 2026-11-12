@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { canSee, connectionReason, homeRouteFor, isHub, lockReason, navItemsFor, needsAppChoice } from '../src/features/hub/permissions.ts'
+import { canSee, dashboardPublishLabel, connectionReason, homeRouteFor, isHub, lockReason, navItemsFor, needsAppChoice } from '../src/features/hub/permissions.ts'
 import type { MeDto } from '../src/lib/api.ts'
 
 const app = { id: 'a1', key: 'a', name: 'App A' }
@@ -54,6 +54,7 @@ test('canSee for the home route, the builder, admin and the apps console', () =>
   const routes = ['/', '/queries/new', '/admin', '/hub/apps']
   const seen = (me: MeDto) => routes.map((r) => canSee(r, me))
   assert.deepEqual(seen(embedded), [true, true, true, false])
+  assert.equal(canSee('/choose-app', embedded), true)
   assert.deepEqual(seen(hubMe('Viewer')), [false, false, false, false])
   assert.deepEqual(seen(hubMe('Author')), [true, true, false, false])
   assert.deepEqual(seen(hubMe('Admin')), [true, true, true, false])
@@ -67,10 +68,16 @@ test('dashboards are open to every role, and a Viewer lands on them', () => {
   assert.equal(homeRouteFor(embedded), '/')
 })
 
+test('publish label', () => {
+  assert.equal(dashboardPublishLabel(true), 'Unpublish')
+  assert.equal(dashboardPublishLabel(false), 'Publish')
+})
+
 test('lock and connection reasons', () => {
   assert.equal(lockReason({ locked: true, canEdit: false }), 'Locked by a super admin')
   assert.equal(lockReason({ locked: true, canEdit: true }), null)
   assert.equal(lockReason({}), null)
+  assert.equal(lockReason({ locked: false, canEdit: false }), 'You can view this data source but not change it')
   assert.notEqual(connectionReason({ canManageConnection: false }), null)
   assert.equal(connectionReason({ canManageConnection: true }), null)
   assert.equal(connectionReason({}), null)

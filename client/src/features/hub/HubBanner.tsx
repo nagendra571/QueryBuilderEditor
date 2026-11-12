@@ -17,7 +17,6 @@ export function HubBanner({ me }: { me: MeDto | undefined }) {
         <>
           <span
             className="flex min-w-0 items-center gap-1.5 rounded-sm border border-primary bg-primary/15 px-2 py-1 text-xs font-semibold"
-            role="status"
           >
             <ShieldCheck className="size-3.5 shrink-0" aria-hidden />
             <span className="min-w-0 truncate">{appName ? `Super admin · viewing ${appName}` : 'Super admin · no app chosen'}</span>

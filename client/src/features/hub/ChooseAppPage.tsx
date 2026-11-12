@@ -1,5 +1,4 @@
 import { Loader2 } from 'lucide-react'
-import { useNavigate } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { useHubApps, useViewApp } from '@/hooks/useHub'
 
@@ -7,7 +6,6 @@ import { useHubApps, useViewApp } from '@/hooks/useHub'
 export function ChooseAppPage() {
   const apps = useHubApps(true)
   const view = useViewApp()
-  const navigate = useNavigate()
   const enabled = (apps.data ?? []).filter((a) => a.isEnabled)
 
   return (
@@ -30,7 +28,7 @@ export function ChooseAppPage() {
               variant="outline"
               className="h-auto w-full justify-start px-3 py-2.5 text-left"
               disabled={view.isPending}
-              onClick={() => view.mutate(a.id, { onSuccess: () => navigate('/', { replace: true }) })}
+              onClick={() => view.mutate(a.id)}
             >
               <span className="flex min-w-0 flex-col">
                 <span className="truncate text-sm font-semibold">{a.name}</span>

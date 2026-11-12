@@ -21,6 +21,11 @@ import type { DashboardContext, DashboardParameterDto, DashboardTileDto, Paramet
 
 const NEW_PARAMETER = '__new__'
 
+function statusOf(error: unknown): number | undefined {
+  const e = error as { status?: number; response?: { status?: number } } | null
+  return e?.status ?? e?.response?.status
+}
+
 type Row = { source: ParameterMappingSource; dashboardParameter: string; fixed: string | null; label: string }
 
 const SOURCE_LABELS: Record<ParameterMappingSource, string> = {
@@ -49,21 +54,24 @@ export function ParameterMappingDialog({
   const { data: me, isLoading: meLoading } = useMe()
   const hubTile = isHub(me) && !!dashboardId && !!tile
   const context = useMemo(() => (hubTile && tile ? { dashboardId: dashboardId!, tileId: tile.id } : undefined), [hubTile, dashboardId, tile])
+  // The saved query first: anyone who can open it (owner, sharee, Admin, super admin) gets the full dialog.
   const savedDetail = useQuery({
     queryKey: ['saved-query', queryId],
     queryFn: () => savedQueriesApi.getById(queryId),
-    enabled: !!tile?.chart && !meLoading && !hubTile,
+    enabled: !!tile?.chart && !meLoading,
     retry: false,
     staleTime: 30_000,
   })
+  // Only a 403 on that read falls back to the dashboard's own view of the tile, which never exposes source query ids.
+  const useFallback = hubTile && savedDetail.isError && statusOf(savedDetail.error) === 403
   const tileChart = useQuery({
     queryKey: ['tile-chart', context?.dashboardId, context?.tileId],
     queryFn: () => dashboardsApi.tileChart(context!.dashboardId, context!.tileId),
-    enabled: !!tile?.chart && hubTile,
+    enabled: !!tile?.chart && useFallback,
     retry: false,
     staleTime: 30_000,
   })
-  const detail = hubTile
+  const detail = useFallback
     ? {
         isLoading: tileChart.isLoading,
         isError: tileChart.isError,
@@ -104,7 +112,8 @@ export function ParameterMappingDialog({
                 <Form
                   tile={tile}
                   queryParameters={detail.data.definition.parameters}
-                  dashboardContext={context}
+                  dashboardContext={useFallback ? context : undefined}
+                  canCreateParameter={!useFallback}
                   dashboardParameters={dashboardParameters}
                   onCancel={() => onOpenChange(false)}
                   onSave={onSave}
@@ -121,6 +130,7 @@ function Form({
   tile,
   queryParameters,
   dashboardContext,
+  canCreateParameter,
   dashboardParameters,
   onCancel,
   onSave,
@@ -128,6 +138,8 @@ function Form({
   tile: DashboardTileDto
   queryParameters: QueryParameter[]
   dashboardContext?: DashboardContext
+  /** False when the query's own definition is hidden from the editor, so a query-list parameter can't carry its options query. */
+  canCreateParameter: boolean
   dashboardParameters: DashboardParameterDto[]
   onCancel: () => void
   onSave: (mappings: Record<string, ParameterMappingDto>, created: DashboardParameterDto[]) => void
@@ -229,11 +241,14 @@ function Form({
                             {dashboardParameterTitle(d)}
                           </SelectItem>
                         ))}
-                        <SelectItem value={NEW_PARAMETER} className="text-xs">
+                        <SelectItem value={NEW_PARAMETER} className="text-xs" disabled={!canCreateParameter && p.type === 'queryList'}>
                           New dashboard parameter
                         </SelectItem>
                       </SelectContent>
                     </Select>
+                    {!canCreateParameter && p.type === 'queryList' && (
+                      <p className="text-xs text-muted-foreground">Ask someone who can open this chart&apos;s query to add this parameter.</p>
+                    )}
                   </div>
                 )}
 

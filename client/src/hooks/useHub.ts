@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { hubApi } from '@/lib/api'
 import { ApiError } from '@/lib/api-client'
@@ -10,13 +10,10 @@ export function useHubApps(enabled: boolean) {
 
 /** Switching app changes what every query would answer, so nothing cached may survive it. */
 export function useViewApp() {
-  const queryClient = useQueryClient()
   return useMutation({
     mutationFn: (appId: string) => hubApi.viewApp(appId),
-    onSuccess: async () => {
-      queryClient.clear()
-      await queryClient.refetchQueries({ queryKey: ['me'] })
-    },
+    // A full reload is the only way to be sure no cached answer, open dialog or store survives the other app.
+    onSuccess: () => window.location.assign('/querybuilder/'),
     onError: (error) => toast.error(error instanceof ApiError ? error.message : 'Could not switch app.'),
   })
 }

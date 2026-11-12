@@ -1,4 +1,3 @@
-import { useNavigate } from 'react-router-dom'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useHubApps, useViewApp } from '@/hooks/useHub'
 
@@ -6,7 +5,6 @@ import { useHubApps, useViewApp } from '@/hooks/useHub'
 export function AppSwitcher({ currentAppId }: { currentAppId: string | null }) {
   const apps = useHubApps(true)
   const view = useViewApp()
-  const navigate = useNavigate()
   const enabled = (apps.data ?? []).filter((a) => a.isEnabled)
 
   return (
@@ -16,7 +14,7 @@ export function AppSwitcher({ currentAppId }: { currentAppId: string | null }) {
       onValueChange={(appId) => {
         // Radix can report '' while its items are not mounted; that is not a choice.
         if (!appId || appId === currentAppId) return
-        view.mutate(appId, { onSuccess: () => navigate('/', { replace: true }) })
+        view.mutate(appId)
       }}
     >
       <SelectTrigger size="sm" className="h-8 w-48 text-xs" aria-label="Switch app">

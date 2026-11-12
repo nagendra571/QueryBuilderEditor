@@ -44,7 +44,7 @@ function section(route: string): string {
 
 /** Whether a route is open to this person. Unknown routes are not gated here (the router shows nothing for them). */
 export function canSee(route: string, me: MeDto | undefined | null): boolean {
-  if (!isHub(me)) return section(route) !== 'hub' && section(route) !== 'choose-app'
+  if (!isHub(me)) return section(route) !== 'hub'
   const p = me!.permissions!
   switch (section(route)) {
     case 'hub':
