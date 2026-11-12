@@ -18,6 +18,11 @@ internal sealed class SuperAdminCodeIssuer(QueryBuilderEditorOptions options, Su
 {
     public async Task<IssuedCode> IssueAsync(string name, int? minutes, CancellationToken ct)
     {
+        if (!options.Hub.SignInCodes.Enabled)
+        {
+            throw new InvalidOperationException("Sign-in codes are turned off: set Hub:SignIn:Codes:Enabled to true to issue one.");
+        }
+
         var resolvedMinutes = minutes ?? options.Hub.SignInCodes.DefaultMinutes;
         var issued = codes.Issue(name, resolvedMinutes);
 

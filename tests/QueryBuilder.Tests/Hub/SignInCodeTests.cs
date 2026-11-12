@@ -318,6 +318,17 @@ public class SignInCodeTests
     });
 
     [MetadataSqlFact]
+    public Task Issuer_refuses_when_codes_are_turned_off_and_writes_no_audit() => HubApiHost.RunAsync(async env =>
+    {
+        var issuer = env.Host.Services.GetRequiredService<ISuperAdminCodeIssuer>();
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => issuer.IssueAsync("priya", null, CancellationToken.None));
+
+        Assert.Contains("Hub:SignIn:Codes:Enabled", ex.Message);
+        Assert.Empty(await AuditAsync(env, AuditAction.SuperAdminCodeIssued));
+    }, configure: o => o.Hub.SuperAdmins.CodeNames = ["priya"]);
+
+    [MetadataSqlFact]
     public Task Issuer_audits_the_resolved_default_minutes() => Run(async env =>
     {
         await env.NewBrowser().GetAsync("/");

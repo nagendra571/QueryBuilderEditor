@@ -53,7 +53,8 @@ public sealed class ProviderSettings
     public string? ClientId { get; set; }
     public string? ClientSecret { get; set; }
     public string CallbackPath { get; set; } = "/signin-oidc";
-    public string[] Scopes { get; set; } = ["openid", "profile", "email"];
+    /// <summary>Empty means openid, profile and email. Must include openid.</summary>
+    public string[] Scopes { get; set; } = [];
 
     /// <summary>OpenID Connect only: the claim that carries group ids.</summary>
     public string GroupsClaim { get; set; } = "groups";

@@ -1,4 +1,5 @@
 using System.Net;
+using Microsoft.AspNetCore.Authentication;
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 using Microsoft.AspNetCore.HttpOverrides;
@@ -25,7 +26,16 @@ public static class HubHost
     /// </param>
     public static WebApplication Build(string[] args, Action<WebApplicationBuilder>? configure = null, bool forCommand = false)
     {
-        var builder = WebApplication.CreateBuilder(args);
+        // The command reads the app folder's appsettings whatever directory it was started from, and stays quiet so
+        // stdout carries only the code and its expiry.
+        var builder = forCommand
+            ? WebApplication.CreateBuilder(new WebApplicationOptions { Args = args, ContentRootPath = AppContext.BaseDirectory })
+            : WebApplication.CreateBuilder(args);
+        if (forCommand)
+        {
+            builder.Logging.SetMinimumLevel(LogLevel.Warning);
+        }
+
         configure?.Invoke(builder);
 
         if (builder.Configuration.GetSection("Hub:Entra").Exists())
@@ -41,8 +51,18 @@ public static class HubHost
         {
             Require(provider.ClientId, "Hub:SignIn:Provider:ClientId");
             Require(provider.ClientSecret, "Hub:SignIn:Provider:ClientSecret");
+            if (provider.Scopes.Length > 0 && !provider.Scopes.Contains("openid", StringComparer.Ordinal))
+            {
+                throw new InvalidOperationException("Hub:SignIn:Provider:Scopes must include openid.");
+            }
+
             if (kind == SuperAdminProviderKind.Entra)
             {
+                if (!Uri.TryCreate(provider.Instance, UriKind.Absolute, out var instance) || instance.Scheme != Uri.UriSchemeHttps)
+                {
+                    throw new InvalidOperationException("Hub:SignIn:Provider:Instance must be an absolute https:// address.");
+                }
+
                 Require(provider.TenantId, "Hub:SignIn:Provider:TenantId");
                 if (provider.TenantId!.Trim().ToLowerInvariant() is "common" or "organizations" or "consumers")
                 {
@@ -118,7 +138,14 @@ public static class HubHost
                 options.SaveTokens = false;
                 options.GetClaimsFromUserInfoEndpoint = kind == SuperAdminProviderKind.OpenIdConnect;
                 options.Scope.Clear();
-                foreach (var scope in provider.Scopes)
+                if (kind == SuperAdminProviderKind.OpenIdConnect)
+                {
+                    // Userinfo is read, but only claims mapped here reach the principal the allowlist checks.
+                    options.ClaimActions.MapUniqueJsonKey("email_verified", "email_verified");
+                    options.ClaimActions.MapJsonKey(provider.GroupsClaim, provider.GroupsClaim);
+                }
+
+                foreach (var scope in provider.Scopes.Length > 0 ? provider.Scopes : ["openid", "profile", "email"])
                 {
                     options.Scope.Add(scope);
                 }

@@ -171,7 +171,74 @@ public class SignInOptionsTests
     [Fact]
     public void Neither_option_refuses_startup()
     {
-        Assert.Throws<InvalidOperationException>(() => Build(Base("Server=unused")));
+        var ex = Assert.Throws<InvalidOperationException>(() => Build(Base("Server=unused")));
+
+        Assert.Contains("SuperAdminSignInScheme", ex.Message);
+        Assert.Contains("SignInCodes", ex.Message);
+    }
+
+    [Theory]
+    [InlineData("http://login.example.com/")]
+    [InlineData("login.example.com")]
+    public void Entra_instance_must_be_absolute_https(string instance)
+    {
+        var settings = Entra("Server=unused");
+        settings["Hub:SignIn:Provider:Instance"] = instance;
+
+        var ex = Assert.Throws<InvalidOperationException>(() => Build(settings));
+
+        Assert.Contains("Hub:SignIn:Provider:Instance", ex.Message);
+    }
+
+    [Fact]
+    public void Scopes_must_include_openid_and_default_when_empty()
+    {
+        var settings = Oidc("Server=unused");
+        settings["Hub:SignIn:Provider:Scopes:0"] = "profile";
+        var ex = Assert.Throws<InvalidOperationException>(() => Build(settings));
+        Assert.Contains("Hub:SignIn:Provider:Scopes", ex.Message);
+
+        var defaults = Build(Oidc("Server=unused"));
+        Assert.Equal(["openid", "profile", "email"], defaults.Services.GetRequiredService<IOptionsMonitor<OpenIdConnectOptions>>().Get("provider").Scope);
+    }
+
+    // The handler's claim actions are run on a userinfo document directly: a full round trip needs a live provider.
+    [Fact]
+    public void Userinfo_email_verified_and_groups_reach_the_principal_for_openid_connect()
+    {
+        var settings = Oidc("Server=unused");
+        settings["Hub:SignIn:Provider:GroupsClaim"] = "roles";
+        var options = Build(settings).Services.GetRequiredService<IOptionsMonitor<OpenIdConnectOptions>>().Get("provider");
+        using var userinfo = System.Text.Json.JsonDocument.Parse("""{"sub":"sub-1","email":"a@example.com","email_verified":true,"roles":"g1"}""");
+        var identity = new System.Security.Claims.ClaimsIdentity("test");
+
+        foreach (var action in options.ClaimActions)
+        {
+            action.Run(userinfo.RootElement, identity, "issuer");
+        }
+
+        Assert.Equal("true", identity.FindFirst("email_verified")?.Value, ignoreCase: true);
+        Assert.Equal("g1", identity.FindFirst("roles")?.Value);
+        Assert.Equal("a@example.com", identity.FindFirst("email")?.Value);
+    }
+
+    [Fact]
+    public async Task Signin_code_command_refuses_when_codes_are_turned_off()
+    {
+        var stdout = new StringWriter();
+        var stderr = new StringWriter();
+        string[] args =
+        [
+            "signin-code", "--name", "priya", "--Hub:ConnectionString=Server=unused", "--Hub:Audience=https://hub.test",
+            $"--Hub:DataSourceKey={HubApiHost.Key}", "--Hub:SignIn:Provider:Kind=OpenIdConnect",
+            "--Hub:SignIn:Provider:Authority=https://idp.example.com", "--Hub:SignIn:Provider:ClientId=c",
+            "--Hub:SignIn:Provider:ClientSecret=s", "--Hub:SuperAdmins:UserIds:0=sub-1", "--Hub:SuperAdmins:CodeNames:0=priya",
+        ];
+
+        Assert.Equal(1, await SignInCodeCommand.RunAsync(args, stdout, stderr));
+
+        Assert.Equal("", stdout.ToString());
+        Assert.Contains("Hub:SignIn:Codes:Enabled", stderr.ToString());
     }
 
     [Theory]
