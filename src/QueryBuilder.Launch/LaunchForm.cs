@@ -7,9 +7,10 @@ namespace QueryBuilder.Launch
     {
         /// <summary>
         /// A complete HTML page that posts the token to the hub as a form field (never in the URL, so it stays out of
-        /// logs and Referer headers) and submits itself; the button is for browsers with scripting off.
+        /// logs and Referer headers) and submits itself. The button is always visible: under a CSP that blocks inline
+        /// scripts the script never runs, so the user continues by clicking it. Pass <paramref name="cspNonce"/> to allow the script.
         /// </summary>
-        public static string Html(string hubBaseUrl, string token)
+        public static string Html(string hubBaseUrl, string token, string? cspNonce = null)
         {
             if (string.IsNullOrWhiteSpace(token))
             {
@@ -22,9 +23,10 @@ namespace QueryBuilder.Launch
               .Append("<title>Opening QueryBuilder</title></head><body>")
               .Append("<form id=\"qb-launch\" method=\"post\" action=\"").Append(Encode(action)).Append("\">")
               .Append("<input type=\"hidden\" name=\"token\" value=\"").Append(Encode(token)).Append("\">")
-              .Append("<noscript><button type=\"submit\">Continue to QueryBuilder</button></noscript>")
+              .Append("<button type=\"submit\">Continue to QueryBuilder</button>")
               .Append("</form>")
-              .Append("<script>document.getElementById('qb-launch').submit();</script>")
+              .Append(cspNonce == null ? "<script>" : "<script nonce=\"" + Encode(cspNonce) + "\">")
+              .Append("document.getElementById('qb-launch').submit();</script>")
               .Append("</body></html>");
             return sb.ToString();
         }

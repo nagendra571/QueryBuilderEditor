@@ -11,6 +11,9 @@ var token = LaunchToken.Create("my-app", "https://hub.example.com", key,
 return Content(LaunchForm.Html("https://hub.example.com", token), "text/html");
 ```
 
+On .NET Framework, load keys from a PFX or the certificate store with `cert.GetRSAPrivateKey()` /
+`cert.GetECDsaPrivateKey()` (not `cert.PrivateKey`); PEM loading is not built into .NET Framework.
+
 Rules the hub enforces and this library checks before signing: token lifetime 1-120 s (default 60), `iat`/`exp` in
 whole seconds, a scope of at most 20 keys, 1,000 values per key, 200 characters per value and at most 6,144 UTF-8
 bytes once serialised the way the hub stores it (`LaunchScope.SerializedByteCount`); `kid` matching

@@ -68,15 +68,15 @@ public class LaunchTokenTests
         await WithHubAsync(rsa, null, async (validator, appId) =>
         {
             using var key = LaunchSigningKey.Rsa("rsa-1", rsa);
-            var token = LaunchToken.Create("app-a", Audience, key, new LaunchUser("user-1", "Mary", "m@x.com"),
+            var token = LaunchToken.Create("app-a", Audience, key, new LaunchUser("user-1", "Mary \"Q\"\n\U0001F600 O'Neil", "mary+qb@x.com"),
                 LaunchRole.Author, Scope("10", "20"));
             var result = await validator.ValidateAsync(token, CancellationToken.None);
             Assert.Null(result.Refusal);
             var claims = result.Claims!;
             Assert.Equal(appId, claims.AppId);
             Assert.Equal("user-1", claims.UserId);
-            Assert.Equal("Mary", claims.Name);
-            Assert.Equal("m@x.com", claims.Email);
+            Assert.Equal("Mary \"Q\"\n\U0001F600 O'Neil", claims.Name);
+            Assert.Equal("mary+qb@x.com", claims.Email);
             Assert.Equal(HubRole.Author, claims.Role);
             Assert.Equal(["10", "20"], claims.Scope.ValuesFor("ProgramId"));
         });
@@ -224,11 +224,11 @@ public class LaunchTokenTests
     [InlineData("-a")]
     [InlineData("a b")]
     [InlineData("a/b")]
+    [InlineData("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")]
     public void Bad_kid_is_refused(string kid)
     {
         using var rsa = RSA.Create(2048);
         Assert.Throws<ArgumentException>(() => LaunchSigningKey.Rsa(kid, rsa));
-        Assert.Throws<ArgumentException>(() => LaunchSigningKey.Rsa(new string('a', 65), rsa));
     }
 
     [Fact]
@@ -251,9 +251,41 @@ public class LaunchTokenTests
         Assert.Contains("name=\"token\"", html);
         Assert.DoesNotContain("<script>x", html);
         Assert.Contains("&quot;&gt;&lt;script&gt;x&lt;/script&gt;.c&amp;d", html);
-        Assert.Contains("<noscript>", html);
+        Assert.Contains("<button type=\"submit\">Continue to QueryBuilder</button>", html);
+        Assert.DoesNotContain("<noscript>", html);
+        Assert.DoesNotContain("nonce", html);
         Assert.Contains(".submit()", html);
         Assert.Contains("http://localhost:5000/querybuilder/launch", LaunchForm.Html("http://localhost:5000", "t"));
+    }
+
+    [Fact]
+    public void Form_has_a_visible_button_and_an_encoded_nonce()
+    {
+        var html = LaunchForm.Html("https://hub.example.com", "t", "ab\"c<d&e");
+        Assert.Contains("<script nonce=\"ab&quot;c&lt;d&amp;e\">", html);
+        Assert.Contains("<button type=\"submit\">Continue to QueryBuilder</button>", html);
+        Assert.DoesNotContain("<script>", html);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("/relative")]
+    [InlineData("http://a.example/home")]
+    [InlineData("https://a.example/home#frag")]
+    [InlineData("https://u:p@a.example/")]
+    [InlineData("https://A.example/home")]
+    [InlineData("https://a.example")]
+    [InlineData(" https://a.example/ ")]
+    public void Bad_return_url_is_refused(string url)
+    {
+        using var rsa = RSA.Create(2048);
+        using var key = LaunchSigningKey.Rsa("k", rsa);
+        Assert.Throws<ArgumentException>(() => LaunchToken.Create("a", Audience, key, new LaunchUser("u"), LaunchRole.Admin, LaunchScope.Unrestricted, returnUrl: url));
+        Assert.Throws<ArgumentException>(() => LaunchToken.Create("a", Audience, key, new LaunchUser("u"), LaunchRole.Admin, LaunchScope.Unrestricted,
+            returnUrl: "https://a.example/" + new string('x', 800)));
+        Assert.Contains("\"returnUrl\":\"https://a.example/home\"", Payload(LaunchToken.Create("a", Audience, key, new LaunchUser("u"),
+            LaunchRole.Admin, LaunchScope.Unrestricted, returnUrl: "https://a.example/home")));
+        LaunchToken.Create("a", Audience, key, new LaunchUser("u"), LaunchRole.Admin, LaunchScope.Unrestricted, returnUrl: "http://localhost:5000/");
     }
 
     [Theory]

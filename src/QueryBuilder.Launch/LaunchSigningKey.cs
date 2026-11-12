@@ -53,9 +53,22 @@ namespace QueryBuilder.Launch
             }
 
             // KeySize alone also admits other 256-bit curves, which ES256 does not allow.
-            var curve = key.ExportParameters(false).Curve;
-            var isP256 = key.KeySize == 256
-                && (curve.Oid?.Value == P256Oid || curve.Oid?.FriendlyName == "nistP256" || curve.Oid?.FriendlyName == "ECDSA_P256");
+            var isP256 = false;
+            if (key.KeySize == 256)
+            {
+                try
+                {
+                    var curve = key.ExportParameters(false).Curve;
+                    isP256 = curve.Oid?.Value == P256Oid || curve.Oid?.FriendlyName == "nistP256" || curve.Oid?.FriendlyName == "ECDSA_P256";
+                }
+                catch (CryptographicException)
+                {
+                }
+                catch (NotSupportedException)
+                {
+                }
+            }
+
             if (!isP256)
             {
                 throw new ArgumentException("ECDSA keys must use the NIST P-256 curve.", nameof(key));

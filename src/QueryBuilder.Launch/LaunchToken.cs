@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 
@@ -43,6 +44,11 @@ namespace QueryBuilder.Launch
                 throw new ArgumentOutOfRangeException(nameof(role), "The role must be Admin, Author or Viewer.");
             }
 
+            if (returnUrl != null)
+            {
+                CheckReturnUrl(returnUrl);
+            }
+
             var seconds = (long)(lifetime ?? TimeSpan.FromSeconds(DefaultLifetimeSeconds)).TotalSeconds;
             if (seconds < 1 || seconds > MaxLifetimeSeconds)
             {
@@ -66,6 +72,30 @@ namespace QueryBuilder.Launch
 
             var signingInput = Base64Url.Encode(Utf8(header.ToString())) + "." + Base64Url.Encode(Utf8(payload.ToString()));
             return signingInput + "." + Base64Url.Encode(key.Sign(Encoding.ASCII.GetBytes(signingInput)));
+        }
+
+        // Same shape rule as the hub's return-URL registry, so a URL it could never have registered fails here with a reason
+        // instead of as a refused launch.
+        private static void CheckReturnUrl(string url)
+        {
+            var bad = url.Length == 0 || url.Length > 800 || url != url.Trim() || url.Any(char.IsControl) || url.Contains('#')
+                || !Uri.TryCreate(url, UriKind.Absolute, out var uri) || uri.UserInfo.Length != 0 || url.IndexOf("//", StringComparison.Ordinal) < 0;
+            if (bad)
+            {
+                throw new ArgumentException("The return URL must be an absolute https URL of at most 800 characters, without a fragment or credentials.", nameof(url));
+            }
+
+            uri = new Uri(url);
+            if (!string.Equals(uri.AbsoluteUri, url, StringComparison.Ordinal))
+            {
+                throw new ArgumentException("Write the return URL exactly as '" + uri.AbsoluteUri + "' (lowercase host, '/' after the host, no default port).", nameof(url));
+            }
+
+            var local = uri.Scheme == Uri.UriSchemeHttp && uri.Host == "localhost";
+            if (uri.Scheme != Uri.UriSchemeHttps && !local)
+            {
+                throw new ArgumentException("The return URL must use https (http is allowed only for localhost).", nameof(url));
+            }
         }
 
         private static byte[] Utf8(string json) => new UTF8Encoding(false, true).GetBytes(json);
