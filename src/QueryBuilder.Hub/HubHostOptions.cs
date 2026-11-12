@@ -11,7 +11,7 @@ public sealed class HubHostOptions
     /// <summary>The value every launch token's <c>aud</c> must equal, typically the hub's public URL.</summary>
     public string? Audience { get; set; }
 
-    public EntraOptions Entra { get; set; } = new();
+    public SignInSettings SignIn { get; set; } = new();
     public SuperAdminSettings SuperAdmins { get; set; } = new();
 
     /// <summary>Base64, 32 bytes. The same value on every instance.</summary>
@@ -26,21 +26,57 @@ public sealed class HubHostOptions
     public bool ApplyMigrations { get; set; } = true;
 }
 
-public sealed class EntraOptions
+public sealed class SignInSettings
 {
+    public ProviderSettings Provider { get; set; } = new();
+    public CodeSettings Codes { get; set; } = new();
+}
+
+/// <summary>The identity provider super admins sign in with. Leave <see cref="Kind"/> empty to use sign-in codes only.</summary>
+public sealed class ProviderSettings
+{
+    /// <summary>Empty (no provider), <c>Entra</c> or <c>OpenIdConnect</c>.</summary>
+    public string? Kind { get; set; }
+
+    /// <summary>What the sign-in page's button says ("Sign in with ...").</summary>
+    public string? DisplayName { get; set; }
+
+    /// <summary>Entra only.</summary>
     public string Instance { get; set; } = "https://login.microsoftonline.com/";
+
+    /// <summary>Entra only: one tenant's id or domain, never <c>common</c>, <c>organizations</c> or <c>consumers</c>.</summary>
     public string? TenantId { get; set; }
+
+    /// <summary>OpenID Connect only: the provider's issuer address, absolute https.</summary>
+    public string? Authority { get; set; }
+
     public string? ClientId { get; set; }
     public string? ClientSecret { get; set; }
     public string CallbackPath { get; set; } = "/signin-oidc";
+    public string[] Scopes { get; set; } = ["openid", "profile", "email"];
+
+    /// <summary>OpenID Connect only: the claim that carries group ids.</summary>
+    public string GroupsClaim { get; set; } = "groups";
+}
+
+public sealed class CodeSettings
+{
+    public bool Enabled { get; set; }
+    public int DefaultMinutes { get; set; } = 15;
+
+    /// <summary>Code attempts one address may make per window.</summary>
+    public int PermitLimit { get; set; } = 10;
+    public int WindowSeconds { get; set; } = 60;
 }
 
 public sealed class SuperAdminSettings
 {
     public string[] TenantIds { get; set; } = [];
     public string[] ObjectIds { get; set; } = [];
+    public string[] UserIds { get; set; } = [];
     public string[] Emails { get; set; } = [];
     public string[] GroupIds { get; set; } = [];
+    public string[] CodeNames { get; set; } = [];
 }
 
 public sealed class LaunchRateLimitOptions

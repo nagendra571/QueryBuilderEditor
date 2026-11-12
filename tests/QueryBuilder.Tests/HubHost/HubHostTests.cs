@@ -60,9 +60,10 @@ public class HubHostTests
     {
         ["Hub:ConnectionString"] = connection,
         ["Hub:Audience"] = "https://hub.test",
-        ["Hub:Entra:TenantId"] = "tenant-1",
-        ["Hub:Entra:ClientId"] = "client-1",
-        ["Hub:Entra:ClientSecret"] = "not-a-real-secret",
+        ["Hub:SignIn:Provider:Kind"] = "Entra",
+        ["Hub:SignIn:Provider:TenantId"] = "tenant-1",
+        ["Hub:SignIn:Provider:ClientId"] = "client-1",
+        ["Hub:SignIn:Provider:ClientSecret"] = "not-a-real-secret",
         ["Hub:SuperAdmins:TenantIds:0"] = "tenant-1",
         ["Hub:SuperAdmins:ObjectIds:0"] = "admin-oid",
         ["Hub:DataSourceKey"] = HubApiHost.Key,
@@ -78,7 +79,7 @@ public class HubHostTests
             {
                 // Swaps only the handler type: the real OpenIdConnectOptions stay registered for the options test.
                 builder.Services.PostConfigure<AuthenticationOptions>(o =>
-                    o.Schemes.Single(s => s.Name == "entra").HandlerType = typeof(FakeEntraHandler));
+                    o.Schemes.Single(s => s.Name == "provider").HandlerType = typeof(FakeEntraHandler));
             }
         });
 
@@ -214,9 +215,9 @@ public class HubHostTests
 
     [Theory]
     [InlineData("Hub:ConnectionString")]
-    [InlineData("Hub:Entra:TenantId")]
-    [InlineData("Hub:Entra:ClientId")]
-    [InlineData("Hub:Entra:ClientSecret")]
+    [InlineData("Hub:SignIn:Provider:TenantId")]
+    [InlineData("Hub:SignIn:Provider:ClientId")]
+    [InlineData("Hub:SignIn:Provider:ClientSecret")]
     public void Missing_settings_refuse_startup_naming_the_setting(string missing)
     {
         var settings = Settings("Server=unused");
@@ -231,7 +232,7 @@ public class HubHostTests
     [MetadataSqlFact]
     public Task Oidc_scheme_signs_into_the_hub_external_scheme() => RunAsync(async (app, _) =>
     {
-        var options = app.Services.GetRequiredService<IOptionsMonitor<OpenIdConnectOptions>>().Get("entra");
+        var options = app.Services.GetRequiredService<IOptionsMonitor<OpenIdConnectOptions>>().Get("provider");
 
         Assert.Equal("QueryBuilder.HubExternal", options.SignInScheme);
         Assert.True(options.UsePkce);

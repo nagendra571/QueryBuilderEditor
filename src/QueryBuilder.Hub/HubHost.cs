@@ -10,24 +10,55 @@ namespace QueryBuilder.Hub;
 
 public static class HubHost
 {
-    public const string EntraScheme = "entra";
+    public const string ProviderScheme = "provider";
     private const string HubExternalScheme = "QueryBuilder.HubExternal";
     private const string LaunchPattern = "/querybuilder/launch";
+    private const string CodePattern = "/querybuilder/signin/code";
 
     /// <param name="configure">
     /// Runs first, before any setting is read, so a test can add configuration, swap the server for TestServer and
-    /// replace the <c>entra</c> handler (a <c>PostConfigure&lt;AuthenticationOptions&gt;</c> works whatever the order).
+    /// replace the <c>provider</c> handler (a <c>PostConfigure&lt;AuthenticationOptions&gt;</c> works whatever the order).
     /// </param>
-    public static WebApplication Build(string[] args, Action<WebApplicationBuilder>? configure = null)
+    /// <param name="forCommand">
+    /// Builds the same services for a server command that never starts the host: migrations are forced off so nothing
+    /// writes to the database except what the command itself does.
+    /// </param>
+    public static WebApplication Build(string[] args, Action<WebApplicationBuilder>? configure = null, bool forCommand = false)
     {
         var builder = WebApplication.CreateBuilder(args);
         configure?.Invoke(builder);
 
+        if (builder.Configuration.GetSection("Hub:Entra").Exists())
+        {
+            throw new InvalidOperationException("Hub:Entra is no longer used. Move those settings to Hub:SignIn:Provider and set Hub:SignIn:Provider:Kind to Entra.");
+        }
+
         var settings = builder.Configuration.GetSection(HubHostOptions.SectionName).Get<HubHostOptions>() ?? new HubHostOptions();
         Require(settings.ConnectionString, "Hub:ConnectionString");
-        Require(settings.Entra.TenantId, "Hub:Entra:TenantId");
-        Require(settings.Entra.ClientId, "Hub:Entra:ClientId");
-        Require(settings.Entra.ClientSecret, "Hub:Entra:ClientSecret");
+        var provider = settings.SignIn.Provider;
+        var kind = ParseKind(provider.Kind);
+        if (kind is not null)
+        {
+            Require(provider.ClientId, "Hub:SignIn:Provider:ClientId");
+            Require(provider.ClientSecret, "Hub:SignIn:Provider:ClientSecret");
+            if (kind == SuperAdminProviderKind.Entra)
+            {
+                Require(provider.TenantId, "Hub:SignIn:Provider:TenantId");
+                if (provider.TenantId!.Trim().ToLowerInvariant() is "common" or "organizations" or "consumers")
+                {
+                    throw new InvalidOperationException("Hub:SignIn:Provider:TenantId must name one tenant, not common, organizations or consumers: those let users of any tenant in.");
+                }
+            }
+            else
+            {
+                Require(provider.Authority, "Hub:SignIn:Provider:Authority");
+                if (!Uri.TryCreate(provider.Authority, UriKind.Absolute, out var authority) || authority.Scheme != Uri.UriSchemeHttps)
+                {
+                    throw new InvalidOperationException("Hub:SignIn:Provider:Authority must be an absolute https:// address.");
+                }
+            }
+        }
+
         if (!Uri.TryCreate(settings.Audience, UriKind.Absolute, out var audience)
             || audience.Scheme != Uri.UriSchemeHttps
             || settings.Audience!.EndsWith('/')
@@ -41,42 +72,62 @@ public static class HubHost
         builder.Services.AddQueryBuilderEditor(o =>
         {
             o.ConnectionString = settings.ConnectionString!;
-            o.ApplyMigrations = settings.ApplyMigrations;
+            o.ApplyMigrations = settings.ApplyMigrations && !forCommand;
             o.DefaultMaxRecords = settings.DefaultMaxRecords;
             o.Hub.Enabled = true;
             o.Hub.Audience = settings.Audience ?? string.Empty;
-            o.Hub.SuperAdminSignInScheme = EntraScheme;
-            o.Hub.SuperAdmins.TenantIds = [.. settings.SuperAdmins.TenantIds];
-            o.Hub.SuperAdmins.ObjectIds = [.. settings.SuperAdmins.ObjectIds];
-            o.Hub.SuperAdmins.Emails = [.. settings.SuperAdmins.Emails];
-            o.Hub.SuperAdmins.GroupIds = [.. settings.SuperAdmins.GroupIds];
+            if (kind is not null)
+            {
+                o.Hub.SuperAdminSignInScheme = ProviderScheme;
+                if (!string.IsNullOrWhiteSpace(provider.DisplayName))
+                {
+                    o.Hub.ProviderDisplayName = provider.DisplayName;
+                }
+            }
+
+            o.Hub.SignInCodes.Enabled = settings.SignIn.Codes.Enabled;
+            o.Hub.SignInCodes.DefaultMinutes = settings.SignIn.Codes.DefaultMinutes;
+            var admins = o.Hub.SuperAdmins;
+            admins.ProviderKind = kind ?? SuperAdminProviderKind.Entra;
+            admins.GroupsClaim = provider.GroupsClaim;
+            admins.TenantIds = [.. settings.SuperAdmins.TenantIds];
+            admins.ObjectIds = [.. settings.SuperAdmins.ObjectIds];
+            admins.UserIds = [.. settings.SuperAdmins.UserIds];
+            admins.Emails = [.. settings.SuperAdmins.Emails];
+            admins.GroupIds = [.. settings.SuperAdmins.GroupIds];
+            admins.CodeNames = [.. settings.SuperAdmins.CodeNames];
             o.DataSourceManagement.EncryptionKey = settings.DataSourceKey;
             o.DataSourceManagement.PreviousEncryptionKeys = [.. settings.PreviousDataSourceKeys];
         });
 
         // The package registers the cookie schemes and takes over Data Protection; the host adds only the remote handler.
-        builder.Services.AddAuthentication().AddOpenIdConnect(EntraScheme, options =>
+        if (kind is not null)
         {
-            var entra = settings.Entra;
-            options.Authority = $"{entra.Instance.TrimEnd('/')}/{entra.TenantId}/v2.0";
-            options.ClientId = entra.ClientId;
-            options.ClientSecret = entra.ClientSecret;
-            options.CallbackPath = entra.CallbackPath;
-            options.SignInScheme = HubExternalScheme;
-            options.ResponseType = OpenIdConnectResponseType.Code;
-            options.UsePkce = true;
-            options.MapInboundClaims = false;
-            options.SaveTokens = false;
-            options.GetClaimsFromUserInfoEndpoint = false;
-            options.Scope.Clear();
-            options.Scope.Add("openid");
-            options.Scope.Add("profile");
-            options.Scope.Add("email");
-        });
+            builder.Services.AddAuthentication().AddOpenIdConnect(ProviderScheme, options =>
+            {
+                options.Authority = kind == SuperAdminProviderKind.Entra
+                    ? $"{provider.Instance.TrimEnd('/')}/{provider.TenantId}/v2.0"
+                    : provider.Authority;
+                options.ClientId = provider.ClientId;
+                options.ClientSecret = provider.ClientSecret;
+                options.CallbackPath = provider.CallbackPath;
+                options.SignInScheme = HubExternalScheme;
+                options.ResponseType = OpenIdConnectResponseType.Code;
+                options.UsePkce = true;
+                options.MapInboundClaims = false;
+                options.SaveTokens = false;
+                options.GetClaimsFromUserInfoEndpoint = kind == SuperAdminProviderKind.OpenIdConnect;
+                options.Scope.Clear();
+                foreach (var scope in provider.Scopes)
+                {
+                    options.Scope.Add(scope);
+                }
+            });
+        }
 
         builder.Services.AddAuthorization();
         ConfigureForwardedHeaders(builder.Services, settings.ForwardedHeaders);
-        ConfigureRateLimiter(builder.Services, settings.LaunchRateLimit);
+        ConfigureRateLimiter(builder.Services, settings.LaunchRateLimit, settings.SignIn.Codes);
 
         var app = builder.Build();
 
@@ -98,6 +149,12 @@ public static class HubHost
         app.MapGet("/", () => Results.Redirect("/querybuilder/")).AllowAnonymous();
         return app;
     }
+
+    private static SuperAdminProviderKind? ParseKind(string? kind) => string.IsNullOrWhiteSpace(kind)
+        ? null
+        : Enum.TryParse<SuperAdminProviderKind>(kind.Trim(), ignoreCase: false, out var parsed) && Enum.IsDefined(parsed)
+            ? parsed
+            : throw new InvalidOperationException("Hub:SignIn:Provider:Kind must be empty, Entra or OpenIdConnect.");
 
     private static void Require(string? value, string name)
     {
@@ -144,39 +201,60 @@ public static class HubHost
     }
 
     // Routing has already run here (WebApplication puts it first), so the endpoint is known.
-    private static bool IsLaunch(HttpContext context) =>
+    private static bool IsPost(HttpContext context, string pattern) =>
         HttpMethods.IsPost(context.Request.Method)
-        && context.GetEndpoint() is RouteEndpoint { RoutePattern.RawText: LaunchPattern };
+        && context.GetEndpoint() is RouteEndpoint { RoutePattern.RawText: var raw }
+        && raw == pattern;
 
-    private static void ConfigureRateLimiter(IServiceCollection services, LaunchRateLimitOptions settings)
+    private static void ConfigureRateLimiter(IServiceCollection services, LaunchRateLimitOptions launch, CodeSettings codes)
     {
-        if (settings.PermitLimit < 1 || settings.WindowSeconds < 1)
+        if (launch.PermitLimit < 1 || launch.WindowSeconds < 1)
         {
             throw new InvalidOperationException("Hub:LaunchRateLimit:PermitLimit and WindowSeconds must be at least 1.");
+        }
+
+        if (codes.PermitLimit < 1)
+        {
+            throw new InvalidOperationException("Hub:SignIn:Codes:PermitLimit must be at least 1.");
+        }
+
+        if (codes.WindowSeconds < 1)
+        {
+            throw new InvalidOperationException("Hub:SignIn:Codes:WindowSeconds must be at least 1.");
         }
 
         services.AddRateLimiter(options =>
         {
             options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
-            // The package maps the launch endpoint, so a named policy can't be attached to it: one global limiter
-            // that limits that route and lets everything else through. Matched by endpoint, not by path text:
-            // routing also serves /querybuilder/launch/ and any letter case, which a path comparison would miss.
+            // The package maps these endpoints, so a named policy can't be attached to them: one global limiter that
+            // limits those routes, each with its own allowance per address, and lets everything else through. Matched by
+            // endpoint, not by path text: routing also serves a trailing slash and any letter case, which a path
+            // comparison would miss.
             options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(context =>
-                IsLaunch(context)
-                    ? RateLimitPartition.GetFixedWindowLimiter(
-                        context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
-                        _ => new FixedWindowRateLimiterOptions
-                        {
-                            PermitLimit = settings.PermitLimit,
-                            Window = TimeSpan.FromSeconds(settings.WindowSeconds),
-                            QueueLimit = 0,
-                        })
-                    : RateLimitPartition.GetNoLimiter("other"));
+            {
+                var ip = context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+                if (IsPost(context, LaunchPattern))
+                {
+                    return RateLimitPartition.GetFixedWindowLimiter("launch:" + ip, _ => Window(launch.PermitLimit, launch.WindowSeconds));
+                }
+
+                return IsPost(context, CodePattern)
+                    ? RateLimitPartition.GetFixedWindowLimiter("code:" + ip, _ => Window(codes.PermitLimit, codes.WindowSeconds))
+                    : RateLimitPartition.GetNoLimiter("other");
+            });
             options.OnRejected = (rejected, _) =>
             {
-                rejected.HttpContext.Response.Headers.RetryAfter = settings.WindowSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                var seconds = IsPost(rejected.HttpContext, CodePattern) ? codes.WindowSeconds : launch.WindowSeconds;
+                rejected.HttpContext.Response.Headers.RetryAfter = seconds.ToString(System.Globalization.CultureInfo.InvariantCulture);
                 return ValueTask.CompletedTask;
             };
         });
     }
+
+    private static FixedWindowRateLimiterOptions Window(int permits, int seconds) => new()
+    {
+        PermitLimit = permits,
+        Window = TimeSpan.FromSeconds(seconds),
+        QueueLimit = 0,
+    };
 }
