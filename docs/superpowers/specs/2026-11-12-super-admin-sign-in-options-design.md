@@ -76,8 +76,9 @@ would let two code users keep issuing each other codes without the server).
 sub>`); one person signing in both ways is two identities (accepted: super admins rarely own queries).
 
 **The code:** compact `base64url(payload).base64url(HMAC-SHA256)`; payload `{ purpose:"qb-super-signin", aud:
-<Hub:Audience>, name, jti, iat, exp }` — `aud` ties a code to one hub deployment (staging and production sharing a key
-still can't use each other's codes). HMAC key derived (HKDF-SHA256, fixed label) from the hub's existing `Hub:DataSourceKey`, so no new
+<Hub:Audience>, name, jti, iat, exp }` — `aud` (also mixed into the HKDF `info`) stops a code issued for one hub being used on another. It does
+not stop someone who holds the key: with codes on, `Hub:DataSourceKey` is a super admin credential and must be kept as secret as an admin
+password, with a different key per deployment. HMAC key derived (HKDF-SHA256, fixed label) from the hub's existing `Hub:DataSourceKey`, so no new
 secret and every instance verifies the same codes. Lifetime default 15 minutes, maximum 60. Rotating the
 data-source key invalidates outstanding codes (acceptable; they are short-lived).
 
@@ -86,7 +87,7 @@ button and/or a paste box). The paste box posts `code` to `POST /querybuilder/si
 check on `Origin`; rate-limited per IP like `/launch`). The server checks signature, purpose, expiry (30 s skew),
 the name is still in `CodeNames`, and single use by inserting `jti` into the existing `LaunchReplay` table with
 `AppId = App.NoneId` (hub-level). Success → the normal super admin session (8 h absolute / 1 h idle), match kind
-`Code`, value = name; audit `SuperAdminSignedIn` with method `code`. Any failure → one generic refusal page (no
+`Code`, value = name; audit `SuperAdminSignedIn` with method `code`. Any failure → one generic refusal page titled "Sign-in code not accepted" with a link back to sign-in (no
 reason shown) and audit `SuperAdminSignInRefused` with the reason.
 
 ## 6. Startup rules

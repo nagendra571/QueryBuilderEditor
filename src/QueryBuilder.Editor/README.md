@@ -658,10 +658,11 @@ Either way works, or both; with neither the host refuses to start (the message n
   and name who may be given one in `options.Hub.SuperAdmins.CodeNames` (compared exactly, case-sensitive; required when codes are
   on). A code is created only on the server, by your own code calling `ISuperAdminCodeIssuer.IssueAsync(name, minutes, ct)`
   (`QueryBuilder.Hub` wraps it as the command `signin-code --name <name> [--minutes <1-60>]`). It is single use, tied to
-  `Hub.Audience` and a key derived from the encryption key, and signs the person in as the session user `super:code:<name>`.
+  `Hub.Audience` and a key derived from the encryption key and the audience, and signs the person in as the session user `super:code:<name>`.
   The person pastes it at `/querybuilder/signin`, which posts to `POST /querybuilder/signin/code` (form field `code`, the
   request's `Origin` must equal the hub's own origin). Rate-limit that route in your host: `QueryBuilder.Hub` allows 10 attempts per
-  minute per address. Removing a name from `CodeNames` and restarting ends that name's sessions.
+  minute per address. With codes on, the encryption key is a super admin credential: anyone who holds it can create a code, so keep it
+  as secret as an admin password and use a different key for every deployment. Removing a name from `CodeNames` and restarting ends that name's sessions.
 
 ### Who can do what
 

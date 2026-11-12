@@ -20,7 +20,7 @@ internal sealed class SuperAdminCodeIssuer(QueryBuilderEditorOptions options, Su
     {
         if (!options.Hub.SignInCodes.Enabled)
         {
-            throw new InvalidOperationException("Sign-in codes are turned off: set Hub:SignIn:Codes:Enabled to true to issue one.");
+            throw new InvalidOperationException("Sign-in codes are turned off: set HubOptions.SignInCodes.Enabled (Hub:SignIn:Codes:Enabled in the hub host's settings) to true to issue one.");
         }
 
         var resolvedMinutes = minutes ?? options.Hub.SignInCodes.DefaultMinutes;

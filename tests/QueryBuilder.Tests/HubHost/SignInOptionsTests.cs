@@ -156,6 +156,20 @@ public class SignInOptionsTests
         Assert.Contains("Hub:SignIn:Provider:Kind", ex.Message);
     }
 
+    [Theory]
+    [InlineData("0")]
+    [InlineData("1")]
+    [InlineData("2")]
+    public void A_numeric_kind_is_refused(string kind)
+    {
+        var settings = Entra("Server=unused");
+        settings["Hub:SignIn:Provider:Kind"] = kind;
+
+        var ex = Assert.Throws<InvalidOperationException>(() => Build(settings));
+
+        Assert.Contains("Hub:SignIn:Provider:Kind", ex.Message);
+    }
+
     [Fact]
     public void Old_Hub_Entra_settings_are_rejected_with_a_pointer()
     {
@@ -336,11 +350,25 @@ public class SignInOptionsTests
         var stdout = new StringWriter();
         var stderr = new StringWriter();
 
-        var exit = await SignInCodeCommand.RunAsync(CommandArgs(connection, "--minutes", "5"), stdout, stderr);
+        // The process's own stdout is what a shell captures; an appsettings log level must not put log lines on it.
+        var console = new StringWriter();
+        var previous = Console.Out;
+        Console.SetOut(console);
+        int exit;
+        try
+        {
+            exit = await SignInCodeCommand.RunAsync(CommandArgs(connection, "--minutes", "5", "--Logging:LogLevel:Default=Information"), stdout, stderr);
+        }
+        finally
+        {
+            Console.SetOut(previous);
+        }
 
         Assert.Equal(0, exit);
+        Assert.Equal("", console.ToString());
         Assert.Equal("", stderr.ToString());
         var lines = stdout.ToString().Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        Assert.Equal(2, lines.Length);
         var code = Assert.Single(lines, l => l.StartsWith("Code: ", StringComparison.Ordinal))["Code: ".Length..];
         Assert.Single(lines, l => l.StartsWith("Expires: ", StringComparison.Ordinal));
 

@@ -90,7 +90,7 @@ What to expect from common providers (check your provider's documentation; these
 
 | Provider | `Authority` looks like | What `sub` is | Groups |
 |---|---|---|---|
-| Google Workspace | `https://accounts.google.com` | A long number (about 21 digits), the same for that Google account everywhere. It is not the email. | Google does not put groups in the token, so use `UserIds`, or `Emails` (Google sets `email_verified`). |
+| Google Workspace | `https://accounts.google.com` | A long number (about 21 digits), the same for that Google account everywhere. It is not the email. | Google does not put groups in the token, so use `UserIds`. Avoid `Emails` for Google: a consumer Google account can carry a verified address that is not a Gmail one. |
 | Okta | `https://<your-org>.okta.com` (or `.../oauth2/default`) | A short id starting with `00u`. | Add a **groups claim** to the app's sign-on settings (a claim named `groups`). Okta fills it with group names unless you choose otherwise, and `GroupIds` must hold whatever the claim contains. |
 | Auth0 | `https://<your-tenant>.auth0.com/` | `auth0\|<id>` for database users, `google-oauth2\|<id>` and similar for social logins. Copy it exactly, including the part before the `\|`. | Auth0 puts no groups in the token by default; add them with an Action, as a claim whose name is a full URL (set `GroupsClaim` to that exact name). |
 | Keycloak | `https://<host>/realms/<realm>` | A GUID, the user id. | Add a **Group Membership** mapper to the client, with the claim name you want (for example `groups`) and **Full group path** off; the values are group names, so list those in `GroupIds`. |
@@ -128,7 +128,9 @@ one, so someone who is not already on the server cannot get one.
    configuration, as for the site.
    **On IIS or Azure App Service**, run it from the site's own console (on App Service, the Kudu console, `https://<app>.scm.azurewebsites.net`),
    in the folder that holds `QueryBuilder.Hub.dll`: the environment variables and app settings you set for the site are
-   visible there. If you run it from somewhere else, give it the same `Hub__...` values.
+   visible there. Plain IIS has no such console: environment variables set in `web.config` or for the app pool are not visible to a
+   shell you open yourself, so set the `Hub__...` environment variables in that shell before running the command. Prefer that to
+   `--Hub:...=` arguments, which land in the shell history and in process lists (the `--name` and `--minutes` arguments hold nothing secret).
 4. Open `https://<hub>/querybuilder/signin`, paste the code into **One-time sign-in code** and press **Sign in with code**. You
    land in the console as a super admin; the session lasts at most 8 hours and ends after 1 hour unused, like any other.
 
@@ -136,8 +138,12 @@ How codes behave:
 
 - **Single use, short life.** A code works once. The default life is 15 minutes (`Hub:SignIn:Codes:DefaultMinutes`) and the
   longest possible is 60. Clocks may differ by up to 30 seconds.
-- **One deployment only.** A code carries the hub's `Hub:Audience` and is signed with a key derived from `Hub:DataSourceKey`, so
-  it works only on a hub with both the same, and a launch token can never be used as a code or the reverse.
+- **The data source key is now a super admin credential.** Anyone who holds `Hub:DataSourceKey` can create a valid code for any
+  name in `Hub:SuperAdmins:CodeNames`. Keep it as secret as an admin password, and use a different key for every deployment
+  (staging and production must not share one).
+- **Tied to one deployment.** A code carries the hub's `Hub:Audience` and is signed with a key derived from `Hub:DataSourceKey`
+  and the audience, so a code issued by one hub is not accepted by another, and a launch token can never be used as a code or the
+  reverse. This stops a legitimately issued code being reused elsewhere; it does not stop someone who holds the key.
 - **Who it is.** A code session is its own identity, `super:code:<name>` in the audit log (for example
   `super:code:ops-nagendra`). It is separate from the same person's identity-provider sign-in, so their audit trail shows which way they
   came in. Audit entries: `SuperAdminCodeIssued` (name, minutes and a code id; written by the command, never the code itself),
@@ -185,7 +191,7 @@ in environment variables or a file that exists only on the server (see section 3
 | `Hub:SuperAdmins:Emails` | one of these three | none | Email or user principal names, compared ignoring case. With `OpenIdConnect` only when the provider reports `email_verified`. A provider or tenant administrator can change a user's email, so prefer ids or groups. |
 | `Hub:SuperAdmins:GroupIds` | one of these three | none | Group ids from the groups claim. With Entra this needs the `groups` claim (step 6 above). |
 | `Hub:SuperAdmins:CodeNames` | with codes on | none | Names a sign-in code may be issued for, compared exactly including case. |
-| `Hub:DataSourceKey` | yes | none | Base64 of 32 random bytes. Encrypts the stored data source passwords **and the session key ring** (section 5). Make one with `openssl rand -base64 32`. |
+| `Hub:DataSourceKey` | yes | none | Base64 of 32 random bytes. Encrypts the stored data source passwords **and the session key ring** (section 5). Make one with `openssl rand -base64 32`. With sign-in codes on it is also a super admin credential (anyone holding it can create a code): keep it as secret as an admin password and use a different one per deployment. |
 | `Hub:PreviousDataSourceKeys` | no | empty | Old keys, read-only, kept while rotating (see [`MANAGING-KEYS.md`](../../MANAGING-KEYS.md)). |
 | `Hub:LaunchRateLimit:PermitLimit` | no | `30` | Launch requests allowed per client address per window. Must be at least 1. |
 | `Hub:LaunchRateLimit:WindowSeconds` | no | `60` | The window length. Must be at least 1. |
@@ -330,13 +336,13 @@ claims a database and a DBA-inserted marker skips that step), `LaunchReplays` an
 | Host won't start, "Hub:SignIn:Codes:PermitLimit must be at least 1" (or `WindowSeconds`) | A zero or negative limit | Set 1 or more |
 | Log warning "ProviderKind is OpenIdConnect, so TenantIds, ObjectIds are ignored" | Entra-only lists are still set | Remove them, or set `Kind` to `Entra` |
 | `signin-code` prints "Could not issue a sign-in code: ..." | The message says why: codes are turned off (`Hub:SignIn:Codes:Enabled`), the name is not in `Hub:SuperAdmins:CodeNames` (case matters), minutes outside 1 to 60, or a setting or the database is missing from where you ran it | Run it from the site's folder with the site's environment variables; fix the setting |
-| Pasting a code gives the generic page (403) | One of the reasons in section 1c: used already (`Replayed`), `Expired` (clocks more than 30 seconds apart count), `WrongAudience` or `BadSignature` (a code from another hub, or another `Hub:DataSourceKey`), `NotListed` (the name was removed), `OriginMismatch` (posted from somewhere other than the hub's sign-in page) | A super admin reads the reason in the audit log (`SuperAdminSignInRefused`); create a new code |
+| Pasting a code gives the page "Sign-in code not accepted" (403) | One of the reasons in section 1c: used already (`Replayed`), `Expired` (clocks more than 30 seconds apart count), `WrongAudience` or `BadSignature` (a code from another hub, or another `Hub:DataSourceKey`), `NotListed` (the name was removed), `OriginMismatch` (posted from somewhere other than the hub's sign-in page). The page itself never says which | A super admin reads the reason in the audit log (`SuperAdminSignInRefused`); create a new code |
 | Pasting a code gives `404` | Codes are turned off | Set `Hub:SignIn:Codes:Enabled` and restart |
 | Pasting a code gives `429` | The per-address code limit | Wait for the `Retry-After` seconds; check proxy settings (section 4) |
 | Host won't start, "needs its own empty metadata database" | The database holds QueryBuilder data from an embedded app | Give the hub a new empty database |
 | Host won't start, "belongs to an Embedded-mode installation" | The database was claimed by an embedded host | Same: a separate database |
 | Sign-in loops after Entra, or the redirect goes to an `http://` address | The proxy's headers are not trusted, so the app believes it is on http | Fix `KnownProxies`/`KnownNetworks` (section 4) |
 | `AADSTS50011` (reply URL mismatch) at Entra, or a redirect-URI error at another provider | The redirect URI differs from `https://<host>` + `Hub:SignIn:Provider:CallbackPath`, or the proxy's headers aren't trusted (the URI is built as `http://…`) | Register the exact URL |
-| After provider sign-in you get the generic page "This link to QueryBuilder isn't valid or has expired" (403) | Entra: your tenant id, object id, email or group is not in `Hub:SuperAdmins`, or you belong to too many groups for Entra to list them. OpenID Connect: your `sub`, verified email or group is not listed (an email without `email_verified` = `true` never matches; check the groups claim name) | Add the entry and restart. Another super admin (or a sign-in code session) can read the reason in the audit log (`SuperAdminSignInRefused`: `NotAllowlisted`, `WrongTenant`, `GroupsOverage`, `NoStableId`) |
+| After provider sign-in you get the generic page "This link to QueryBuilder isn't valid or has expired" (403). If you start the provider sign-in from another site you get "Sign-in didn't start from this site" instead; open `/querybuilder/signin` and try again. | Entra: your tenant id, object id, email or group is not in `Hub:SuperAdmins`, or you belong to too many groups for Entra to list them. OpenID Connect: your `sub`, verified email or group is not listed (an email without `email_verified` = `true` never matches; check the groups claim name) | Add the entry and restart. Another super admin (or a sign-in code session) can read the reason in the audit log (`SuperAdminSignInRefused`: `NotAllowlisted`, `WrongTenant`, `GroupsOverage`, `NoStableId`) |
 | An app's users get the generic "link isn't valid" page | See the [launch troubleshooting table](../QueryBuilder.Launch/README.md#6-troubleshooting) | Read the `LaunchRefused` reason in `/querybuilder/hub/audit` |
 | Users all launch fine for a while, then `429` | Launch rate limit per address | Raise `Hub:LaunchRateLimit:PermitLimit`, check proxy settings |

@@ -33,7 +33,15 @@ public static class HubHost
             : WebApplication.CreateBuilder(args);
         if (forCommand)
         {
-            builder.Logging.SetMinimumLevel(LogLevel.Warning);
+            // Logging:LogLevel in appsettings.json outranks SetMinimumLevel, so the filter rules are replaced outright and
+            // the console goes to stderr: stdout carries only the code and its expiry.
+            builder.Logging.ClearProviders();
+            builder.Logging.AddConsole(o => o.LogToStandardErrorThreshold = LogLevel.Trace);
+            builder.Services.Configure<LoggerFilterOptions>(o =>
+            {
+                o.Rules.Clear();
+                o.MinLevel = LogLevel.Warning;
+            });
         }
 
         configure?.Invoke(builder);
@@ -179,7 +187,7 @@ public static class HubHost
 
     private static SuperAdminProviderKind? ParseKind(string? kind) => string.IsNullOrWhiteSpace(kind)
         ? null
-        : Enum.TryParse<SuperAdminProviderKind>(kind.Trim(), ignoreCase: false, out var parsed) && Enum.IsDefined(parsed)
+        : Enum.GetNames<SuperAdminProviderKind>().Contains(kind.Trim(), StringComparer.Ordinal) && Enum.TryParse<SuperAdminProviderKind>(kind.Trim(), ignoreCase: false, out var parsed)
             ? parsed
             : throw new InvalidOperationException("Hub:SignIn:Provider:Kind must be empty, Entra or OpenIdConnect.");
 

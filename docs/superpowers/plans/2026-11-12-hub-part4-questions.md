@@ -22,6 +22,9 @@ it costs to change. Answer any you disagree with; nothing here is pushed or rele
 8. **Release 2.0.0**: version bump, DBA script regeneration, packing and pushes are waiting for your ask, as always. A root `dotnet pack` now also packs `QueryBuilder.Launch` (independent version 1.0.0), so the push command must name both packages.
 9. **Merge `feature/hub` to `main` (or link a tag) before pushing 2.0.0 to NuGet.** The NuGet-facing `QueryBuilder.Editor` README links to the hub and launch guides at `github.com/nagendra571/QueryBuilderEditor/blob/main/...`, which do not exist until then.
 
+10. **Sign-in codes make the data-source key a super admin credential.** With sign-in codes on, the data-source key can
+   create super admin codes: keep it as secret as an admin password and use a different key per deployment. OK?
+
 ## Decided by me in Part 3 (review when convenient)
 
 - Record limit = min(app ceiling, data-source limit ?? host default) — not "lowest of three", because that would change

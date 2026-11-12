@@ -70,6 +70,14 @@ public class SuperAdminProviderKindTests
         Assert.Equal(SuperAdminRefusalReason.NotAllowlisted, r.Refusal);
     }
 
+    [Fact]
+    public void A_subject_starting_with_code_colon_is_not_a_stable_id()
+    {
+        var r = SuperAdminRecognizer.Recognize(P(("sub", "code:priya")), Oidc(x => x.UserIds = ["code:priya"]));
+        Assert.Null(r.Match);
+        Assert.Equal(SuperAdminRefusalReason.NoStableId, r.Refusal);
+    }
+
     [Theory]
     [InlineData("true")]
     [InlineData("True")]

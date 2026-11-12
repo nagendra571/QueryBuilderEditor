@@ -97,7 +97,8 @@ public class SignInCodeTests
         other.DataSourceManagement.EncryptionKey = HubApiHost.Key;
         var foreign = new SuperAdminSignInCodes(other, env.Clock).Issue("priya", null);
 
-        Assert.Equal(CodeRefusal.WrongAudience, Codes(env).Verify(foreign.Code).Refusal);
+        // The audience is part of the derived key too, so a foreign code fails the signature before its aud is even read.
+        Assert.Equal(CodeRefusal.BadSignature, Codes(env).Verify(foreign.Code).Refusal);
         Assert.Equal(HttpStatusCode.Forbidden, (await env.NewBrowser().PostFormAsync(Code, "code", foreign.Code)).StatusCode);
     });
 
@@ -123,10 +124,11 @@ public class SignInCodeTests
     [MetadataSqlFact]
     public Task Code_for_unlisted_name_cannot_be_issued_or_used() => Run(async env =>
     {
-        Assert.Throws<ArgumentException>(() => Codes(env).Issue("mallory", null));
+        var unlisted = Assert.Throws<InvalidOperationException>(() => Codes(env).Issue("mallory", null));
+        Assert.DoesNotContain("Parameter", unlisted.Message);
         Assert.Throws<ArgumentException>(() => Codes(env).Issue("priya", 0));
         Assert.Throws<ArgumentException>(() => Codes(env).Issue("priya", 61));
-        Assert.Throws<ArgumentException>(() => Codes(env).Issue("Priya", null));
+        Assert.Throws<InvalidOperationException>(() => Codes(env).Issue("Priya", null));
 
         var issued = Codes(env).Issue("priya", null);
         await env.RestartAsync(o => WithCodes(o, "someone-else"));
@@ -231,7 +233,7 @@ public class SignInCodeTests
         Assert.Contains("priya", entry.Details);
         Assert.DoesNotContain(issued.Code, entry.Details + entry.Summary);
         Assert.Null(Codes(env).Verify(issued.Code).Refusal);
-        await Assert.ThrowsAsync<ArgumentException>(() => issuer.IssueAsync("mallory", null, CancellationToken.None));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => issuer.IssueAsync("mallory", null, CancellationToken.None));
         Assert.Single(await AuditAsync(env, AuditAction.SuperAdminCodeIssued));
     });
 
@@ -285,7 +287,7 @@ public class SignInCodeTests
     public Task Code_with_out_of_range_times_is_malformed() => Run(async env =>
     {
         var ikm = Convert.FromBase64String(HubApiHost.Key);
-        var key = System.Security.Cryptography.HKDF.DeriveKey(System.Security.Cryptography.HashAlgorithmName.SHA256, ikm, 32, [], Encoding.UTF8.GetBytes("qb-super-signin-code-v1"));
+        var key = System.Security.Cryptography.HKDF.DeriveKey(System.Security.Cryptography.HashAlgorithmName.SHA256, ikm, 32, [], Encoding.UTF8.GetBytes("qb-super-signin-code-v1|https://hub.test"));
         string Mint(long iat, long exp)
         {
             var payload = Encoding.UTF8.GetBytes($"{{\"purpose\":\"qb-super-signin\",\"aud\":\"https://hub.test\",\"name\":\"priya\",\"jti\":\"j\",\"iat\":{iat},\"exp\":{exp}}}");
@@ -299,6 +301,36 @@ public class SignInCodeTests
         Assert.Equal(CodeRefusal.Malformed, Codes(env).Verify(Mint(-5, now + 60)).Refusal);
         Assert.Equal(CodeRefusal.Malformed, Codes(env).Verify(Mint(long.MinValue, long.MaxValue)).Refusal);
         Assert.Null(Codes(env).Verify(Mint(now, now + 60)).Refusal);
+    });
+
+    private static async Task AssertGenericRefusalAsync(HttpResponseMessage response, string heading, string sentence)
+    {
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        var body = await response.Content.ReadAsStringAsync();
+        Assert.Contains(heading, body);
+        Assert.Contains(sentence, body);
+        Assert.Contains("href=\"/querybuilder/signin\"", body);
+        foreach (var word in new[] { "signature", "expired", "audience", "replay", "Replayed", "BadSignature", "OriginMismatch" })
+        {
+            Assert.DoesNotContain(word, body, StringComparison.OrdinalIgnoreCase);
+        }
+    }
+
+    [MetadataSqlFact]
+    public Task Refused_code_and_provider_posts_show_the_new_generic_pages() => HubApiHost.RunAsync(async env =>
+    {
+        var browser = env.NewBrowser();
+        var issued = Codes(env).Issue("priya", null);
+        var bad = await browser.PostFormAsync(Code, "code", "garbage");
+        await AssertGenericRefusalAsync(bad, "Sign-in code not accepted", "That code didn't work. Codes work once and expire after a few minutes. Ask for a new code and try again.");
+        var origin = await browser.PostFormAsync(Code, "code", issued.Code, origin: "http://evil.test");
+        await AssertGenericRefusalAsync(origin, "Sign-in code not accepted", "That code didn't work.");
+        var provider = await browser.PostFormAsync("/querybuilder/signin/provider", "x", "y", origin: "http://evil.test");
+        await AssertGenericRefusalAsync(provider, "Sign-in didn't start from this site", "Open the sign-in page and try again.");
+    }, configure: o =>
+    {
+        WithCodes(o, "priya");
+        o.Hub.SuperAdminSignInScheme = "host";
     });
 
     [MetadataSqlFact]
@@ -324,6 +356,7 @@ public class SignInCodeTests
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => issuer.IssueAsync("priya", null, CancellationToken.None));
 
+        Assert.Contains("HubOptions.SignInCodes.Enabled", ex.Message);
         Assert.Contains("Hub:SignIn:Codes:Enabled", ex.Message);
         Assert.Empty(await AuditAsync(env, AuditAction.SuperAdminCodeIssued));
     }, configure: o => o.Hub.SuperAdmins.CodeNames = ["priya"]);

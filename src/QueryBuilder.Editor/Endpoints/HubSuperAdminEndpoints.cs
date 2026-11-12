@@ -40,6 +40,21 @@ internal static class HubSuperAdminEndpoints
         endpoints.MapPost(ViewAppPath, ViewAppAsync).AllowAnonymous();
     }
 
+    // Fixed text with no reason, like the launch refusal page, but with a way back: the person is a staff member with a
+    // mistyped or used code, not a probing caller who needs telling which check failed.
+    private static string RefusalPageFor(string heading, string text) =>
+        "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">" +
+        "<meta name=\"robots\" content=\"noindex\"><title>QueryBuilder</title>" +
+        "<style>body{font-family:system-ui,sans-serif;margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:#f4f5f7;color:#1b2430}" +
+        "main{max-width:28rem;padding:2rem;text-align:center}</style></head><body><main>" +
+        $"<h1>{heading}</h1><p>{text}</p><p><a href=\"{SignInPath}\">Back to sign-in</a></p></main></body></html>";
+
+    private static readonly string CodeRefusalPage = RefusalPageFor("Sign-in code not accepted",
+        "That code didn't work. Codes work once and expire after a few minutes. Ask for a new code and try again.");
+
+    private static readonly string ProviderStartRefusalPage = RefusalPageFor("Sign-in didn't start from this site",
+        "Open the sign-in page and try again.");
+
     private static IResult SignIn(HttpContext context, QueryBuilderEditorOptions options)
     {
         context.Response.Headers.CacheControl = "no-store";
@@ -63,7 +78,7 @@ internal static class HubSuperAdminEndpoints
 
         return OriginMatches(context.Request)
             ? Challenge(options)
-            : Results.Content(HubLaunchEndpoints.RefusalPage, "text/html; charset=utf-8", statusCode: StatusCodes.Status403Forbidden);
+            : Results.Content(ProviderStartRefusalPage, "text/html; charset=utf-8", statusCode: StatusCodes.Status403Forbidden);
     }
 
     private static IResult Challenge(QueryBuilderEditorOptions options) =>
@@ -138,7 +153,7 @@ internal static class HubSuperAdminEndpoints
             // The visitor's existing session is left alone: a cross-site form must not be able to end anyone's session,
             // and no refusal path here creates one.
             await RecordCodeRefusalAsync(context, reason ?? nameof(CodeRefusal.Malformed), clock, ct);
-            return Results.Content(HubLaunchEndpoints.RefusalPage, "text/html; charset=utf-8", statusCode: StatusCodes.Status403Forbidden);
+            return Results.Content(CodeRefusalPage, "text/html; charset=utf-8", statusCode: StatusCodes.Status403Forbidden);
         }
 
         var codeName = check.Name;
@@ -245,7 +260,7 @@ internal static class HubSuperAdminEndpoints
         await db.SaveChangesAsync(ct);
     }
 
-    private static string? Cap(string? value) => value is { Length: > 100 } ? value[..100] : value;
+    private static string? Cap(string? value) => value is { Length: > 200 } ? value[..200] : value;
 
     private static async Task<IResult> CompleteAsync(HttpContext context, QueryBuilderEditorOptions options, CancellationToken ct)
     {

@@ -12,7 +12,9 @@ public sealed record CodeCheck(string? Name, string? Jti, DateTimeOffset? Expire
 
 /// <summary>
 /// One-time super admin sign-in codes: <c>base64url(payload).base64url(HMAC-SHA256)</c>. The key is derived from the
-/// data-source encryption key with a fixed label, so it is never the key itself and a code can't be a launch token.
+/// data-source encryption key with a fixed label and the hub's Audience, so it is never the key itself, a code can't be
+/// a launch token, and a code from another deployment fails its signature. Whoever holds the encryption key can still
+/// mint a code: with codes on, that key is a super admin credential.
 /// Single use is enforced by the caller (the replay store); this class only issues and checks.
 /// </summary>
 public sealed class SuperAdminSignInCodes
@@ -31,7 +33,7 @@ public sealed class SuperAdminSignInCodes
         _options = options;
         _clock = clock;
         var ikm = Convert.FromBase64String(options.DataSourceManagement.EncryptionKey ?? throw new InvalidOperationException("Sign-in codes need the data source encryption key."));
-        _key = HKDF.DeriveKey(HashAlgorithmName.SHA256, ikm, 32, salt: [], info: Encoding.UTF8.GetBytes("qb-super-signin-code-v1"));
+        _key = HKDF.DeriveKey(HashAlgorithmName.SHA256, ikm, 32, salt: [], info: Encoding.UTF8.GetBytes("qb-super-signin-code-v1|" + options.Hub.Audience));
     }
 
     public IssuedCode Issue(string name, int? minutes)
@@ -44,7 +46,7 @@ public sealed class SuperAdminSignInCodes
 
         if (string.IsNullOrEmpty(name) || !_options.Hub.SuperAdmins.CodeNames.Any(n => string.Equals(n, name, StringComparison.Ordinal)))
         {
-            throw new ArgumentException("That name is not in SuperAdmins.CodeNames.", nameof(name));
+            throw new InvalidOperationException("That name is not in SuperAdmins.CodeNames.");
         }
 
         // Whole seconds on purpose: the check compares whole seconds and a fraction would only be ambiguous.

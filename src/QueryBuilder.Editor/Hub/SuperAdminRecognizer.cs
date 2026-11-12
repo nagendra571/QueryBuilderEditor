@@ -46,15 +46,16 @@ internal static class SuperAdminRecognizer
     {
         var subjects = Distinct(Values(principal, SubjectClaims));
         var subject = subjects.Count == 1 ? subjects[0] : null;
-        if (subject is null || subject.Length > MaxIdLength)
+        // "code:" is the namespace of sign-in code sessions (super:code:<name>); a provider id must not be able to enter it.
+        if (subject is null || subject.Length > MaxIdLength || subject.StartsWith("code:", StringComparison.Ordinal))
         {
             return new SuperAdminRecognition(null, SuperAdminRefusalReason.NoStableId, null, null);
         }
 
         var verified = Values(principal, EmailVerifiedClaims);
         var emailsVerified = verified.Count > 0 && verified.All(v => string.Equals(v, "true", StringComparison.OrdinalIgnoreCase));
-        var emails = emailsVerified ? Values(principal, OidcEmailClaims) : [];
         // The stored email is only ever one the provider vouched for.
+        var emails = emailsVerified ? Values(principal, OidcEmailClaims) : [];
         // The raw claim name, as the provider sends it. A host whose handler renames claims (MapInboundClaims defaults to
         // true, which turns "roles" into ClaimTypes.Role) must set it to false; matching mapped names too would make
         // the setting mean different things per provider.
@@ -110,7 +111,7 @@ internal static class SuperAdminRecognizer
 
         // The id becomes the audit row's EntityName (200) and part of its Actor, so one that cannot fit is refused,
         // not truncated: a truncated id could collide with another person's.
-        if (objectId is null || objectId.Length > MaxIdLength)
+        if (objectId is null || objectId.Length > MaxIdLength || objectId.StartsWith("code:", StringComparison.Ordinal))
         {
             return new SuperAdminRecognition(null, SuperAdminRefusalReason.NoStableId, null, tenantId);
         }
