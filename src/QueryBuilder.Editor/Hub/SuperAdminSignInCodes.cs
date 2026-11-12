@@ -110,6 +110,13 @@ public sealed class SuperAdminSignInCodes
             return Refuse(CodeRefusal.Malformed);
         }
 
+        // DateTimeOffset.FromUnixTimeSeconds throws outside year 1..9999, and the sums below could overflow.
+        const long MaxUnix = 253402300799;
+        if (iat is < 0 or > MaxUnix || exp is < 0 or > MaxUnix)
+        {
+            return Refuse(CodeRefusal.Malformed);
+        }
+
         if (!string.Equals(purpose, Purpose, StringComparison.Ordinal))
         {
             return Refuse(CodeRefusal.WrongPurpose);

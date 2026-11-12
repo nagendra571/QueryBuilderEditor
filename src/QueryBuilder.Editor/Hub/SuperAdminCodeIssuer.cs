@@ -14,11 +14,12 @@ public interface ISuperAdminCodeIssuer
     Task<IssuedCode> IssueAsync(string name, int? minutes, CancellationToken ct);
 }
 
-internal sealed class SuperAdminCodeIssuer(SuperAdminSignInCodes codes, IHubWideScopeFactory hubWide, TimeProvider clock) : ISuperAdminCodeIssuer
+internal sealed class SuperAdminCodeIssuer(QueryBuilderEditorOptions options, SuperAdminSignInCodes codes, IHubWideScopeFactory hubWide, TimeProvider clock) : ISuperAdminCodeIssuer
 {
     public async Task<IssuedCode> IssueAsync(string name, int? minutes, CancellationToken ct)
     {
-        var issued = codes.Issue(name, minutes);
+        var resolvedMinutes = minutes ?? options.Hub.SignInCodes.DefaultMinutes;
+        var issued = codes.Issue(name, resolvedMinutes);
 
         await using var scope = hubWide.Create();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -32,7 +33,7 @@ internal sealed class SuperAdminCodeIssuer(SuperAdminSignInCodes codes, IHubWide
             // The id lets an operator match this entry to a later sign-in; the code itself is never stored.
             DetailsJson = JsonSerializer.Serialize(new
             {
-                name, minutes = (int)Math.Round((issued.ExpiresUtc - clock.GetUtcNow()).TotalMinutes), jti = issued.Jti,
+                name, minutes = resolvedMinutes, jti = issued.Jti,
             }, QueryDefinitionSerializer.Options),
             TimestampUtc = clock.GetUtcNow(),
         });

@@ -269,4 +269,63 @@ public class SignInCodeTests
         }));
         Assert.Contains("DefaultMinutes", ex.Message);
     }
+
+    [MetadataSqlFact]
+    public Task Refused_cross_site_post_leaves_an_existing_session_working() => Run(async env =>
+    {
+        var browser = env.NewBrowser();
+        Assert.Equal(HttpStatusCode.SeeOther, (await browser.PostFormAsync(Code, "code", Codes(env).Issue("priya", null).Code)).StatusCode);
+
+        Assert.Equal(HttpStatusCode.Forbidden, (await browser.PostFormAsync(Code, "code", "x", origin: "http://evil.test")).StatusCode);
+
+        Assert.Equal("super:code:priya", await UserAsync(browser));
+    });
+
+    [MetadataSqlFact]
+    public Task Code_with_out_of_range_times_is_malformed() => Run(async env =>
+    {
+        var ikm = Convert.FromBase64String(HubApiHost.Key);
+        var key = System.Security.Cryptography.HKDF.DeriveKey(System.Security.Cryptography.HashAlgorithmName.SHA256, ikm, 32, [], Encoding.UTF8.GetBytes("qb-super-signin-code-v1"));
+        string Mint(long iat, long exp)
+        {
+            var payload = Encoding.UTF8.GetBytes($"{{\"purpose\":\"qb-super-signin\",\"aud\":\"https://hub.test\",\"name\":\"priya\",\"jti\":\"j\",\"iat\":{iat},\"exp\":{exp}}}");
+            string B(byte[] b) => Convert.ToBase64String(b).TrimEnd('=').Replace('+', '-').Replace('/', '_');
+            var body = B(payload);
+            return body + "." + B(System.Security.Cryptography.HMACSHA256.HashData(key, Encoding.ASCII.GetBytes(body)));
+        }
+
+        var now = env.Clock.Now.ToUnixTimeSeconds();
+        Assert.Equal(CodeRefusal.Malformed, Codes(env).Verify(Mint(now, long.MaxValue)).Refusal);
+        Assert.Equal(CodeRefusal.Malformed, Codes(env).Verify(Mint(-5, now + 60)).Refusal);
+        Assert.Equal(CodeRefusal.Malformed, Codes(env).Verify(Mint(long.MinValue, long.MaxValue)).Refusal);
+        Assert.Null(Codes(env).Verify(Mint(now, now + 60)).Refusal);
+    });
+
+    [MetadataSqlFact]
+    public Task Provider_post_needs_a_matching_origin() => HubApiHost.RunAsync(async env =>
+    {
+        const string path = "/querybuilder/signin/provider";
+        var browser = env.NewBrowser();
+        Assert.Equal(HttpStatusCode.Forbidden, (await browser.PostFormAsync(path, "x", "y", origin: null)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await browser.PostFormAsync(path, "x", "y", origin: "http://evil.test")).StatusCode);
+        // A matching origin gets as far as the challenge (the test host has no real "host" scheme, so it errors there, never 403).
+        var ok = await Record.ExceptionAsync(async () => Assert.NotEqual(HttpStatusCode.Forbidden, (await browser.PostFormAsync(path, "x", "y")).StatusCode));
+        Assert.True(ok is null or InvalidOperationException);
+    }, configure: o =>
+    {
+        WithCodes(o, "priya");
+        o.Hub.SuperAdminSignInScheme = "host";
+    });
+
+    [MetadataSqlFact]
+    public Task Issuer_audits_the_resolved_default_minutes() => Run(async env =>
+    {
+        await env.NewBrowser().GetAsync("/");
+        var issuer = env.Host.Services.GetRequiredService<ISuperAdminCodeIssuer>();
+        env.Clock.Now += TimeSpan.FromMinutes(3);
+        await issuer.IssueAsync("priya", null, CancellationToken.None);
+
+        var entry = Assert.Single(await AuditAsync(env, AuditAction.SuperAdminCodeIssued));
+        Assert.Contains("\"minutes\":15", entry.Details);
+    });
 }

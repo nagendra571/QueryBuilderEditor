@@ -56,7 +56,14 @@ internal static class HubSuperAdminEndpoints
     private static IResult StartProvider(HttpContext context, QueryBuilderEditorOptions options)
     {
         context.Response.Headers.CacheControl = "no-store";
-        return string.IsNullOrWhiteSpace(options.Hub.SuperAdminSignInScheme) ? Results.NotFound() : Challenge(options);
+        if (string.IsNullOrWhiteSpace(options.Hub.SuperAdminSignInScheme))
+        {
+            return Results.NotFound();
+        }
+
+        return OriginMatches(context.Request)
+            ? Challenge(options)
+            : Results.Content(HubLaunchEndpoints.RefusalPage, "text/html; charset=utf-8", statusCode: StatusCodes.Status403Forbidden);
     }
 
     private static IResult Challenge(QueryBuilderEditorOptions options) =>
@@ -86,9 +93,7 @@ internal static class HubSuperAdminEndpoints
         CodeCheck? check = null;
 
         // A form posted from another site carries that site's origin, not ours; a missing header is refused too.
-        var expectedOrigin = $"{request.Scheme}://{request.Host}";
-        if (!request.Headers.TryGetValue("Origin", out var origin) || origin.Count != 1
-            || !string.Equals(origin[0], expectedOrigin, StringComparison.OrdinalIgnoreCase))
+        if (!OriginMatches(request))
         {
             reason = "OriginMismatch";
         }
@@ -130,8 +135,8 @@ internal static class HubSuperAdminEndpoints
 
         if (reason is not null || check?.Name is null)
         {
-            // Signed out first: if the audit write fails, the visitor must not be left holding a session.
-            await context.SignOutAsync(HubSession.Scheme);
+            // The visitor's existing session is left alone: a cross-site form must not be able to end anyone's session,
+            // and no refusal path here creates one.
             await RecordCodeRefusalAsync(context, reason ?? nameof(CodeRefusal.Malformed), clock, ct);
             return Results.Content(HubLaunchEndpoints.RefusalPage, "text/html; charset=utf-8", statusCode: StatusCodes.Status403Forbidden);
         }
@@ -163,6 +168,10 @@ internal static class HubSuperAdminEndpoints
         context.Response.Headers.Location = Home;
         return Results.StatusCode(StatusCodes.Status303SeeOther);
     }
+
+    private static bool OriginMatches(HttpRequest request) =>
+        request.Headers.TryGetValue("Origin", out var origin) && origin.Count == 1
+        && string.Equals(origin[0], $"{request.Scheme}://{request.Host}", StringComparison.OrdinalIgnoreCase);
 
     private static async Task<string?> ReadCodeAsync(HttpContext context, CancellationToken ct)
     {
