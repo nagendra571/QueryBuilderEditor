@@ -39,31 +39,61 @@ internal sealed class AppRegistry(AppDbContext db, ICurrentUserService user, IHt
         return ToDto(app, [], []);
     }
 
-    public async Task<AppDto> UpdateAsync(Guid id, string name, bool isEnabled, List<string> scopeKeys, CancellationToken ct)
+    public async Task<AppDto> UpdateAsync(Guid id, int version, string name, bool isEnabled, List<string> scopeKeys, int? maxRecords,
+        bool appAdminsCanManageConnections, CancellationToken ct)
     {
-        // Default may be renamed or turned off, never turned on.
-        if (id == App.DefaultId && isEnabled)
+        var app = await FindAsync(id, ct, allowDefault: true);
+        if (app.Version != version)
         {
-            throw new NotFoundException(nameof(App), id);
+            throw new ConcurrencyConflictException("This app was changed by someone else. Reload to see the latest.");
         }
 
-        var app = await FindAsync(id, ct, allowDefault: true);
-        var before = new { name = app.Name, isEnabled = app.IsEnabled, scopeKeys = app.ScopeKeys.ToList() };
+        // Default may be renamed but never turned on, and a request to do so is ignored rather than failing the rename.
+        if (id == App.DefaultId)
+        {
+            isEnabled = false;
+        }
 
-        // Turning an app off ends its sessions for good: turning it back on must not revive them.
+        var before = Settings(app);
+        var after = new AppSettings(name, isEnabled, scopeKeys.ToList(), maxRecords, appAdminsCanManageConnections);
+        if (before == after)
+        {
+            return await DtoAsync(app, ct);
+        }
+
+        // Turning an app off ends its sessions for good: turning it back on must not revive them. Never earlier than a stamp already set.
         if (app.IsEnabled && !isEnabled)
         {
-            app.SessionsValidAfterUtc = clock.GetUtcNow();
+            app.SessionsValidAfterUtc = Latest(app.SessionsValidAfterUtc, clock.GetUtcNow());
         }
 
         app.Name = name;
         app.IsEnabled = isEnabled;
         app.ScopeKeys = scopeKeys;
-        Audit(app, $"Updated app '{name}' ({app.Key})", new { before, after = new { name, isEnabled, scopeKeys } });
-        await SaveAsync(ct);
+        app.MaxRecords = maxRecords;
+        // Read by CurrentAppSettings / CurrentAppReader through a 30 s cache, so a change reaches running requests within 30 s.
+        app.AppAdminsCanManageConnections = appAdminsCanManageConnections;
+        // A concurrency token does not count itself up: the row is only written when the caller's version still matches.
+        db.Entry(app).Property(a => a.Version).OriginalValue = version;
+        app.Version = version + 1;
+        Audit(app, $"Updated app '{name}' ({app.Key})", new { before, after });
+        await SaveAsync(ct, concurrencyMessage: "This app was changed by someone else. Reload to see the latest.");
 
         return await DtoAsync(app, ct);
     }
+
+    private sealed record AppSettings(string Name, bool IsEnabled, List<string> ScopeKeys, int? MaxRecords, bool AppAdminsCanManageConnections)
+    {
+        public bool Equals(AppSettings? other) => other is not null && Name == other.Name && IsEnabled == other.IsEnabled
+            && ScopeKeys.SequenceEqual(other.ScopeKeys, StringComparer.Ordinal) && MaxRecords == other.MaxRecords
+            && AppAdminsCanManageConnections == other.AppAdminsCanManageConnections;
+
+        public override int GetHashCode() => HashCode.Combine(Name, IsEnabled, MaxRecords, AppAdminsCanManageConnections);
+    }
+
+    private static AppSettings Settings(App app) => new(app.Name, app.IsEnabled, app.ScopeKeys.ToList(), app.MaxRecords, app.AppAdminsCanManageConnections);
+
+    private static DateTimeOffset Latest(DateTimeOffset? existing, DateTimeOffset now) => existing is { } e && e > now ? e : now;
 
     public async Task<SigningKeyDto> AddKeyAsync(Guid appId, string kid, string algorithm, string pem, string fingerprint, CancellationToken ct)
     {
@@ -97,7 +127,7 @@ internal sealed class AppRegistry(AppDbContext db, ICurrentUserService user, IHt
 
         key.RevokedAtUtc = clock.GetUtcNow();
         // A session does not record which key signed its launch, so every session of the app ends.
-        app.SessionsValidAfterUtc = key.RevokedAtUtc;
+        app.SessionsValidAfterUtc = Latest(app.SessionsValidAfterUtc, key.RevokedAtUtc.Value);
         Audit(app, $"Revoked signing key '{kid}' of '{app.Key}'",
             new { revoked = new { kid, key.Algorithm, fingerprint = RegistryRules.FingerprintOrNull(key.Algorithm, key.PublicKeyPem) } });
         await SaveAsync(ct);
@@ -137,7 +167,7 @@ internal sealed class AppRegistry(AppDbContext db, ICurrentUserService user, IHt
     private static AppDto ToDto(App app, List<AppSigningKey> keys, List<string> urls) => new(
         app.Id, app.Key, app.Name, app.IsEnabled, app.CreatedAtUtc, app.ScopeKeys.ToList(),
         keys.Select(k => new SigningKeyDto(k.Kid, k.Algorithm, RegistryRules.FingerprintOrNull(k.Algorithm, k.PublicKeyPem), k.CreatedAtUtc, k.RevokedAtUtc)).ToList(),
-        urls);
+        urls, app.Version, app.MaxRecords, app.AppAdminsCanManageConnections);
 
     private void Audit(App app, string summary, object details) =>
         db.AuditLogEntries.Add(new AuditLogEntry
@@ -155,11 +185,15 @@ internal sealed class AppRegistry(AppDbContext db, ICurrentUserService user, IHt
             TimestampUtc = clock.GetUtcNow(),
         });
 
-    private async Task SaveAsync(CancellationToken ct, string? duplicateMessage = null)
+    private async Task SaveAsync(CancellationToken ct, string? duplicateMessage = null, string? concurrencyMessage = null)
     {
         try
         {
             await db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateConcurrencyException) when (concurrencyMessage is not null)
+        {
+            throw new ConcurrencyConflictException(concurrencyMessage);
         }
         catch (DbUpdateException) when (duplicateMessage is not null)
         {

@@ -14,6 +14,20 @@ public class HubRegistryTests
 {
     private const string Apps = "/querybuilder/api/hub/apps";
 
+    /// <summary>Sends an update carrying the app's current version (and its current settings for whatever the call leaves out).</summary>
+    internal static async Task<HttpResponseMessage> UpdateAppAsync(HubApiHost.Browser super, Guid id, string name, bool isEnabled, string[]? scopeKeys = null,
+        int? maxRecords = null, bool canManage = false, int? version = null)
+    {
+        var row = (await HubApiHost.Browser.JsonAsync(await super.GetAsync(Apps))).EnumerateArray().Single(a => a.GetProperty("id").GetGuid() == id);
+        return await super.PutAsync($"{Apps}/{id}", new
+        {
+            name, isEnabled, scopeKeys = scopeKeys ?? [], maxRecords, appAdminsCanManageConnections = canManage,
+            version = version ?? row.GetProperty("version").GetInt32(),
+        });
+    }
+
+    private static Task<HttpResponseMessage> UpdateAppAsync(HubApiHost.Browser super, Guid id, string name, bool isEnabled) => UpdateAppAsync(super, id, name, isEnabled, null);
+
     private static async Task<HubApiHost.Browser> SuperAsync(HubApiHost env)
     {
         var browser = env.NewBrowser();
@@ -41,7 +55,7 @@ public class HubRegistryTests
         var super = await SuperAsync(env);
         var id = await CreateAppAsync(super);
 
-        var updated = await super.PutAsync($"{Apps}/{id}", new { name = "Renamed", isEnabled = true, scopeKeys = new[] { "ProgramId", "Region" } });
+        var updated = await UpdateAppAsync(super, id, "Renamed", true, ["ProgramId", "Region"]);
         Assert.Equal(HttpStatusCode.OK, updated.StatusCode);
         Assert.Equal(["ProgramId", "Region"], (await HubApiHost.Browser.JsonAsync(updated)).GetProperty("scopeKeys").EnumerateArray().Select(v => v.GetString()));
 
@@ -170,14 +184,15 @@ public class HubRegistryTests
         Assert.Equal(HttpStatusCode.BadRequest, (await super.PostAsync(Apps, new { key = "fine-key", name = new string('n', 201) })).StatusCode);
 
         async Task<HttpStatusCode> Update(object body) => (await super.PutAsync($"{Apps}/{id}", body)).StatusCode;
-        Assert.Equal(HttpStatusCode.BadRequest, await Update(new { name = "n", isEnabled = true, scopeKeys = new[] { "bad key" } }));
-        Assert.Equal(HttpStatusCode.BadRequest, await Update(new { name = "n", isEnabled = true, scopeKeys = new[] { "A", "a" } }));
-        Assert.Equal(HttpStatusCode.BadRequest, await Update(new { name = "n", isEnabled = true, scopeKeys = Enumerable.Range(0, 21).Select(i => $"k{i}").ToArray() }));
-        Assert.Equal(HttpStatusCode.BadRequest, await Update(new { name = "n", scopeKeys = Array.Empty<string>() }));
-        Assert.Equal(HttpStatusCode.BadRequest, await Update(new { name = " ", isEnabled = true, scopeKeys = Array.Empty<string>() }));
+        const int V = 1;
+        Assert.Equal(HttpStatusCode.BadRequest, await Update(new { name = "n", isEnabled = true, scopeKeys = new[] { "bad key" }, version = V, appAdminsCanManageConnections = false }));
+        Assert.Equal(HttpStatusCode.BadRequest, await Update(new { name = "n", isEnabled = true, scopeKeys = new[] { "A", "a" }, version = V, appAdminsCanManageConnections = false }));
+        Assert.Equal(HttpStatusCode.BadRequest, await Update(new { name = "n", isEnabled = true, scopeKeys = Enumerable.Range(0, 21).Select(i => $"k{i}").ToArray(), version = V, appAdminsCanManageConnections = false }));
+        Assert.Equal(HttpStatusCode.BadRequest, await Update(new { name = "n", scopeKeys = Array.Empty<string>(), version = V, appAdminsCanManageConnections = false }));
+        Assert.Equal(HttpStatusCode.BadRequest, await Update(new { name = " ", isEnabled = true, scopeKeys = Array.Empty<string>(), version = V, appAdminsCanManageConnections = false }));
 
-        Assert.Equal(HttpStatusCode.NotFound, (await super.PutAsync($"{Apps}/{Guid.NewGuid()}", new { name = "n", isEnabled = true, scopeKeys = Array.Empty<string>() })).StatusCode);
-        Assert.Equal(HttpStatusCode.NotFound, (await super.PutAsync($"{Apps}/{Guid.Empty}", new { name = "n", isEnabled = true, scopeKeys = Array.Empty<string>() })).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await super.PutAsync($"{Apps}/{Guid.NewGuid()}", new { name = "n", isEnabled = true, scopeKeys = Array.Empty<string>(), version = 1, appAdminsCanManageConnections = false })).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await super.PutAsync($"{Apps}/{Guid.Empty}", new { name = "n", isEnabled = true, scopeKeys = Array.Empty<string>(), version = 1, appAdminsCanManageConnections = false })).StatusCode);
 
         // Nothing rejected above left a key or URL behind.
         await using var db = env.HubWideDb();
@@ -210,14 +225,14 @@ public class HubRegistryTests
     });
 
     [MetadataSqlFact]
-    public Task The_default_app_can_be_renamed_and_turned_off_but_not_enabled_or_given_keys_or_urls() => HubApiHost.RunAsync(async env =>
+    public Task The_default_app_can_be_renamed_but_not_enabled_or_given_keys_or_urls() => HubApiHost.RunAsync(async env =>
     {
         var super = await SuperAsync(env);
-        Assert.Equal(HttpStatusCode.NotFound, (await super.PutAsync($"{Apps}/{App.DefaultId}", new { name = "x", isEnabled = true, scopeKeys = Array.Empty<string>() })).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await UpdateAppAsync(super, App.DefaultId, "x", true)).StatusCode);
         using var rsa = RSA.Create(2048);
         Assert.Equal(HttpStatusCode.NotFound, (await super.PostAsync($"{Apps}/{App.DefaultId}/keys", new { kid = "k1", algorithm = "RS256", publicKeyPem = TestTokens.Pem(rsa) })).StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, (await super.PutAsync($"{Apps}/{App.DefaultId}/return-urls", new { urls = new[] { "https://a.example/x" } })).StatusCode);
-        var rename = await super.PutAsync($"{Apps}/{App.DefaultId}", new { name = "Renamed default", isEnabled = false, scopeKeys = Array.Empty<string>() });
+        var rename = await UpdateAppAsync(super, App.DefaultId, "Renamed default", false);
         Assert.Equal(HttpStatusCode.OK, rename.StatusCode);
 
         var delete = await super.SendAsync(HttpMethod.Delete, $"{Apps}/{App.DefaultId}");
@@ -289,7 +304,7 @@ public class HubRegistryTests
         Assert.Equal(HttpStatusCode.OK, await user.StatusAsync("/querybuilder/api/me"));
 
         var super = await SuperAsync(env);
-        var off = await super.PutAsync($"{Apps}/{env.AppA}", new { name = "App A", isEnabled = false, scopeKeys = new[] { "ProgramId" } });
+        var off = await UpdateAppAsync(super, env.AppA, "App A", false, ["ProgramId"]);
         Assert.Equal(HttpStatusCode.OK, off.StatusCode);
 
         // Within the 30 s the cached answer may still say enabled; after it, the session is gone.
@@ -299,5 +314,104 @@ public class HubRegistryTests
         // A super admin can still open the disabled app's registry row.
         Assert.False((await HubApiHost.Browser.JsonAsync(await super.GetAsync(Apps))).EnumerateArray()
             .Single(a => a.GetProperty("id").GetGuid() == env.AppA).GetProperty("isEnabled").GetBoolean());
+    });
+
+    private static async Task<JsonElement> RowAsync(HubApiHost.Browser super, Guid id) =>
+        (await HubApiHost.Browser.JsonAsync(await super.GetAsync(Apps))).EnumerateArray().Single(a => a.GetProperty("id").GetGuid() == id);
+
+    [MetadataSqlFact]
+    public Task Stale_registry_update_is_409() => HubApiHost.RunAsync(async env =>
+    {
+        var super = await SuperAsync(env);
+        var id = await CreateAppAsync(super);
+        Assert.Equal(1, (await RowAsync(super, id)).GetProperty("version").GetInt32());
+
+        Assert.Equal(HttpStatusCode.OK, (await UpdateAppAsync(super, id, "First", true)).StatusCode);
+        Assert.Equal(2, (await RowAsync(super, id)).GetProperty("version").GetInt32());
+
+        var stale = await UpdateAppAsync(super, id, "Second", true, version: 1);
+        Assert.Equal(HttpStatusCode.Conflict, stale.StatusCode);
+        Assert.Equal("First", (await RowAsync(super, id)).GetProperty("name").GetString());
+
+        // A stale version is refused even when the update would change nothing.
+        Assert.Equal(HttpStatusCode.Conflict, (await UpdateAppAsync(super, id, "First", true, version: 1)).StatusCode);
+
+        var missing = await super.PutAsync($"{Apps}/{id}", new { name = "x", isEnabled = true, scopeKeys = Array.Empty<string>(), appAdminsCanManageConnections = false });
+        Assert.Equal(HttpStatusCode.BadRequest, missing.StatusCode);
+    });
+
+    [MetadataSqlFact]
+    public Task No_op_update_writes_no_audit() => HubApiHost.RunAsync(async env =>
+    {
+        var super = await SuperAsync(env);
+        var id = await CreateAppAsync(super);
+        await using var db = env.HubWideDb();
+        var before = await db.AuditLogEntries.CountAsync(a => a.AppId == id);
+
+        var same = await UpdateAppAsync(super, id, "New app", true);
+        Assert.Equal(HttpStatusCode.OK, same.StatusCode);
+        var row = await HubApiHost.Browser.JsonAsync(same);
+        Assert.Equal(1, row.GetProperty("version").GetInt32());
+        Assert.Equal(before, await db.AuditLogEntries.CountAsync(a => a.AppId == id));
+
+        Assert.Equal(HttpStatusCode.OK, (await UpdateAppAsync(super, id, "Changed", true)).StatusCode);
+        Assert.Equal(before + 1, await db.AuditLogEntries.CountAsync(a => a.AppId == id));
+    });
+
+    [MetadataSqlFact]
+    public Task Default_can_be_renamed_and_stays_off() => HubApiHost.RunAsync(async env =>
+    {
+        var super = await SuperAsync(env);
+        var renamed = await UpdateAppAsync(super, App.DefaultId, "Old default", true);
+        Assert.Equal(HttpStatusCode.OK, renamed.StatusCode);
+        Assert.False((await HubApiHost.Browser.JsonAsync(renamed)).GetProperty("isEnabled").GetBoolean());
+        await using var db = env.HubWideDb();
+        var row = await db.Apps.SingleAsync(a => a.Id == App.DefaultId);
+        Assert.Equal("Old default", row.Name);
+        Assert.False(row.IsEnabled);
+    });
+
+    [MetadataSqlFact]
+    public Task Revoke_never_moves_the_stamp_backwards() => HubApiHost.RunAsync(async env =>
+    {
+        var super = await SuperAsync(env);
+        var id = await CreateAppAsync(super);
+        using var rsa = RSA.Create(2048);
+        await super.PostAsync($"{Apps}/{id}/keys", new { kid = "k1", algorithm = "RS256", publicKeyPem = TestTokens.Pem(rsa) });
+        var future = DateTimeOffset.UtcNow.AddDays(30);
+        await using (var db = env.HubWideDb())
+        {
+            (await db.Apps.SingleAsync(a => a.Id == id)).SessionsValidAfterUtc = future;
+            await db.SaveChangesAsync();
+        }
+
+        Assert.Equal(HttpStatusCode.NoContent, (await super.SendAsync(HttpMethod.Delete, $"{Apps}/{id}/keys/k1")).StatusCode);
+
+        await using var check = env.HubWideDb();
+        Assert.Equal(future.UtcDateTime, (await check.Apps.AsNoTracking().SingleAsync(a => a.Id == id)).SessionsValidAfterUtc!.Value.UtcDateTime, TimeSpan.FromMilliseconds(5));
+    });
+
+    [MetadataSqlFact]
+    public Task App_settings_round_trip() => HubApiHost.RunAsync(async env =>
+    {
+        var super = await SuperAsync(env);
+        var id = await CreateAppAsync(super);
+        var saved = await UpdateAppAsync(super, id, "New app", true, [], maxRecords: 5000, canManage: true);
+        Assert.Equal(HttpStatusCode.OK, saved.StatusCode);
+        var row = await HubApiHost.Browser.JsonAsync(saved);
+        Assert.Equal(5000, row.GetProperty("maxRecords").GetInt32());
+        Assert.True(row.GetProperty("appAdminsCanManageConnections").GetBoolean());
+
+        var listed = await RowAsync(super, id);
+        Assert.Equal(5000, listed.GetProperty("maxRecords").GetInt32());
+        Assert.True(listed.GetProperty("appAdminsCanManageConnections").GetBoolean());
+
+        Assert.Equal(HttpStatusCode.BadRequest, (await UpdateAppAsync(super, id, "New app", true, [], maxRecords: 0, canManage: true)).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await UpdateAppAsync(super, id, "New app", true, [], maxRecords: 100001, canManage: true)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await UpdateAppAsync(super, id, "New app", true, [], maxRecords: 100000, canManage: true)).StatusCode);
+
+        var cleared = await HubApiHost.Browser.JsonAsync(await UpdateAppAsync(super, id, "New app", true, [], maxRecords: null, canManage: false));
+        Assert.Equal(JsonValueKind.Null, cleared.GetProperty("maxRecords").ValueKind);
+        Assert.False(cleared.GetProperty("appAdminsCanManageConnections").GetBoolean());
     });
 }

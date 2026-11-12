@@ -26,7 +26,7 @@ public class HubSessionLimitsTests
     }
 
     private static Task<HttpResponseMessage> RenameAsync(HubApiHost.Browser super, Guid id, bool enabled) =>
-        super.PutAsync($"{Apps}/{id}", new { name = "App A", isEnabled = enabled, scopeKeys = new[] { "ProgramId" } });
+        HubRegistryTests.UpdateAppAsync(super, id, "App A", enabled, ["ProgramId"]);
 
     [MetadataSqlFact]
     public Task Turning_an_app_off_ends_its_sessions_for_good_even_after_it_is_turned_back_on() => HubApiHost.RunAsync(async env =>

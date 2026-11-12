@@ -40,6 +40,7 @@ public static class DependencyInjection
             services.AddSingleton<LaunchReplayStore>();
             services.AddScoped<QueryBuilder.Application.Hub.ILaunchRecorder, LaunchRecorder>();
             services.AddScoped<QueryBuilder.Application.Hub.Registry.IAppRegistry, AppRegistry>();
+            services.AddScoped<QueryBuilder.Application.Hub.Registry.IHubAuditReader, HubAuditReader>();
             services.AddScoped<QueryBuilder.Application.DataSourceManagement.IDataSourceMover, DataSourceMover>();
         }
 

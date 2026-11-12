@@ -177,10 +177,27 @@ internal static class HubSuperAdminEndpoints
             await using var scope = context.RequestServices.GetRequiredService<IHubWideScopeFactory>().Create();
             var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
             // Default is the embedded-mode app and None the "no session" marker: neither is something to look at in hub mode.
-            if (appId == App.DefaultId || appId == App.NoneId || !await db.Apps.AsNoTracking().AnyAsync(a => a.Id == appId, ct))
+            var target = appId == App.DefaultId || appId == App.NoneId ? null : await db.Apps.AsNoTracking().FirstOrDefaultAsync(a => a.Id == appId, ct);
+            if (target is null)
             {
                 return Results.NotFound();
             }
+
+            // Written inside the target app (AppId = that app) so its own admins can see that staff looked, and before the
+            // switch, so there is no view without a record. The actor is masked for them when they read it.
+            db.AuditLogEntries.Add(new AuditLogEntry
+            {
+                Actor = $"super:{objectId}",
+                Action = AuditAction.SuperAdminViewedApp,
+                EntityType = nameof(App),
+                EntityId = target.Id,
+                EntityName = target.Name,
+                AppId = target.Id,
+                Summary = $"A super admin viewed '{target.Name}'",
+                IpAddress = context.Connection.RemoteIpAddress?.ToString(),
+                TimestampUtc = context.RequestServices.GetRequiredService<TimeProvider>().GetUtcNow(),
+            });
+            await db.SaveChangesAsync(ct);
         }
 
         // The original issue time is kept: switching apps must not stretch the 8 h absolute lifetime.

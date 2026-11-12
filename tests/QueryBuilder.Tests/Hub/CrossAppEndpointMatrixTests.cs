@@ -57,6 +57,7 @@ public partial class CrossAppEndpointMatrixTests
         ["DELETE /api/hub/apps/{id}/keys/{kid}"] = "super-admin-only registry of apps, not app-scoped; covered by HubRegistryTests",
         ["PUT /api/hub/apps/{id}/return-urls"] = "super-admin-only registry of apps, not app-scoped; covered by HubRegistryTests",
         ["POST /api/hub/view-app"] = "super-admin-only choice of the app to view; covered by SuperAdminTests",
+        ["GET /api/hub/audit"] = "super-admin-only and hub-wide by design (lists every app's audit); covered by HubAuditTests",
         ["POST /api/hub/apps/{appId}/data-sources/{id}/move"] = "super-admin-only move between apps, hub-wide by design; covered by DataSourceLockTests",
         ["GET /api/hub/encryption-key"] = "super-admin-only and hub-wide by design (counts every app); covered by DataSourceLockTests",
         ["POST /api/hub/encryption-key/reencrypt"] = "super-admin-only and hub-wide by design (re-encrypts every app); covered by DataSourceLockTests"

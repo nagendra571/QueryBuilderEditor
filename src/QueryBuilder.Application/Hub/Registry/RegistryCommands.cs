@@ -15,7 +15,10 @@ public sealed record AppDto(
     DateTimeOffset CreatedAtUtc,
     IReadOnlyList<string> ScopeKeys,
     IReadOnlyList<SigningKeyDto> Keys,
-    IReadOnlyList<string> ReturnUrls);
+    IReadOnlyList<string> ReturnUrls,
+    int Version,
+    int? MaxRecords,
+    bool AppAdminsCanManageConnections);
 
 public sealed record ReturnUrlsDto(IReadOnlyList<string> Urls);
 
@@ -27,7 +30,8 @@ public interface IAppRegistry
 {
     Task<IReadOnlyList<AppDto>> ListAsync(CancellationToken ct);
     Task<AppDto> CreateAsync(string key, string name, CancellationToken ct);
-    Task<AppDto> UpdateAsync(Guid id, string name, bool isEnabled, List<string> scopeKeys, CancellationToken ct);
+    /// <summary>Throws <see cref="ConcurrencyConflictException"/> on a stale version; a call that changes nothing writes no audit and keeps the version.</summary>
+    Task<AppDto> UpdateAsync(Guid id, int version, string name, bool isEnabled, List<string> scopeKeys, int? maxRecords, bool appAdminsCanManageConnections, CancellationToken ct);
     Task<SigningKeyDto> AddKeyAsync(Guid appId, string kid, string algorithm, string pem, string fingerprint, CancellationToken ct);
     Task RevokeKeyAsync(Guid appId, string kid, CancellationToken ct);
     Task<ReturnUrlsDto> SetReturnUrlsAsync(Guid appId, List<string> urls, CancellationToken ct);
@@ -35,7 +39,7 @@ public interface IAppRegistry
 
 public sealed record GetAppsQuery : IRequest<IReadOnlyList<AppDto>>;
 public sealed record CreateAppCommand(string? Key, string? Name) : IRequest<AppDto>;
-public sealed record UpdateAppCommand(Guid Id, string? Name, bool IsEnabled, List<string>? ScopeKeys) : IRequest<AppDto>;
+public sealed record UpdateAppCommand(Guid Id, int Version, string? Name, bool IsEnabled, List<string>? ScopeKeys, int? MaxRecords, bool AppAdminsCanManageConnections) : IRequest<AppDto>;
 public sealed record AddSigningKeyCommand(Guid AppId, string? Kid, string? Algorithm, string? PublicKeyPem) : IRequest<SigningKeyDto>;
 public sealed record RevokeSigningKeyCommand(Guid AppId, string? Kid) : IRequest<Unit>;
 public sealed record SetReturnUrlsCommand(Guid AppId, List<string>? Urls) : IRequest<ReturnUrlsDto>;
@@ -89,7 +93,13 @@ public sealed class UpdateAppCommandHandler(ICurrentUserService user, IHubWideSc
         RegistryAccess.RequireSuperAdmin(user);
         var name = RegistryRules.AppName(request.Name);
         var keys = RegistryRules.ScopeKeys(request.ScopeKeys);
-        return RegistryAccess.RunAsync(factory, r => r.UpdateAsync(request.Id, name, request.IsEnabled, keys, ct));
+        if (request.MaxRecords is { } max && !RecordLimits.IsValid(max))
+        {
+            throw new CatalogValidationException($"The record limit must be between {RecordLimits.Min:N0} and {RecordLimits.Max:N0}, or empty for none.");
+        }
+
+        return RegistryAccess.RunAsync(factory, r => r.UpdateAsync(
+            request.Id, request.Version, name, request.IsEnabled, keys, request.MaxRecords, request.AppAdminsCanManageConnections, ct));
     }
 }
 

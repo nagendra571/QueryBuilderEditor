@@ -1,6 +1,7 @@
 using QueryBuilder.Editor.Hub;
 using QueryBuilder.Application.Common;
 using QueryBuilder.Application.Hub.Registry;
+using QueryBuilder.Domain.Enums;
 
 namespace QueryBuilder.Editor.Endpoints;
 
@@ -13,12 +14,16 @@ internal static class HubRegistryEndpoints
     public const string Path = QueryBuilderRoutes.BasePath + "/api/hub/apps";
 
     private sealed record CreateAppRequest(string? Key, string? Name);
-    private sealed record UpdateAppRequest(string? Name, bool? IsEnabled, List<string>? ScopeKeys);
+    private sealed record UpdateAppRequest(int? Version, string? Name, bool? IsEnabled, List<string>? ScopeKeys, int? MaxRecords, bool? AppAdminsCanManageConnections);
     private sealed record AddKeyRequest(string? Kid, string? Algorithm, string? PublicKeyPem);
     private sealed record ReturnUrlsRequest(List<string>? Urls);
 
     public static void MapHubRegistryEndpoints(this IEndpointRouteBuilder endpoints)
     {
+        endpoints.MapGroup(QueryBuilderRoutes.BasePath + "/api/hub/audit").RequireSuperAdmin().WithTags("Hub registry")
+            .MapGet("", async (Guid? appId, AuditAction? action, DateTimeOffset? before, int? take, ISender sender, CancellationToken ct) =>
+                Results.Json(await sender.Send(new GetHubAuditQuery(appId, action, before, take), ct), QueryBuilderJson.Options));
+
         var group = endpoints.MapGroup(Path).RequireSuperAdmin().WithTags("Hub registry");
 
         group.MapGet("", async (ISender sender, CancellationToken ct) =>
@@ -36,7 +41,9 @@ internal static class HubRegistryEndpoints
             var request = await Read<UpdateAppRequest>(http, ct);
             // A missing flag is refused rather than read as "off", which would disable an app by omission.
             var isEnabled = request.IsEnabled ?? throw new BadHttpRequestException("isEnabled is required.");
-            return Results.Json(await sender.Send(new UpdateAppCommand(id, request.Name, isEnabled, request.ScopeKeys), ct), QueryBuilderJson.Options);
+            var version = request.Version ?? throw new BadHttpRequestException("version is required.");
+            var canManage = request.AppAdminsCanManageConnections ?? throw new BadHttpRequestException("appAdminsCanManageConnections is required.");
+            return Results.Json(await sender.Send(new UpdateAppCommand(id, version, request.Name, isEnabled, request.ScopeKeys, request.MaxRecords, canManage), ct), QueryBuilderJson.Options);
         });
 
         group.MapPost("/{id:guid}/keys", async (Guid id, HttpContext http, ISender sender, CancellationToken ct) =>
