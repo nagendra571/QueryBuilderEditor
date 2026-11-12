@@ -6,10 +6,10 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { moveCountsSummary } from '@/features/hub/app-form'
+import { DEFAULT_APP_ID } from '@/features/hub/permissions'
 import { useHubApps, useMoveDataSource, useSetDataSourceLock } from '@/hooks/useHub'
 import { ApiError } from '@/lib/api-client'
 
-const DEFAULT_APP_ID = '00000000-0000-0000-0000-00000000000d'
 
 /** Super admins only, hub mode only: who may change this data source, and which app owns it. */
 export function DataSourceHubControls({ dataSourceId, name, locked, appId }: { dataSourceId: string; name: string; locked: boolean; appId: string | null }) {

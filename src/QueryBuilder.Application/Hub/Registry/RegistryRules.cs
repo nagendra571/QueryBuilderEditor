@@ -14,10 +14,10 @@ public static partial class RegistryRules
     public const int MaxReturnUrls = 20;
     public const int MaxReturnUrlLength = 800;
 
-    [GeneratedRegex("^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")]
+    [GeneratedRegex("^[A-Za-z0-9][A-Za-z0-9._-]{0,63}\\z")]
     private static partial Regex KidPattern();
 
-    [GeneratedRegex("^[a-z0-9][a-z0-9-]{1,62}$")]
+    [GeneratedRegex("^[a-z0-9][a-z0-9-]{1,62}\\z")]
     private static partial Regex AppKeyPattern();
 
     public static string AppKey(string? key)

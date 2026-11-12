@@ -1,5 +1,8 @@
 import type { MeDto } from '@/lib/api'
 
+/** The app embedded mode used; it is never launched from another app. Matches App.DefaultId on the server. */
+export const DEFAULT_APP_ID = '00000000-0000-0000-0000-00000000000d'
+
 export type HubRole = 'Admin' | 'Author' | 'Viewer'
 
 export interface NavItemSpec {

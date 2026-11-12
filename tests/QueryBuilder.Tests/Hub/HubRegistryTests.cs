@@ -14,6 +14,17 @@ public class HubRegistryTests
 {
     private const string Apps = "/querybuilder/api/hub/apps";
 
+    // .NET's $ also matches before a final newline, so these patterns end in \z.
+    [Theory]
+    [InlineData("k1\n")]
+    [InlineData("k1\r\n")]
+    public void A_key_id_or_app_key_with_a_trailing_newline_is_refused(string value)
+    {
+        Assert.Throws<QueryBuilder.Application.Exceptions.CatalogValidationException>(() => QueryBuilder.Application.Hub.Registry.RegistryRules.Kid(value));
+        Assert.Throws<QueryBuilder.Application.Exceptions.CatalogValidationException>(() => QueryBuilder.Application.Hub.Registry.RegistryRules.AppKey(value.ToLowerInvariant()));
+        Assert.Equal("k1", QueryBuilder.Application.Hub.Registry.RegistryRules.Kid("k1"));
+    }
+
     /// <summary>Sends an update carrying the app's current version (and its current settings for whatever the call leaves out).</summary>
     internal static async Task<HttpResponseMessage> UpdateAppAsync(HubApiHost.Browser super, Guid id, string name, bool isEnabled, string[]? scopeKeys = null,
         int? maxRecords = null, bool canManage = false, int? version = null)

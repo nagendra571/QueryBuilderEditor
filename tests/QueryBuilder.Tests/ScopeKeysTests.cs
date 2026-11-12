@@ -17,6 +17,14 @@ public class ScopeKeysTests
     private static DataSource Source(Guid id, params string[] keys) =>
         new() { Id = id, Name = $"Source {id.ToString()[..1]}", IsActive = true, ScopeKeys = [.. keys] };
 
+    [Theory]
+    [InlineData("ProgramId", true)]
+    [InlineData("ProgramId\n", false)]
+    [InlineData("ProgramId\r\n", false)]
+    [InlineData("1abc", false)]
+    public void A_scope_key_name_must_match_exactly_with_no_trailing_newline(string key, bool valid) =>
+        Assert.Equal(valid, DataScopeKeys.IsValidName(key));
+
     // ---- Effective ----------------------------------------------------------------------------------------
 
     [Fact]

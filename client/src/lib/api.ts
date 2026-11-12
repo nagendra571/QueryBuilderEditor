@@ -1,4 +1,5 @@
 import { dropOrphanParameters } from '@/features/parameters/param-values'
+import { auditQueryParams } from '@/features/hub/audit-filter'
 import { apiClient } from '@/lib/api-client'
 import type {
   AdminDataScopeDto,
@@ -235,7 +236,7 @@ export const hubApi = {
   },
   setReturnUrls: async (id: string, urls: string[]): Promise<{ urls: string[] }> =>
     (await apiClient.put(`/hub/apps/${id}/return-urls`, { urls })).data,
-  audit: async (params: HubAuditParams): Promise<HubAuditEntryDto[]> => (await apiClient.get('/hub/audit', { params })).data,
+  audit: async (params: HubAuditParams): Promise<HubAuditEntryDto[]> => (await apiClient.get('/hub/audit', { params: auditQueryParams(params) })).data,
   setDataSourceLock: async (id: string, locked: boolean): Promise<void> => {
     await apiClient.put(`/admin/data-sources/${id}/lock`, { locked })
   },

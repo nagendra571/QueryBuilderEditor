@@ -19,11 +19,11 @@ import {
   validateReturnUrls,
   validateScopeKeys,
 } from '@/features/hub/app-form'
+import { DEFAULT_APP_ID } from '@/features/hub/permissions'
 import { hubAppsKey, useAddSigningKey, useHubApps, useRevokeSigningKey, useSetReturnUrls, useUpdateApp } from '@/hooks/useHub'
 import { ApiError } from '@/lib/api-client'
 import type { HubAppDto, HubSigningKeyDto } from '@/lib/api'
 
-const DEFAULT_APP_ID = '00000000-0000-0000-0000-00000000000d'
 const STALE = 'Someone else changed this app. Reload to see their changes.'
 
 const when = (iso: string) => new Date(iso).toLocaleString()

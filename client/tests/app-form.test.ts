@@ -12,7 +12,7 @@ import {
   validateReturnUrls,
   validateScopeKeys,
 } from '../src/features/hub/app-form.ts'
-import { actionLabel, HUB_AUDIT_ACTIONS } from '../src/features/hub/audit-filter.ts'
+import { actionLabel, auditQueryParams, HUB_AUDIT_ACTIONS } from '../src/features/hub/audit-filter.ts'
 
 // The accept and refuse values below are the ones HubRegistryTests uses against the server.
 
@@ -117,4 +117,11 @@ test('audit action names read as words, and the filter offers the hub actions', 
   assert.equal(actionLabel('dataSourceLockChanged'), 'Data source lock changed')
   assert.equal(actionLabel('launchRefused'), 'Launch refused')
   for (const a of ['dataSourceMoved', 'dataSourceLockChanged', 'appRegistryChanged']) assert.ok((HUB_AUDIT_ACTIONS as readonly string[]).includes(a), a)
+})
+
+test('the audit request sends the PascalCase action name the server binds', () => {
+  assert.equal(auditQueryParams({ action: 'dataSourceMoved' }).action, 'DataSourceMoved')
+  assert.equal(auditQueryParams({ action: 'launchRefused', take: 50 }).take, 50)
+  assert.equal(auditQueryParams({}).action, undefined)
+  for (const a of HUB_AUDIT_ACTIONS) assert.match(auditQueryParams({ action: a }).action!, /^[A-Z][A-Za-z]+$/)
 })

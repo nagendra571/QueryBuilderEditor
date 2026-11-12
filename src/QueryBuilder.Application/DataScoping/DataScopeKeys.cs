@@ -27,6 +27,6 @@ public static partial class DataScopeKeys
 
     public static bool IsValidName(string? key) => key is not null && ValidKey().IsMatch(key);
 
-    [GeneratedRegex("^[A-Za-z_][A-Za-z0-9_]{0,127}$")]
+    [GeneratedRegex("^[A-Za-z_][A-Za-z0-9_]{0,127}\\z")]
     private static partial Regex ValidKey();
 }
