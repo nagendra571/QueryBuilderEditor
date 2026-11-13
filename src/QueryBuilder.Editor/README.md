@@ -802,6 +802,23 @@ and have your DBA run the idempotent script shipped at `scripts/QueryBuilder.sch
 in this package instead. It's safe to run against a fresh database or re-run against an
 already-migrated one. With `sqlcmd`, pass `-I` (the script's filtered indexes need `QUOTED_IDENTIFIER`).
 
+**Database roles.** With auto-migration the login needs `db_ddladmin` as well as `db_datareader` and `db_datawriter` (a
+missing `db_ddladmin` shows up as `CREATE TABLE permission denied` at the first start). With the DBA script, `db_datareader` and
+`db_datawriter` are enough.
+
+**Entra (Azure AD) sign-in to SQL Server.** QueryBuilder uses Microsoft.Data.SqlClient 7, which moved every
+`Authentication=Active Directory ...` method (Managed Identity, Default, Service Principal, Interactive, ...) into a separate
+package. If your metadata connection string or a data source's uses one, add it to your host, at the same version as
+QueryBuilder's SqlClient (7.1.0 for 2.0.0):
+
+```bash
+dotnet add package Microsoft.Data.SqlClient.Extensions.Azure --version 7.1.0
+```
+
+Without it the connection fails with "Cannot find an authentication provider for 'ActiveDirectoryManagedIdentity'". No code is
+needed; SqlClient finds the methods once the package is present. For a managed identity, an Entra admin of the database creates
+its user with `CREATE USER [<name>] FROM EXTERNAL PROVIDER;` and grants the roles above.
+
 ## Setup Diagnostics
 
 Once registered, visit `GET /_setup` in Development to check database connectivity, migration

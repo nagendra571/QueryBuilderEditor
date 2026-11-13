@@ -10,6 +10,10 @@
   <ItemGroup>
     <!-- Host only (MIT, Microsoft); never part of the QueryBuilder.Editor package. -->
     <PackageReference Include="Microsoft.AspNetCore.Authentication.OpenIdConnect" Version="10.0.14" />
+    <!-- SqlClient 7 moved Entra authentication (Managed Identity, Default, ...) into this package; without it a
+         connection string with Authentication=Active Directory ... fails with "Cannot find an authentication provider".
+         Keep its version in step with Microsoft.Data.SqlClient in QueryBuilder.Editor. -->
+    <PackageReference Include="Microsoft.Data.SqlClient.Extensions.Azure" Version="7.1.0" />
   </ItemGroup>
 
   <ItemGroup>

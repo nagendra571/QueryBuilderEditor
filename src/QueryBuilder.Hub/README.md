@@ -291,8 +291,13 @@ database can run out of order; keep the default.
 
 ## 6. First run
 
-1. Create an **empty** database for the hub and a SQL login or identity with read and write rights on it. With
-   `Hub:ApplyMigrations` left at `true`, that login also needs the rights to create and alter tables on the first start.
+1. Create an **empty** database for the hub and a SQL login or identity with read and write rights on it
+   (`db_datareader`, `db_datawriter`). With `Hub:ApplyMigrations` left at `true`, that login also needs the rights to create
+   and alter tables on the first start and on upgrades (`db_ddladmin`); without them the start fails with
+   `CREATE TABLE permission denied`. A managed identity (`Authentication=Active Directory Managed Identity` in
+   `Hub:ConnectionString`) works: this host includes `Microsoft.Data.SqlClient.Extensions.Azure`, which SqlClient 7 needs for
+   every `Active Directory ...` method; create its database user with `CREATE USER [<name>] FROM EXTERNAL PROVIDER;`. Details
+   and connection string examples: [hub setup guide, A2](../../docs/hub-setup-guide.md#a2-the-database).
 2. Set the settings above and start the host. It applies the schema and records `MetadataSettings` `Mode` = `Hub`: the hub
    **claims** the database. A database that already holds QueryBuilder data but no recorded mode is refused ("the hub
    needs its own empty metadata database"), and so is one recorded as an embedded installation. The built-in *Default* app
@@ -322,7 +327,8 @@ The hub's login then needs `SELECT`, `INSERT`, `UPDATE` and `DELETE` on all Quer
 (the first start inserts the mode row; if you would rather not grant that, your DBA can insert `('Mode', 'Hub')`
 and the hub then only reads it; with that route also run
 `UPDATE Apps SET IsEnabled = 0 WHERE Id = '00000000-0000-0000-0000-00000000000d';`, because the hub turns the Default app off when it
-claims a database and a DBA-inserted marker skips that step), `LaunchReplays` and `DataProtectionKeys`.
+claims a database and a DBA-inserted marker skips that step), `LaunchReplays` and `DataProtectionKeys`. The roles
+`db_datareader` and `db_datawriter` cover all of that.
 
 ## 8. Troubleshooting
 
@@ -330,6 +336,8 @@ claims a database and a DBA-inserted marker skips that step), `LaunchReplays` an
 |---|---|---|
 | Host won't start, `Hub:... is required` | A required setting is empty | Set it (environment variable names are in section 3) |
 | Host won't start and the message names `DataSourceManagement.EncryptionKey`, `HubOptions.SuperAdmins.TenantIds`, `HubOptions.SuperAdmins` (object ids or user ids, emails or groups), `HubOptions.SuperAdmins.CodeNames`, `HubOptions.SuperAdmins.GroupsClaim`, `HubOptions.SuperAdminSignInScheme`, `HubOptions.SignInCodes` or `HubOptions.Audience` | Those are the package's option names; the host fills them from `Hub:DataSourceKey` (and `Hub:PreviousDataSourceKeys`), `Hub:SuperAdmins:TenantIds`, `Hub:SuperAdmins:ObjectIds` / `UserIds` / `Emails` / `GroupIds` / `CodeNames`, `Hub:SignIn:Provider:GroupsClaim`, `Hub:SignIn:Provider:Kind` (no provider, no codes), `Hub:SignIn:Codes` and `Hub:Audience` | Set the matching `Hub:*` setting. "`SuperAdminSignInScheme` is required ... unless `SignInCodes` is enabled" means neither a `Kind` nor codes is set (section 1) |
+| Host won't start, "Cannot find an authentication provider for 'ActiveDirectoryManagedIdentity'" (or another `ActiveDirectory...` name) | A build of this host from before the `Microsoft.Data.SqlClient.Extensions.Azure` reference was added | Rebuild from current `main` and redeploy |
+| Host won't start, `CREATE TABLE permission denied in database '...'` | `Hub:ApplyMigrations` is `true` and the login cannot create tables | Grant `db_ddladmin` (plus `db_datareader`, `db_datawriter`), or have a DBA run the script and set `Hub:ApplyMigrations` to `false` (section 7) |
 | Host won't start, "Hub:Entra is no longer used" | An old `Hub:Entra:*` setting is still present (file or environment variable `Hub__Entra__...`) | Move them to `Hub:SignIn:Provider:*` and set `Kind` to `Entra` (section 1) |
 | Host won't start, "Hub:SignIn:Provider:Kind must be empty, Entra or OpenIdConnect" | Misspelled or wrong case | Use exactly `Entra` or `OpenIdConnect`, or leave it empty for codes only |
 | Host won't start, "Hub:SignIn:Provider:TenantId must name one tenant, not common, organizations or consumers" | A multi-tenant authority would let users of any tenant in | Use your own tenant's id |
