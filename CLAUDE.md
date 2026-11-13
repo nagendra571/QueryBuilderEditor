@@ -32,6 +32,18 @@ integration ergonomics (single-call registration, embedded SPA, DBA-friendly mig
 
 ## Where we left off (update this at the end of each session)
 
+**2026-11-12, after 2.0.0 (branch `fix/hub-entra-sql-auth`, commit only, not pushed): first real hub deployment by the user hit
+two problems.** (1) `Cannot find an authentication provider for 'ActiveDirectoryManagedIdentity'`: SqlClient 7 moved every
+`Authentication=Active Directory ...` method into `Microsoft.Data.SqlClient.Extensions.Azure` (MIT, brings Azure.Identity/MSAL).
+Added 7.1.0 to `src/QueryBuilder.Hub` only (not the Editor package — embedded hosts add it themselves, documented); keep its
+version in step with `Microsoft.Data.SqlClient` in Editor/Infrastructure. Verified with a scratch console:
+`SqlAuthenticationProvider.GetProvider(ActiveDirectoryManagedIdentity)` is null without the package and
+`ActiveDirectoryAuthenticationProvider` with it; no code registration needed. Not verified against a real Azure SQL.
+(2) `CREATE TABLE permission denied`: auto-migration needs `db_ddladmin` (+ `db_datareader`/`db_datawriter`); the DBA-script
+route needs only the data roles. Documented in `docs/hub-setup-guide.md` (A2 connection string table, B1, troubleshooting,
+checklists), `src/QueryBuilder.Hub/README.md`, both READMEs ("Database roles and Entra sign-in"/"Database") and
+`Scripts/README.md`. No package version change needed (the hub isn't on NuGet; docs only for Editor).
+
 **2026-11-12: released as QueryBuilder.Editor 2.0.0 + QueryBuilder.Launch 1.0.0 (see the top of this file); the notes
 below about "local, never pushed" and "release still needs" are history — all of it is on `main` and on NuGet. Setup guide:
 `docs/hub-setup-guide.md`. Open questions for the user still stand: `docs/superpowers/plans/2026-11-12-hub-part4-questions.md`.**

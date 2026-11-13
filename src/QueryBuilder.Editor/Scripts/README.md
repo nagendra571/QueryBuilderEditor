@@ -55,6 +55,26 @@ Things your DBA should know:
 - A hub login needs `SELECT`, `INSERT`, `UPDATE` and `DELETE` on every QueryBuilder table, including `LaunchReplays` and
   `DataProtectionKeys`. Set `Hub:ApplyMigrations` to `false` in the hub host (or `options.ApplyMigrations = false` in your own).
 
+## Database roles
+
+| Who creates the tables | Roles for the application's login or identity |
+|---|---|
+| The app (auto-migration, the default) | `db_ddladmin`, `db_datareader`, `db_datawriter` |
+| A DBA, with this script (`ApplyMigrations = false`) | `db_datareader`, `db_datawriter` |
+
+```sql
+-- SQL login:            CREATE USER [qb_app] FOR LOGIN [qb_app];
+-- Entra managed identity (run as an Entra admin of the database):
+--                       CREATE USER [<app or identity name>] FROM EXTERNAL PROVIDER;
+ALTER ROLE db_datareader ADD MEMBER [<user>];
+ALTER ROLE db_datawriter ADD MEMBER [<user>];
+ALTER ROLE db_ddladmin   ADD MEMBER [<user>];   -- only when the app migrates itself
+```
+
+`CREATE TABLE permission denied` at the first start means the app is migrating itself without `db_ddladmin`. An app whose
+connection string uses `Authentication=Active Directory ...` also needs the `Microsoft.Data.SqlClient.Extensions.Azure` package
+(see the package README, "Database").
+
 ## Usage
 
 ```csharp

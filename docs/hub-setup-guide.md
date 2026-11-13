@@ -68,8 +68,9 @@ Tick these off first.
 - [ ] **SQL Server for the hub's metadata.** One **empty** database used only by the hub. Never one that an embedded
       QueryBuilder uses: the hub refuses a database that already holds QueryBuilder data without a recorded mode. Know the
       connection string and make a SQL login or identity that can read and write it. If the hub is to create the tables itself
-      (the default), that login also needs the rights to create and alter tables on the first start and on each upgrade. If your
-      DBA runs the schema script instead, see step A2.
+      (the default), that login also needs the rights to create and alter tables on the first start and on each upgrade
+      (`db_ddladmin`, with `db_datareader` and `db_datawriter`). If your DBA runs the schema script instead, see step A2. A
+      managed identity (`Authentication=Active Directory Managed Identity`) works too; A2 shows how.
 - [ ] **A public https address** for the hub, for example `https://hub.example.com`, with a certificate. The hub must be
       served at the root of its own host name. It cannot live under a path such as `/tools`. HTTPS is required: the session cookie
       is named `__Host-qb-hub` and browsers refuse such a cookie unless it is `Secure`.
@@ -135,13 +136,22 @@ dotnet QueryBuilder.Hub.dll --urls https://localhost:5001
 
 ### A2. The database
 
-1. Create an **empty** database, for example `QueryBuilderHub`.
-2. Create a login or identity for the hub with read and write rights on it.
-3. Choose who creates the tables:
+1. Create an **empty** database, for example `QueryBuilderHub`. Use it for nothing else.
+2. Create a login or identity for the hub in that database (see "How the hub signs in to SQL Server" below).
+3. Choose who creates the tables, and grant the roles that option needs:
 
 **Option 1: the hub does it (default).** Leave `Hub:ApplyMigrations` at `true`. On first start the hub creates the tables
 and records `MetadataSettings` `Mode` = `Hub`, which claims the database. The login needs the rights to create and alter
-tables for that start, and again for each upgrade.
+tables for that start, and again for each upgrade. Without them the first start fails with
+`CREATE TABLE permission denied in database '...'`. Grant:
+
+```sql
+ALTER ROLE db_ddladmin   ADD MEMBER [<hub login or identity>];  -- create and alter tables (first start, upgrades)
+ALTER ROLE db_datareader ADD MEMBER [<hub login or identity>];
+ALTER ROLE db_datawriter ADD MEMBER [<hub login or identity>];
+```
+
+Keep `db_ddladmin`: later versions that add tables or columns upgrade themselves the same way.
 
 **Option 2: your DBA does it.** Set `Hub:ApplyMigrations` to `false` (the hub then never runs DDL).
 
@@ -164,11 +174,27 @@ tables for that start, and again for each upgrade.
    ```
 3. The hub's login needs `SELECT`, `INSERT`, `UPDATE` and `DELETE` on every QueryBuilder table, including `MetadataSettings`,
    `LaunchReplays` and `DataProtectionKeys`. (If you do not grant `INSERT` on `MetadataSettings`, the DBA must do the insert above, and the hub
-   then only reads it.)
+   then only reads it.) The two data roles cover all of it:
+
+   ```sql
+   ALTER ROLE db_datareader ADD MEMBER [<hub login or identity>];
+   ALTER ROLE db_datawriter ADD MEMBER [<hub login or identity>];
+   ```
 4. Repeat the script before each upgrade.
 
 If the database already holds QueryBuilder data from an embedded app, the hub refuses to start ("needs its own empty
-metadata database"). Give it a new database.
+metadata database"). Give it a new database. A failed first start (for example a permission error) leaves nothing to clean up.
+
+**How the hub signs in to SQL Server.** `Hub:ConnectionString` decides it:
+
+| Sign-in | Connection string | Who the roles above go to |
+|---|---|---|
+| SQL login | `Server=tcp:<server>,1433;Database=QueryBuilderHub;User Id=<login>;Password=<password>;Encrypt=True` | `CREATE USER [<login>] FOR LOGIN [<login>];` first |
+| Entra managed identity (Azure App Service, VM) | `Server=tcp:<server>.database.windows.net,1433;Database=QueryBuilderHub;Authentication=Active Directory Managed Identity;Encrypt=True` (add `User Id=<client id>` for a user-assigned identity) | An Entra admin of the database runs `CREATE USER [<app or identity name>] FROM EXTERNAL PROVIDER;` first |
+| Windows authentication (IIS on a domain) | `Server=<server>;Database=QueryBuilderHub;Integrated Security=True;Encrypt=True` | The app pool identity: `IIS APPPOOL\<pool>` on the same machine, or the pool's domain account |
+
+The ready-made hub includes `Microsoft.Data.SqlClient.Extensions.Azure`, which every `Authentication=Active Directory ...`
+method needs since SqlClient 7. A host of your own needs it too (Part B).
 
 ### A3. Settings
 
@@ -420,6 +446,17 @@ At startup, `AddQueryBuilderEditor` refuses to run in hub mode unless:
 The package takes over Data Protection (keys stored in the metadata database, encrypted with the data source key) and registers the
 `__Host-qb-hub` session cookie scheme and a short-lived cookie scheme named `QueryBuilder.HubExternal`. It does not register
 the OpenID Connect handler. You add it.
+
+If the metadata connection string (or a data source's) uses Entra authentication (`Authentication=Active Directory Managed
+Identity`, `Active Directory Default` and so on), add the package that holds those methods. Since SqlClient 7 they are not in
+SqlClient itself, and without it the connection fails with "Cannot find an authentication provider for '...'". Keep its version
+in step with the `Microsoft.Data.SqlClient` that QueryBuilder.Editor uses (7.1.0 for 2.0.0):
+
+```bash
+dotnet add package Microsoft.Data.SqlClient.Extensions.Azure --version 7.1.0
+```
+
+Nothing else is needed: SqlClient finds the methods once the package is in the app. The database roles are in A2.
 
 ### B2. A complete minimal `Program.cs`
 
@@ -1072,6 +1109,8 @@ plus the data source's `AppUsers` view (the picker reads its first 500 rows). Th
 | "Hub:SignIn:Provider:Kind must be empty, Entra or OpenIdConnect" | Spelling or case | Use exactly one of them. |
 | "...TenantId must name one tenant..." | `common`, `organizations` or `consumers` | Use your tenant's id. |
 | "needs its own empty metadata database" / "belongs to an Embedded-mode installation" | The database was used by an embedded QueryBuilder | Use a new empty database. |
+| "Cannot find an authentication provider for 'ActiveDirectoryManagedIdentity'" (or another `ActiveDirectory...` name) | The connection string uses Entra authentication and the app lacks `Microsoft.Data.SqlClient.Extensions.Azure` | Rebuild the ready-made hub from current `main` (it includes the package), or add the package to your own host (B1). |
+| `CREATE TABLE permission denied in database '...'` at the first start | `Hub:ApplyMigrations` is `true` and the login cannot create tables | Grant `db_ddladmin` (plus `db_datareader`, `db_datawriter`), or let a DBA run the script and set `Hub:ApplyMigrations` to `false` (A2). |
 | `AADSTS50011` at Entra, or a redirect-URI error at another provider | Registered redirect URI differs from `https://<host>` + `CallbackPath`, or the proxy's headers are not trusted (the URI is built as `http://...`) | Register the exact URL; fix `KnownProxies`/`KnownNetworks` (A5). |
 | Sign-in loops, or redirects to `http://` | Proxy headers not trusted | Fix A5. |
 | After provider sign-in: generic "This link to QueryBuilder isn't valid or has expired" (403) | Not on the allowlist, or in too many groups for Entra to list | A super admin reads `SuperAdminSignInRefused` in the audit log (`NotAllowlisted`, `WrongTenant`, `GroupsOverage`, `NoStableId`); add the entry and restart. |
@@ -1089,7 +1128,8 @@ plus the data source's `AppUsers` view (the picker reads its first 500 rows). Th
 
 ### Go-live checklist for the hub
 
-- [ ] Empty hub database, its own; login rights as in A2; backups planned.
+- [ ] Empty hub database, its own; login roles as in A2 (`db_ddladmin` too unless a DBA runs the script); backups planned.
+- [ ] Entra authentication in `Hub:ConnectionString`: the hub was built with `Microsoft.Data.SqlClient.Extensions.Azure` (the ready-made hub from current `main` is).
 - [ ] `Hub:Audience` is the public https address, no trailing slash, and the same address the apps put in `aud`.
 - [ ] `Hub:DataSourceKey` set on every instance; a copy in the password manager; different from every other deployment.
 - [ ] Every secret is in environment variables or a server-only store, none in git or in `appsettings.json`.

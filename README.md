@@ -466,6 +466,22 @@ refused.
   database depend on starting in order.
 - **The hub needs its own empty metadata database.** See the next section.
 
+### Database roles and Entra sign-in to SQL Server
+
+These apply to embedded hosts and hubs alike.
+
+- **Roles.** With auto-migration (the default; `Hub:ApplyMigrations` / `options.ApplyMigrations` = `true`) the login needs
+  `db_ddladmin`, `db_datareader` and `db_datawriter`. Without `db_ddladmin` the first start fails with
+  `CREATE TABLE permission denied in database '...'`. With the DBA script, `db_datareader` and `db_datawriter` are enough.
+- **Entra authentication** (`Authentication=Active Directory Managed Identity`, `Active Directory Default`, ...) needs the
+  package `Microsoft.Data.SqlClient.Extensions.Azure`, because SqlClient 7 moved those methods out of SqlClient. Without it:
+  "Cannot find an authentication provider for 'ActiveDirectoryManagedIdentity'". The ready-made hub (`src/QueryBuilder.Hub`)
+  includes it; your own host adds it at the same version as QueryBuilder's SqlClient (7.1.0 for 2.0.0):
+  `dotnet add package Microsoft.Data.SqlClient.Extensions.Azure --version 7.1.0`. A managed identity's database user is
+  created by an Entra admin with `CREATE USER [<name>] FROM EXTERNAL PROVIDER;`.
+
+Connection string examples: [hub setup guide, A2](docs/hub-setup-guide.md#a2-the-database).
+
 ### Upgrading the database to 2.0.0
 
 2.0.0 adds four migrations: `AddApps`, `AddHubRegistry`, `AddAppSessionsValidAfter` and `AddHubRolesAndPublishing`. **DBA-managed
