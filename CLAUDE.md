@@ -32,6 +32,17 @@ integration ergonomics (single-call registration, embedded SPA, DBA-friendly mig
 
 ## Where we left off (update this at the end of each session)
 
+**2026-11-13, user's first hub is running (Azure; apps on .NET 6, 8 and Framework 4.8, all on Azure App Service).** The user's
+decision for now: **app owners keep the launch private key as a file in each app's deployment package** (certificate/Key Vault
+"later"). Documented as the "simplest start" in `src/QueryBuilder.Launch/README.md` §2a, `docs/hub-setup-guide.md` C2a (+ App
+Service notes in C5, checklist), both READMEs and the Hub README: never in git (`.gitignore`), .NET 6+ = `Keys\qb-launch-private.pem`
+at the content root (not `wwwroot`) via `RSA.ImportFromPem`; **.NET Framework 4.8 has no PEM reader** → same key as XML
+(`ToXmlString(true)` in PowerShell 7) in `App_Data\qb-launch\`, loaded with `new RSACng()` + `FromXmlString` (RSACng = in-memory,
+no profile/key container on App Service). Verified on net48 with QueryBuilder.Launch 1.0.0: token signed from the XML key
+verified with the public PEM. Certificate route on App Service = upload PFX + `WEBSITE_LOAD_CERTIFICATES`, `CurrentUser\My`
+(Linux `/var/ssl/private/<thumbprint>.p12`), Basic plan+. Possible later: `LaunchSigningKey.FromPem` in Launch 1.0.1 (hand-rolled
+PKCS#8 parsing on netstandard2.0) so 4.8 can use the `.pem` too — offered, not built.
+
 **2026-11-12, after 2.0.0 (branch `fix/hub-entra-sql-auth`, commit only, not pushed): first real hub deployment by the user hit
 two problems.** (1) `Cannot find an authentication provider for 'ActiveDirectoryManagedIdentity'`: SqlClient 7 moved every
 `Authentication=Active Directory ...` method into `Microsoft.Data.SqlClient.Extensions.Azure` (MIT, brings Azure.Identity/MSAL).

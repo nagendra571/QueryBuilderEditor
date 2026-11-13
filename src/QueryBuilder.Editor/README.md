@@ -614,6 +614,11 @@ Three pieces make it work:
 
 **Getting started:** the step-by-step [hub setup guide](https://github.com/nagendra571/QueryBuilderEditor/blob/main/docs/hub-setup-guide.md) walks from an empty database to a connected app: deploying the ready-made hub, building your own host, connecting an app, and day-to-day operations.
 
+**Where an app keeps its signing key.** The simplest start is a key file inside the app's own deployment package, never
+committed to git and never under `wwwroot`: a `.pem` file read with `RSA.ImportFromPem` on .NET 6 and later, and the same key
+as an `.xml` file in `App_Data` read with `RSACng.FromXmlString` on .NET Framework 4.8 (which has no PEM reader). A certificate or
+Key Vault can follow later by adding a new key. See [`QueryBuilder.Launch`, section 2a](https://github.com/nagendra571/QueryBuilderEditor/blob/main/src/QueryBuilder.Launch/README.md#2a-the-simplest-start-a-key-file-in-your-deployment-package).
+
 ### Turning it on in your own host
 
 Most teams should deploy `QueryBuilder.Hub` as it is. To build a host yourself:

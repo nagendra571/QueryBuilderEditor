@@ -33,8 +33,9 @@ Agree these with the hub's super admin before you write code:
 ## 2. Make a key pair
 
 Use RSA 2048 to 8192 bits (RS256) or ECDSA on the NIST P-256 curve (ES256). Keep the **private** key only where your app
-can read it (a key store, a certificate store, or a file outside the web root that only the app's account can read). Never put
-it in `web.config`, `appsettings.json` or source control. Only the **public** key goes to the hub.
+can read it (a key store, a certificate store, or a key file outside the web root). Never put it in `web.config`,
+`appsettings.json` or source control. Only the **public** key goes to the hub. The simplest start is a key file shipped in your
+deployment package ([section 2a](#2a-the-simplest-start-a-key-file-in-your-deployment-package)).
 
 ### PowerShell 7.4 or later
 
@@ -107,6 +108,139 @@ openssl pkey -pubin -in qb-launch-public.pem -outform DER | openssl dgst -sha256
 
 Whichever way you made it, the file you send is the one that starts with `-----BEGIN PUBLIC KEY-----`.
 
+## 2a. The simplest start: a key file in your deployment package
+
+The app reads its private key from a file that ships inside its own deployment package. No key vault or certificate store is
+involved, so this works the same on Azure App Service (Windows or Linux), IIS and anything else. You can move to a key vault
+or a certificate later by adding a new key (see "Changing the key" below).
+
+**What this costs.** Anyone who can read the deployed files (Kudu, FTP, deployment credentials, a copy of the package) can sign
+launches into your app as any user and any role, including Admin. Three rules keep it at that:
+
+1. **Never commit the key file.** Add it to `.gitignore`. It lives on the machine you publish from (keep a copy in a password
+   manager). If you build in a pipeline from git, add it at build time from the pipeline's secure files.
+2. **Keep it out of anything the web server serves**: not in `wwwroot` (.NET 6 and later), and in `App_Data` (.NET Framework,
+   which IIS never serves).
+3. **One key per app**, each with its own key id. Never share a key between apps.
+
+.NET 6 and later read the `.pem` file directly. **.NET Framework 4.8 has no PEM reader**, so its key file holds the same key in
+XML form.
+
+### .NET 6, 8 and later: `Keys\qb-launch-private.pem`
+
+Make the key as in section 2 (PowerShell 7.4+ or openssl) and put `qb-launch-private.pem` in a `Keys` folder at the project
+root, next to `Program.cs`.
+
+`.gitignore`:
+
+```
+Keys/*.pem
+```
+
+The `.csproj`, so the file is published:
+
+```xml
+<ItemGroup>
+  <None Update="Keys\qb-launch-private.pem" CopyToPublishDirectory="PreserveNewest" />
+</ItemGroup>
+```
+
+`appsettings.json` (none of these are secrets):
+
+```json
+"QueryBuilder": {
+  "HubUrl": "https://hub.example.com",
+  "AppKey": "agency-a",
+  "KeyId": "agency-a-2026-11"
+}
+```
+
+`Program.cs`:
+
+```csharp
+using System.Security.Cryptography;
+using QueryBuilder.Launch;
+
+var keyPath = Path.Combine(builder.Environment.ContentRootPath, "Keys", "qb-launch-private.pem");
+var rsa = RSA.Create();
+rsa.ImportFromPem(File.ReadAllText(keyPath));
+builder.Services.AddSingleton(LaunchSigningKey.Rsa(builder.Configuration["QueryBuilder:KeyId"]!, rsa));
+```
+
+The rest is section 4 (ASP.NET Core). ASP.NET Core serves static files only from `wwwroot`, so `Keys` is never downloadable.
+
+### .NET Framework 4.8: `App_Data\qb-launch\qb-launch-private.xml`
+
+Make the key in **PowerShell 7** (any machine), for a new app:
+
+```powershell
+$app = "agency-b"; $dir = "C:\keys\$app"; New-Item -ItemType Directory -Force $dir | Out-Null
+$rsa = [System.Security.Cryptography.RSA]::Create(2048)
+Set-Content -Encoding ascii "$dir\qb-launch-private.xml" $rsa.ToXmlString($true)
+Set-Content -Encoding ascii "$dir\qb-launch-public.pem"  $rsa.ExportSubjectPublicKeyInfoPem()
+"Fingerprint: " + [Convert]::ToHexString([System.Security.Cryptography.SHA256]::HashData($rsa.ExportSubjectPublicKeyInfo())).ToLowerInvariant()
+```
+
+or convert a `.pem` private key that is already registered (same key, nothing changes in the hub):
+
+```powershell
+$rsa = [System.Security.Cryptography.RSA]::Create()
+$rsa.ImportFromPem((Get-Content C:\keys\agency-a\qb-launch-private.pem -Raw))
+Set-Content -Encoding ascii C:\keys\agency-a\qb-launch-private.xml $rsa.ToXmlString($true)
+```
+
+Put `qb-launch-private.xml` in `App_Data\qb-launch\`, add it to the project in Visual Studio with **Build Action = Content** so
+it is published, and send `qb-launch-public.pem` to the hub.
+
+`.gitignore`:
+
+```
+App_Data/qb-launch/*.xml
+```
+
+`web.config` (not secrets):
+
+```xml
+<appSettings>
+  <add key="QueryBuilder:HubUrl" value="https://hub.example.com" />
+  <add key="QueryBuilder:AppKey" value="agency-b" />
+  <add key="QueryBuilder:KeyId"  value="agency-b-2026-11" />
+</appSettings>
+```
+
+Load it once:
+
+```csharp
+using System.Configuration;
+using System.IO;
+using System.Security.Cryptography;
+using System.Web.Hosting;
+using QueryBuilder.Launch;
+
+public static class QueryBuilderLaunchKey
+{
+    public static readonly LaunchSigningKey Key = Load();
+
+    private static LaunchSigningKey Load()
+    {
+        var path = HostingEnvironment.MapPath("~/App_Data/qb-launch/qb-launch-private.xml");
+        // RSACng keeps the imported key in memory; it needs no user profile or key container (Azure App Service has neither).
+        var rsa = new RSACng();
+        rsa.FromXmlString(File.ReadAllText(path));
+        return LaunchSigningKey.Rsa(ConfigurationManager.AppSettings["QueryBuilder:KeyId"], rsa);
+    }
+}
+```
+
+Use `QueryBuilderLaunchKey.Key` in place of `Key` in the MVC 5 controller in section 4. This is RS256 only (XML key files are an
+RSA format).
+
+### Changing the key
+
+Make a new key with a new key id (for example `agency-a-2027-01`), have the super admin add its public key, deploy the app with the
+new file and key id, then have the super admin **Revoke** the old key (revoking ends that app's sessions, so do it after the
+deployment). Moving to a key vault or a certificate later is the same change.
+
 ## 3. Register the public key
 
 A hub super admin does this in the hub's console (`/querybuilder/hub/apps`, open the app, **Signing keys**, **Add a key**):
@@ -129,7 +263,8 @@ The page that comes back is a complete HTML document that posts the token by its
 
 ### ASP.NET Core (minimal API)
 
-Load the private key once, at startup. The path comes from configuration, the key file from your secret store.
+Load the private key once, at startup. The path comes from configuration, the key file from your secret store (or from your
+deployment package: section 2a shows the loading code for that).
 
 ```csharp
 using System.Security.Claims;
@@ -202,8 +337,12 @@ it must include the hub's origin. Without the script the page still works: it sh
 The package targets `netstandard2.0`, which .NET Framework 4.7.2 and later can use. Load the private key from the Windows
 certificate store (or a PFX the account can read) and take it as an `RSA` with `GetRSAPrivateKey()`. Do not use
 `cert.PrivateKey`. On .NET Framework this is an `RSACng` for a key created with the commands above; `LaunchSigningKey` accepts
-any `RSA`. PEM loading is not built into .NET Framework, which is why the key lives in a certificate. Keep only the
-thumbprint in `web.config`, never the key or a PFX password.
+any `RSA`. PEM loading is not built into .NET Framework, which is why the key lives in a certificate (or, more simply, in an
+XML key file in `App_Data`: section 2a). Keep only the thumbprint in `web.config`, never the key or a PFX password.
+
+**On Azure App Service** there is no machine store you can use: upload the PFX under the app's **Certificates**, add the app setting
+`WEBSITE_LOAD_CERTIFICATES` = the thumbprint, and read `StoreLocation.CurrentUser` instead of `LocalMachine` below (Linux apps find
+it as the file `/var/ssl/private/<thumbprint>.p12`). The Free and Shared plans cannot load certificates.
 
 ```csharp
 using System;

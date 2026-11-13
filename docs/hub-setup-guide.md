@@ -754,7 +754,8 @@ Do these in order. Steps C1 to C3 are the hub operator's; C4 to C8 are the app o
 
 Use RSA 2048 to 8192 bits (RS256) or ECDSA P-256 (ES256). Keep the **private** key only where the app's account can read it
 (a key store, a certificate store, or a file outside the web root). Never put it in `web.config`, `appsettings.json` or source
-control. Only the public key goes to the hub operator.
+control. Only the public key goes to the hub operator. Where the app keeps it is in C2a; the simplest start is a key file in the
+app's deployment package.
 
 **PowerShell 7.4 or later** (older 7.x: use openssl):
 
@@ -815,6 +816,59 @@ openssl pkey -pubin -in qb-launch-public.pem -outform DER | openssl dgst -sha256
 Send only the file that starts with `-----BEGIN PUBLIC KEY-----`, plus the fingerprint you computed, and tell the
 operator your **key id** (`kid`): for example `2026-11`, 1 to 64 characters, letters, digits, `.`, `_`, `-`, starting with a letter or digit.
 
+### C2a. Where the app keeps its private key (app owner)
+
+| Option | Effort | Works on |
+|---|---|---|
+| **Key file in the deployment package** (start here) | Lowest: a file next to the app's code | .NET 6+ (`.pem`), .NET Framework 4.8 (`.xml`); Azure App Service Windows and Linux, IIS |
+| Certificate (PFX) loaded by the platform | Medium: upload once per app, one app setting | All; on App Service needs the Basic plan or higher |
+| Key Vault | Highest; rotation in one place | All |
+
+**A key file in the deployment package.** Anyone who can read the deployed files (Kudu, FTP, deployment credentials, a copy of the
+package) can sign launches into that app as anyone, including Admin. Accept that knowingly, and:
+
+1. **Never commit the key file**: `.gitignore` it; it lives on the machine you publish from (copy in a password manager), or a
+   pipeline adds it from its secure files.
+2. **Keep it out of what the web server serves**: a `Keys` folder at the project root for .NET 6+ (not `wwwroot`), `App_Data` for
+   .NET Framework.
+3. **One key per app**, each with its own key id.
+
+*.NET 6, 8 and later*: put `qb-launch-private.pem` (from C2) in `Keys\`, `.gitignore` `Keys/*.pem`, publish it with
+`<None Update="Keys\qb-launch-private.pem" CopyToPublishDirectory="PreserveNewest" />` in the `.csproj`, and load it:
+
+```csharp
+var keyPath = Path.Combine(builder.Environment.ContentRootPath, "Keys", "qb-launch-private.pem");
+var rsa = RSA.Create();
+rsa.ImportFromPem(File.ReadAllText(keyPath));
+builder.Services.AddSingleton(LaunchSigningKey.Rsa(builder.Configuration["QueryBuilder:KeyId"]!, rsa));
+```
+
+*.NET Framework 4.8* cannot read PEM, so its file holds the same RSA key as XML. Make it in PowerShell 7:
+
+```powershell
+$rsa = [System.Security.Cryptography.RSA]::Create(2048)
+# ...or, to keep a key already registered: $rsa = [System.Security.Cryptography.RSA]::Create(); $rsa.ImportFromPem((Get-Content qb-launch-private.pem -Raw))
+Set-Content -Encoding ascii qb-launch-private.xml $rsa.ToXmlString($true)
+Set-Content -Encoding ascii qb-launch-public.pem  $rsa.ExportSubjectPublicKeyInfoPem()
+[Convert]::ToHexString([System.Security.Cryptography.SHA256]::HashData($rsa.ExportSubjectPublicKeyInfo())).ToLowerInvariant()
+```
+
+Put it in `App_Data\qb-launch\` (Build Action = Content), `.gitignore` `App_Data/qb-launch/*.xml`, and load it once:
+
+```csharp
+var path = HostingEnvironment.MapPath("~/App_Data/qb-launch/qb-launch-private.xml");
+var rsa = new RSACng();          // in-memory key: no user profile or key container needed (App Service has neither)
+rsa.FromXmlString(File.ReadAllText(path));
+var key = LaunchSigningKey.Rsa(ConfigurationManager.AppSettings["QueryBuilder:KeyId"], rsa);   // keep in a static field
+```
+
+This was checked on .NET Framework 4.8 with `QueryBuilder.Launch` 1.0.0: the token it signed verified against the public `.pem`.
+The full walk-through, with `appsettings.json`/`web.config` entries, is in the
+[`QueryBuilder.Launch` guide, section 2a](../src/QueryBuilder.Launch/README.md#2a-the-simplest-start-a-key-file-in-your-deployment-package).
+
+**Changing the key** (and moving to a certificate or Key Vault later): make a new key with a new key id, have the hub operator add
+it, deploy the app with it, then revoke the old key (revoking ends that app's sessions, so do it after the deployment).
+
 ### C3. Register the public key and return URLs (hub operator)
 
 1. In the console, open the app, **Signing keys**, **Add a key**. Enter the **key id**, choose the **algorithm** (RS256 or ES256) and
@@ -833,7 +887,8 @@ Add the package (`netstandard2.0`, no dependencies, RS256 or ES256 only):
 dotnet add package QueryBuilder.Launch
 ```
 
-Load the private key once at startup. The path comes from configuration and the key file from your secret store.
+Load the private key once at startup. The path comes from configuration and the key file from your secret store (or from the
+deployment package, C2a).
 
 ```csharp
 using System.Security.Claims;
@@ -907,7 +962,10 @@ clicks, not earlier (default lifetime 60 seconds, maximum 120).
 ### C5. ASP.NET MVC 5 on .NET Framework 4.8 (app owner)
 
 `QueryBuilder.Launch` targets `netstandard2.0`, which .NET Framework 4.7.2 and later can use. Install it with the Package Manager Console
-(`Install-Package QueryBuilder.Launch`). Load the private key from the Windows certificate store with `GetRSAPrivateKey()` (not `cert.PrivateKey`).
+(`Install-Package QueryBuilder.Launch`). The simplest key is an XML file in `App_Data` (C2a); this section shows the certificate route.
+On Azure App Service, upload the PFX under the app's **Certificates**, set the app setting `WEBSITE_LOAD_CERTIFICATES` to its
+thumbprint, and use `StoreLocation.CurrentUser` instead of `LocalMachine` in the code below.
+Load the private key from the Windows certificate store with `GetRSAPrivateKey()` (not `cert.PrivateKey`).
 Keep only the thumbprint in `web.config`, never the key or a PFX password.
 
 ```csharp
@@ -1144,7 +1202,7 @@ plus the data source's `AppUsers` view (the picker reads its first 500 rows). Th
 ### Onboarding checklist for each new app
 
 - [ ] App created in the console (it starts turned on; turn it off until ready): key, name, scope keys, record ceiling, "App admins can add data sources" decided.
-- [ ] App owner generated a key pair; private key stays with them.
+- [ ] App owner generated a key pair; private key stays with them (C2a: key file in the package is `.gitignore`d and outside `wwwroot`/inside `App_Data`; `.xml` for .NET Framework).
 - [ ] Public key registered; **fingerprint compared**.
 - [ ] Return URLs registered (canonical form, https).
 - [ ] The owner has the app key, the audience, the scope keys and the Launch guide.
