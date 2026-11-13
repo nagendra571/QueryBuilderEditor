@@ -57,12 +57,7 @@ public sealed class ExportService : IExportService
     private static byte[] ExportXlsx(QueryResultSet resultSet, string sheetName)
     {
         using var workbook = new XLWorkbook();
-        var safeSheetName = string.IsNullOrWhiteSpace(sheetName) ? "Results" : sheetName;
-        if (safeSheetName.Length > 31)
-        {
-            safeSheetName = safeSheetName[..31];
-        }
-        var worksheet = workbook.Worksheets.Add(safeSheetName);
+        var worksheet = workbook.Worksheets.Add(ExportNames.SheetName(sheetName));
 
         for (var c = 0; c < resultSet.Columns.Count; c++)
         {

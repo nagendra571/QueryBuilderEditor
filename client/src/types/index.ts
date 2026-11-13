@@ -610,6 +610,13 @@ export interface RenderVisualizationRequest {
   tileId?: string
 }
 
+export type DownloadFormat = 'csv' | 'xlsx'
+
+/** Downloads the rows the chart is drawn from; the dashboard context works exactly as when drawing it. */
+export interface ExportVisualizationRequest extends RenderVisualizationRequest {
+  format: DownloadFormat
+}
+
 /** What a granted tile needs to draw: the chart and its parameter controls, never the query itself. */
 export interface TileChartDto {
   savedQueryId: string

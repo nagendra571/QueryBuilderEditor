@@ -1,4 +1,5 @@
 using QueryBuilder.Editor.Hub;
+using QueryBuilder.Application.Abstractions;
 using QueryBuilder.Application.Common;
 using QueryBuilder.Application.Dtos;
 using QueryBuilder.Application.Visualizations;
@@ -46,6 +47,20 @@ public static class VisualizationEndpoints
             var data = await sender.Send(
                 new RenderVisualizationCommand(queryId, visualizationId, request?.ParameterValues ?? [], request?.DashboardId, request?.TileId), ct);
             return Results.Json(data, QueryBuilderJson.Options);
+        }).AllowViewers();
+
+        // Same access as drawing the chart (a Viewer gets it through a dashboard), so it is on the Viewer allowlist too.
+        group.MapPost("/{visualizationId:guid}/export", async (Guid queryId, Guid visualizationId, HttpContext http, ISender sender, CancellationToken ct) =>
+        {
+            var request = await http.Request.ReadFromJsonAsync<ExportVisualizationRequest>(QueryBuilderJson.Options, ct)
+                ?? throw new BadHttpRequestException("Request body is required.");
+            if (!ExportFormats.TryParse(request.Format, out var format))
+            {
+                throw new BadHttpRequestException("'format' must be 'csv' or 'xlsx'.");
+            }
+            var result = await sender.Send(
+                new ExportVisualizationCommand(queryId, visualizationId, request.ParameterValues ?? [], format, request.DashboardId, request.TileId), ct);
+            return Results.File(result.Content, result.ContentType, result.FileName);
         }).AllowViewers();
     }
 }

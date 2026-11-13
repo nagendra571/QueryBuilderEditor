@@ -8,6 +8,7 @@ import { useRenderLimiter } from '@/features/dashboards/render-limiter'
 import { Label } from '@/components/ui/label'
 import { ParameterControl } from '@/features/parameters/controls/ParameterControl'
 import { isBlank, parameterTitle, valuesEqual, type ParameterValues } from '@/features/parameters/param-values'
+import { ChartDownloadMenu } from '@/features/visualizations/ChartDownloadMenu'
 import { ChartRenderer } from '@/features/visualizations/ChartRenderer'
 import { isHub } from '@/features/hub/permissions'
 import { useMe, zoneLabel } from '@/hooks/useMe'
@@ -236,6 +237,9 @@ export function ChartTileBody({ tile, titleId, statusId }: { tile: DashboardTile
           <Button variant="ghost" size="icon" className="size-6 shrink-0" aria-label={`Set values for ${title}`} onClick={() => setPromptOpen(true)}>
             <SlidersHorizontal className="size-3.5" />
           </Button>
+        )}
+        {ready && data.data && !data.isError && (
+          <ChartDownloadMenu compact queryId={queryId} visualizationId={vizId} name={title} parameterValues={values} context={context} />
         )}
         <span className="flex size-4 shrink-0 items-center justify-center" aria-hidden="true">
           {refreshing && <Loader2 className="size-3.5 animate-spin text-accent-foreground" />}

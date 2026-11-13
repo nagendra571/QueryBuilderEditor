@@ -20,6 +20,13 @@ The hub only ever stores your public key. Leaking the hub's database cannot be u
 
 ## 1. What you need first
 
+Install the package in the app that has the signed-in users:
+
+```
+dotnet add package QueryBuilder.Launch                 # .NET 6, 8 and later (PackageReference)
+Install-Package QueryBuilder.Launch                    # .NET Framework 4.8 with packages.config (Package Manager Console)
+```
+
 Agree these with the hub's super admin before you write code:
 
 | Item | What it is |
@@ -232,8 +239,35 @@ public static class QueryBuilderLaunchKey
 }
 ```
 
-Use `QueryBuilderLaunchKey.Key` in place of `Key` in the MVC 5 controller in section 4. This is RS256 only (XML key files are an
-RSA format).
+This is RS256 only (XML key files are an RSA format). The whole controller for this setup, with nothing else to add:
+
+```csharp
+using System.Collections.Generic;
+using System.Configuration;
+using System.Web.Mvc;
+using QueryBuilder.Launch;
+
+public class QueryBuilderController : Controller
+{
+    [Authorize]
+    public ActionResult Open()
+    {
+        var hub = ConfigurationManager.AppSettings["QueryBuilder:HubUrl"];
+        var appKey = ConfigurationManager.AppSettings["QueryBuilder:AppKey"];
+
+        // Work these out from your own data for the signed-in user, never from the request.
+        var user = new LaunchUser(User.Identity.Name, name: null, email: null);   // a stable id that is never reused
+        var role = LaunchRole.Author;
+        var scope = LaunchScope.For(new Dictionary<string, IEnumerable<string>> { ["ProgramId"] = new[] { "10" } });
+
+        var token = LaunchToken.Create(appKey, hub, QueryBuilderLaunchKey.Key, user, role, scope);
+        Response.Cache.SetNoStore();
+        return Content(LaunchForm.Html(hub, token), "text/html");
+    }
+}
+```
+
+Then link to it from any page (section 4, "Put the button on your page").
 
 ### Changing the key
 
@@ -334,6 +368,10 @@ it must include the hub's origin. Without the script the page still works: it sh
 
 ### ASP.NET MVC 5 on .NET Framework 4.8
 
+**Using the XML key file from section 2a?** Then this section's certificate code and the `KeyThumbprint` setting don't apply:
+use the controller in section 2a, which signs with `QueryBuilderLaunchKey.Key`. The thumbprint only identifies a certificate in a
+certificate store.
+
 The package targets `netstandard2.0`, which .NET Framework 4.7.2 and later can use. Load the private key from the Windows
 certificate store (or a PFX the account can read) and take it as an `RSA` with `GetRSAPrivateKey()`. Do not use
 `cert.PrivateKey`. On .NET Framework this is an `RSACng` for a key created with the commands above; `LaunchSigningKey` accepts
@@ -396,6 +434,21 @@ public class QueryBuilderController : Controller
 For a key in an ECDSA certificate use `GetECDsaPrivateKey()` with `LaunchSigningKey.EcdsaP256`. Do not dispose the `RSA` while the
 app runs: `LaunchSigningKey` does not own it. The `hub` value must be just the scheme, host and port: the hub is never
 served under a path.
+
+### Put the button on your page
+
+The endpoint above answers a plain GET, so the button is an ordinary link. Opening it in a new tab keeps your app open:
+
+```html
+<!-- ASP.NET Core (Razor), endpoint mapped at /open-querybuilder -->
+<a class="btn btn-primary" href="/open-querybuilder" target="_blank" rel="noopener">Open QueryBuilder</a>
+
+<!-- ASP.NET MVC 5, QueryBuilderController.Open -->
+<a class="btn btn-primary" href="@Url.Action("Open", "QueryBuilder")" target="_blank" rel="noopener">Open QueryBuilder</a>
+```
+
+Show it only to users who should reach QueryBuilder; the endpoint's `[Authorize]` / `RequireAuthorization()` is what actually
+enforces it. Each click makes a new token, so the link can be clicked any number of times.
 
 ### What to send
 

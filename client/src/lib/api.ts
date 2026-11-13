@@ -20,6 +20,7 @@ import type {
   DashboardSummaryDto,
   DataSourceDto,
   ExportQueryRequest,
+  ExportVisualizationRequest,
   ParameterOption,
   PickableVisualizationDto,
   QueryParameter,
@@ -151,6 +152,8 @@ export const visualizationsApi = {
   },
   render: async (queryId: string, id: string, request: RenderVisualizationRequest): Promise<VisualizationDataDto> =>
     (await apiClient.post(`/queries/${queryId}/visualizations/${id}/data`, request)).data,
+  download: async (queryId: string, id: string, request: ExportVisualizationRequest): Promise<Blob> =>
+    (await apiClient.post(`/queries/${queryId}/visualizations/${id}/export`, request, { responseType: 'blob' })).data,
 }
 
 export interface MeDto {

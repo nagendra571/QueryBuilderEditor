@@ -88,7 +88,10 @@ public static class SavedQueryEndpoints
         {
             var request = await http.Request.ReadFromJsonAsync<ExportQueryRequest>(QueryBuilderJson.Options, ct)
                 ?? throw new BadHttpRequestException("Request body is required.");
-            var format = Enum.Parse<ExportFormat>(request.Format, ignoreCase: true);
+            if (!ExportFormats.TryParse(request.Format, out var format))
+            {
+                throw new BadHttpRequestException("'format' must be 'csv' or 'xlsx'.");
+            }
             var result = await sender.Send(
                 new ExportQueryCommand(request.DataSourceId, request.Definition, request.ParameterValues, format, request.FileName, request.SavedQueryId), ct);
             return Results.File(result.Content, result.ContentType, result.FileName);

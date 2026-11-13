@@ -11,6 +11,9 @@ strictly-versioned "run each release's script in order" scheme, the *latest* scr
 both first-time provisioning and every upgrade in between. Only keep the latest one around; older
 ones are superseded, not additive.
 
+A release without a migration ships the previous script unchanged: **2.1.0 adds no migration, so
+`QueryBuilder.schema.2.0.0.sql` is still the current script** for 2.1.0.
+
 ## Regenerating after a migration change
 
 Whenever a new EF Core migration is added under `QueryBuilder.Infrastructure/Persistence/Migrations`:

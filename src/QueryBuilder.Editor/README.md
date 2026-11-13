@@ -429,6 +429,8 @@ source's page; leave it empty to fall back to the default). When a query returns
   5,000 records. Only the first 5,000 are shown. Add filters to narrow down the results."*
 - **Export (CSV/Excel):** refused (HTTP 409) with a message asking the user to add filters, rather
   than producing a file that silently stops at the limit.
+- **Chart download:** a Table chart downloads up to the limit and is refused beyond it, like an export; other charts
+  download the rows they draw (see "Downloading a chart's data").
 
 Detection costs one extra row (the query fetches *N + 1*), never a separate `COUNT(*)`. With neither
 `DefaultMaxRecords` nor a per-data-source limit set, behavior is unchanged from earlier versions: the
@@ -500,6 +502,29 @@ Adding the feature creates one new table, `QueryVisualizations` (migration `AddQ
 applied by auto-migration or by the idempotent script. The types beyond Bar, Line, Pie and Counter need no
 further migration, and charts saved earlier keep working unchanged. Chart create/update/delete are recorded in the
 audit log, and each render is recorded as a query run with the chart's id and the viewer's scope.
+
+### Downloading a chart's data
+
+Every chart has a **Download** menu with **CSV** and **Excel (.xlsx)**: on the query page next to **Add to dashboard**, and on
+a dashboard as the download icon in the tile's header. The file holds the rows the chart is drawn from, with the parameter
+values on screen, and **only the columns the chart uses**: a query column the chart doesn't show is never in the file. A Pivot
+downloads the rows behind it (not the pivoted grid); a Counter downloads its one row.
+
+- **Same checks as drawing the chart**: access (owner, share, Admin, or a dashboard the viewer can see), a disabled query is
+  refused, the viewer's row-level scope applies, and so do the record limits.
+- **A Table chart downloads every row up to the record limit**, not just the first screenful it shows (without a limit, up to
+  100,000). If there are more, the download is refused (HTTP 409) with a message asking for filters, never cut off. Other chart
+  types download exactly the rows they draw (at most 1,000), and a chart too big to draw can't be downloaded either.
+- The file is named after the chart (on a dashboard, the tile's title), with characters that file systems refuse replaced; the
+  Excel sheet is named after the chart too.
+- Each download is recorded in the audit log as an export (`QueryExported`) with the chart's id, the format, the row count and
+  the viewer's scope.
+- **Hub mode:** a Viewer can download the data of a chart on a dashboard they can see (published to the app or shared with
+  them). The download goes through the same dashboard check as drawing the tile, so it reveals nothing the tile doesn't show.
+- API: `POST /querybuilder/api/queries/{queryId}/visualizations/{visualizationId}/export` with
+  `{ "format": "csv" | "xlsx", "parameterValues": { ... }, "dashboardId": "...", "tileId": "..." }` (the dashboard pair only
+  for a tile). Any other format is a 400. Since 2.1.0 the query results export (`POST /querybuilder/api/queries/export`) also
+  answers 400 for a format other than `csv` or `xlsx`, where it used to fail with a 500 (or accept a number).
 
 ## Dashboards
 
@@ -696,13 +721,13 @@ A person's role comes from the **latest launch token only**; it is never stored 
 | Super admin | Identity provider sign-in plus the allowlist, or a one-time sign-in code; never from a launch token | Everything in every app: the app registry (apps, signing keys, return URLs, scope keys, record ceiling), locking, unlocking and moving data sources, the encryption key, the hub audit log. Unrestricted data scope. |
 | Admin | token `role` = `Admin` | Everything inside their app: sees and manages every query, dashboard and share, runs the Admin page for the app's data sources (except locked ones), publishes dashboards. |
 | Author | `Author` | The normal user, inside their app: build, save, chart, run, export, share, build dashboards. |
-| Viewer | `Viewer` | Dashboards only: the ones published to the app and the ones shared with them. Parameter controls and refresh work; there is no query list, builder, SQL, chart settings, sharing or export. |
+| Viewer | `Viewer` | Dashboards only: the ones published to the app and the ones shared with them. Parameter controls and refresh work; there is no query list, builder, SQL, chart settings, sharing or query export. They can download the data behind a dashboard chart (CSV or Excel). |
 
 - **Isolation.** A user is the pair (app, user id): the same email from two apps is two people. A request that names another
   app's query, dashboard, share or data source is answered 404 and changes nothing.
-- **Viewer allowlist.** A Viewer can call exactly seven endpoints: the dashboard list, one dashboard, a dashboard tile's chart,
-  a dashboard's parameter options, a query's parameter options (through a dashboard), the chart render for a query, and
-  `/api/me`. The Viewer role wins over any share: sharing a query with a Viewer gives them nothing beyond dashboards.
+- **Viewer allowlist.** A Viewer can call exactly eight endpoints: the dashboard list, one dashboard, a dashboard tile's chart,
+  a dashboard's parameter options, a query's parameter options (through a dashboard), the chart render and the chart data
+  download for a query (both only through a dashboard they can see), and `/api/me`. The Viewer role wins over any share: sharing a query with a Viewer gives them nothing beyond dashboards.
 - **Publishing.** Admins (and super admins) can **Publish** a dashboard to the app and **Unpublish** it; every Viewer and
   Author of the app then sees it read-only.
 - **Dashboard-context charts.** A chart tile on a dashboard the viewer can see renders with the **viewer's own data scope**.
@@ -846,6 +871,8 @@ Every failing check includes a one-line fix. Returns 404 outside Development.
 - Run queries and browse results with client-side pagination, search, column show/hide, reorder,
   and sort
 - Export results to CSV or Excel
+- Download the data behind any chart, on the query page or a dashboard tile, as CSV or Excel (only the chart's own columns,
+  with the viewer's scope; audited)
 - Save, reopen, and re-run queries; per-query history tab
 - Share a saved query as Viewer or Editor, scoped per data source via an optional `AppUsers` view
 - Disable a saved query to block anyone from running or exporting it without deleting it —

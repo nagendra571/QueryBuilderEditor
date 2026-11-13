@@ -32,6 +32,22 @@ integration ergonomics (single-call registration, embedded SPA, DBA-friendly mig
 
 ## Where we left off (update this at the end of each session)
 
+**2026-11-13, chart data downloads → Editor 2.1.0 + Launch 1.0.1 (branch `feature/chart-download`, off the unpushed
+`docs/launch-key-file` `7a06dbe`).** User decisions: file = the chart's own columns only (same rows the chart draws), hub
+Viewers may download from dashboards they can see (audited), formats CSV + XLSX only. Built: `VisualizationDataLoader`
+(Application/Visualizations) now holds everything the render handler did (access, dashboard grant, ConstrainValues, disabled,
+stale, ValidateAsync, binder, scope, limits, projection, data checks), purpose `Draw`/`Download`; `RenderVisualizationCommandHandler`
+and new `ExportVisualizationCommandHandler` both call it. Download: Table = up to `effectiveLimit ?? 100,000`, refused (409) when
+truncated; other types = chart cap and the same refusal as drawing. `POST /api/queries/{q}/visualizations/{v}/export`
+`{format, parameterValues, dashboardId?, tileId?}` is `.AllowViewers()` (allowlist now 8 routes; matrix + Viewer tests updated).
+Audit `QueryExported` with VisualizationId/Format/RowCount/Scope. `ExportFormats.TryParse` (only "csv"/"xlsx"; the results export
+now 400s on "1"/"pdf" instead of 500/accepting numbers) and `ExportNames` (file names: forbidden chars, Windows device names, 100
+chars; sheet names: Excel's rules, 31 chars, "History") in `Abstractions/IExportService.cs`; never cut a surrogate pair. Client:
+`ChartDownloadMenu` (query chart panel + compact icon in dashboard tile header), `download-name.ts`, shared `lib/download.ts`.
+Launch README gained install commands, a full .NET 4.8 controller using the XML key, and "Put the button on your page". No
+migration: the 2.0.0 schema script still applies. **Open for the user:** CSV formula injection (cells starting `= + - @` open as
+formulas in Excel; the results export has always done this; the reviewer suggested escaping text cells) — not changed, asked.
+
 **2026-11-13, user's first hub is running (Azure; apps on .NET 6, 8 and Framework 4.8, all on Azure App Service).** The user's
 decision for now: **app owners keep the launch private key as a file in each app's deployment package** (certificate/Key Vault
 "later"). Documented as the "simplest start" in `src/QueryBuilder.Launch/README.md` §2a, `docs/hub-setup-guide.md` C2a (+ App

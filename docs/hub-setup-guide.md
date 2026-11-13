@@ -48,7 +48,7 @@ Hub mode is part of QueryBuilder 2.0.0. Names, defaults and limits below are tho
 | **Super admin** | Your own staff. Signs in at `/querybuilder/signin` with your identity provider and/or a one-time code, and must be on the allowlist. A launch token can never make a super admin. | Everything in every app: the app registry (apps, signing keys, return URLs, scope keys, record ceiling), data sources (adding, locking, moving), the data source key, the hub audit log. No row restriction. |
 | **Admin** | The `role` claim of the launch token is `Admin`. | Everything inside their own app: sees and manages all queries, dashboards and shares, publishes dashboards, uses the Admin page for unlocked data sources. |
 | **Author** | `role` is `Author`. | Builds, saves, charts, runs, exports and shares queries; builds dashboards. |
-| **Viewer** | `role` is `Viewer`. | Dashboards only: the ones published to the app and those shared with them. No query builder, no SQL, no export. |
+| **Viewer** | `role` is `Viewer`. | Dashboards only: the ones published to the app and those shared with them. No query builder, no SQL, no query export; they can download the data behind a dashboard chart (CSV or Excel, audited). |
 
 A role comes from the latest launch only. It is not stored as a permanent grant: the app decides it again on every click.
 
@@ -474,8 +474,8 @@ The project file:
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
   <ItemGroup>
-    <!-- 2.0.0 is the first version with hub mode; until it is published, use a ProjectReference or a local feed. -->
-    <PackageReference Include="QueryBuilder.Editor" Version="2.0.0" />
+    <!-- 2.0.0 is the first version with hub mode; 2.1.0 adds chart data downloads (no database change). -->
+    <PackageReference Include="QueryBuilder.Editor" Version="2.1.0" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.OpenIdConnect" Version="10.0.14" />
   </ItemGroup>
 </Project>

@@ -108,6 +108,8 @@ migrations, API/UI wiring, JSON options, and the authorization pipeline in one p
 - Run queries and browse results with client-side pagination, search, column show/hide, reorder,
   and sort
 - Export results to CSV or Excel
+- Download the data behind any chart, on the query page or a dashboard tile, as CSV or Excel (only the chart's own columns,
+  with the viewer's scope; audited)
 - Save, reopen, and re-run queries; per-query audit history
 - Share a saved query as Viewer or Editor, scoped per data source via an optional `AppUsers` view
 - Disable a saved query to block it from being run or exported by anyone (owner or shared users)
@@ -412,13 +414,13 @@ A person's role comes from the **latest launch token only**; it is never stored 
 | Super admin | Identity provider sign-in plus the allowlist, or a one-time sign-in code; never from a launch token | Everything in every app: the app registry (apps, signing keys, return URLs, scope keys, record ceiling), locking, unlocking and moving data sources, the encryption key, the hub audit log. Unrestricted data scope. |
 | Admin | token `role` = `Admin` | Everything inside their app: sees and manages every query, dashboard and share, runs the Admin page for the app's data sources (except locked ones), publishes dashboards. |
 | Author | `Author` | The normal user, inside their app: build, save, chart, run, export, share, build dashboards. |
-| Viewer | `Viewer` | Dashboards only: the ones published to the app and the ones shared with them. Parameter controls and refresh work; there is no query list, builder, SQL, chart settings, sharing or export. |
+| Viewer | `Viewer` | Dashboards only: the ones published to the app and the ones shared with them. Parameter controls and refresh work; there is no query list, builder, SQL, chart settings, sharing or query export. They can download the data behind a dashboard chart (CSV or Excel). |
 
 - **Isolation.** A user is the pair (app, user id): the same email from two apps is two people. A request that names another
   app's query, dashboard, share or data source is answered 404 and changes nothing.
-- **Viewer allowlist.** A Viewer can call exactly seven endpoints: the dashboard list, one dashboard, a dashboard tile's chart,
-  a dashboard's parameter options, a query's parameter options (through a dashboard), the chart render for a query, and
-  `/api/me`. The Viewer role wins over any share: sharing a query with a Viewer gives them nothing beyond dashboards.
+- **Viewer allowlist.** A Viewer can call exactly eight endpoints: the dashboard list, one dashboard, a dashboard tile's chart,
+  a dashboard's parameter options, a query's parameter options (through a dashboard), the chart render and the chart data
+  download for a query (both only through a dashboard they can see), and `/api/me`. The Viewer role wins over any share: sharing a query with a Viewer gives them nothing beyond dashboards.
 - **Publishing.** Admins (and super admins) can **Publish** a dashboard to the app and **Unpublish** it; every Viewer and
   Author of the app then sees it read-only.
 - **Dashboard-context charts.** A chart tile on a dashboard the viewer can see renders with the **viewer's own data scope**.

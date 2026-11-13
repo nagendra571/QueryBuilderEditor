@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { AddToDashboardDialog } from '@/features/dashboards/AddToDashboardDialog'
+import { ChartDownloadMenu } from '@/features/visualizations/ChartDownloadMenu'
 import { ChartRenderer } from '@/features/visualizations/ChartRenderer'
 import { typeNoun } from '@/features/visualizations/chart-data'
 import { useVisualizationData } from '@/hooks/useVisualizations'
@@ -64,6 +65,14 @@ export function ChartPanel({
           <span className="text-[11px] text-muted-foreground">{typeNoun(visualization.type)}</span>
         </div>
         <div className="ml-auto flex items-center gap-1.5">
+          {enabled && !failure && data && (
+            <ChartDownloadMenu
+              queryId={queryId}
+              visualizationId={visualization.id}
+              name={visualization.name}
+              parameterValues={parameterValues ?? {}}
+            />
+          )}
           <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => setAddToDashboardOpen(true)}>
             <LayoutDashboard className="size-3.5" />
             Add to dashboard
