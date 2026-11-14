@@ -19,6 +19,8 @@ public sealed record SaveVisualizationRequest(string Name, VisualizationType Typ
 
 public sealed record RenderVisualizationRequest(Dictionary<string, string?>? ParameterValues, Guid? DashboardId = null, Guid? TileId = null);
 
+public sealed record ExportVisualizationRequest(string? Format, Dictionary<string, string?>? ParameterValues, Guid? DashboardId = null, Guid? TileId = null);
+
 /// <summary>Only the columns the chart references — never the query's full output.</summary>
 public sealed record VisualizationDataDto(
     List<QueryResultColumnDto> Columns,

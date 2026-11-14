@@ -23,6 +23,7 @@ public static class DependencyInjection
         services.AddScoped<IParameterOptionsService, ParameterOptionsService>();
         services.AddScoped<Dashboards.IDashboardGrant, Dashboards.DashboardGrant>();
         services.AddScoped<Dashboards.DashboardGrantResolver>();
+        services.AddScoped<Visualizations.VisualizationDataLoader>();
         RegisterHandlers(services, assembly);
 
         services.AddValidatorsFromAssembly(assembly);

@@ -20,6 +20,13 @@ The hub only ever stores your public key. Leaking the hub's database cannot be u
 
 ## 1. What you need first
 
+Install the package in the app that has the signed-in users:
+
+```
+dotnet add package QueryBuilder.Launch                 # .NET 6, 8 and later (PackageReference)
+Install-Package QueryBuilder.Launch                    # .NET Framework 4.8 with packages.config (Package Manager Console)
+```
+
 Agree these with the hub's super admin before you write code:
 
 | Item | What it is |
@@ -33,8 +40,9 @@ Agree these with the hub's super admin before you write code:
 ## 2. Make a key pair
 
 Use RSA 2048 to 8192 bits (RS256) or ECDSA on the NIST P-256 curve (ES256). Keep the **private** key only where your app
-can read it (a key store, a certificate store, or a file outside the web root that only the app's account can read). Never put
-it in `web.config`, `appsettings.json` or source control. Only the **public** key goes to the hub.
+can read it (a key store, a certificate store, or a key file outside the web root). Never put it in `web.config`,
+`appsettings.json` or source control. Only the **public** key goes to the hub. The simplest start is a key file shipped in your
+deployment package ([section 2a](#2a-the-simplest-start-a-key-file-in-your-deployment-package)).
 
 ### PowerShell 7.4 or later
 
@@ -107,6 +115,166 @@ openssl pkey -pubin -in qb-launch-public.pem -outform DER | openssl dgst -sha256
 
 Whichever way you made it, the file you send is the one that starts with `-----BEGIN PUBLIC KEY-----`.
 
+## 2a. The simplest start: a key file in your deployment package
+
+The app reads its private key from a file that ships inside its own deployment package. No key vault or certificate store is
+involved, so this works the same on Azure App Service (Windows or Linux), IIS and anything else. You can move to a key vault
+or a certificate later by adding a new key (see "Changing the key" below).
+
+**What this costs.** Anyone who can read the deployed files (Kudu, FTP, deployment credentials, a copy of the package) can sign
+launches into your app as any user and any role, including Admin. Three rules keep it at that:
+
+1. **Never commit the key file.** Add it to `.gitignore`. It lives on the machine you publish from (keep a copy in a password
+   manager). If you build in a pipeline from git, add it at build time from the pipeline's secure files.
+2. **Keep it out of anything the web server serves**: not in `wwwroot` (.NET 6 and later), and in `App_Data` (.NET Framework,
+   which IIS never serves).
+3. **One key per app**, each with its own key id. Never share a key between apps.
+
+.NET 6 and later read the `.pem` file directly. **.NET Framework 4.8 has no PEM reader**, so its key file holds the same key in
+XML form.
+
+### .NET 6, 8 and later: `Keys\qb-launch-private.pem`
+
+Make the key as in section 2 (PowerShell 7.4+ or openssl) and put `qb-launch-private.pem` in a `Keys` folder at the project
+root, next to `Program.cs`.
+
+`.gitignore`:
+
+```
+Keys/*.pem
+```
+
+The `.csproj`, so the file is published:
+
+```xml
+<ItemGroup>
+  <None Update="Keys\qb-launch-private.pem" CopyToPublishDirectory="PreserveNewest" />
+</ItemGroup>
+```
+
+`appsettings.json` (none of these are secrets):
+
+```json
+"QueryBuilder": {
+  "HubUrl": "https://hub.example.com",
+  "AppKey": "agency-a",
+  "KeyId": "agency-a-2026-11"
+}
+```
+
+`Program.cs`:
+
+```csharp
+using System.Security.Cryptography;
+using QueryBuilder.Launch;
+
+var keyPath = Path.Combine(builder.Environment.ContentRootPath, "Keys", "qb-launch-private.pem");
+var rsa = RSA.Create();
+rsa.ImportFromPem(File.ReadAllText(keyPath));
+builder.Services.AddSingleton(LaunchSigningKey.Rsa(builder.Configuration["QueryBuilder:KeyId"]!, rsa));
+```
+
+The rest is section 4 (ASP.NET Core). ASP.NET Core serves static files only from `wwwroot`, so `Keys` is never downloadable.
+
+### .NET Framework 4.8: `App_Data\qb-launch\qb-launch-private.xml`
+
+Make the key in **PowerShell 7** (any machine), for a new app:
+
+```powershell
+$app = "agency-b"; $dir = "C:\keys\$app"; New-Item -ItemType Directory -Force $dir | Out-Null
+$rsa = [System.Security.Cryptography.RSA]::Create(2048)
+Set-Content -Encoding ascii "$dir\qb-launch-private.xml" $rsa.ToXmlString($true)
+Set-Content -Encoding ascii "$dir\qb-launch-public.pem"  $rsa.ExportSubjectPublicKeyInfoPem()
+"Fingerprint: " + [Convert]::ToHexString([System.Security.Cryptography.SHA256]::HashData($rsa.ExportSubjectPublicKeyInfo())).ToLowerInvariant()
+```
+
+or convert a `.pem` private key that is already registered (same key, nothing changes in the hub):
+
+```powershell
+$rsa = [System.Security.Cryptography.RSA]::Create()
+$rsa.ImportFromPem((Get-Content C:\keys\agency-a\qb-launch-private.pem -Raw))
+Set-Content -Encoding ascii C:\keys\agency-a\qb-launch-private.xml $rsa.ToXmlString($true)
+```
+
+Put `qb-launch-private.xml` in `App_Data\qb-launch\`, add it to the project in Visual Studio with **Build Action = Content** so
+it is published, and send `qb-launch-public.pem` to the hub.
+
+`.gitignore`:
+
+```
+App_Data/qb-launch/*.xml
+```
+
+`web.config` (not secrets):
+
+```xml
+<appSettings>
+  <add key="QueryBuilder:HubUrl" value="https://hub.example.com" />
+  <add key="QueryBuilder:AppKey" value="agency-b" />
+  <add key="QueryBuilder:KeyId"  value="agency-b-2026-11" />
+</appSettings>
+```
+
+Load it once:
+
+```csharp
+using System.Configuration;
+using System.IO;
+using System.Security.Cryptography;
+using System.Web.Hosting;
+using QueryBuilder.Launch;
+
+public static class QueryBuilderLaunchKey
+{
+    public static readonly LaunchSigningKey Key = Load();
+
+    private static LaunchSigningKey Load()
+    {
+        var path = HostingEnvironment.MapPath("~/App_Data/qb-launch/qb-launch-private.xml");
+        // RSACng keeps the imported key in memory; it needs no user profile or key container (Azure App Service has neither).
+        var rsa = new RSACng();
+        rsa.FromXmlString(File.ReadAllText(path));
+        return LaunchSigningKey.Rsa(ConfigurationManager.AppSettings["QueryBuilder:KeyId"], rsa);
+    }
+}
+```
+
+This is RS256 only (XML key files are an RSA format). The whole controller for this setup, with nothing else to add:
+
+```csharp
+using System.Collections.Generic;
+using System.Configuration;
+using System.Web.Mvc;
+using QueryBuilder.Launch;
+
+public class QueryBuilderController : Controller
+{
+    [Authorize]
+    public ActionResult Open()
+    {
+        var hub = ConfigurationManager.AppSettings["QueryBuilder:HubUrl"];
+        var appKey = ConfigurationManager.AppSettings["QueryBuilder:AppKey"];
+
+        // Work these out from your own data for the signed-in user, never from the request.
+        var user = new LaunchUser(User.Identity.Name, name: null, email: null);   // a stable id that is never reused
+        var role = LaunchRole.Author;
+        var scope = LaunchScope.For(new Dictionary<string, IEnumerable<string>> { ["ProgramId"] = new[] { "10" } });
+
+        var token = LaunchToken.Create(appKey, hub, QueryBuilderLaunchKey.Key, user, role, scope);
+        Response.Cache.SetNoStore();
+        return Content(LaunchForm.Html(hub, token), "text/html");
+    }
+}
+```
+
+Then link to it from any page (section 4, "Put the button on your page").
+
+### Changing the key
+
+Make a new key with a new key id (for example `agency-a-2027-01`), have the super admin add its public key, deploy the app with the
+new file and key id, then have the super admin **Revoke** the old key (revoking ends that app's sessions, so do it after the
+deployment). Moving to a key vault or a certificate later is the same change.
+
 ## 3. Register the public key
 
 A hub super admin does this in the hub's console (`/querybuilder/hub/apps`, open the app, **Signing keys**, **Add a key**):
@@ -129,7 +297,8 @@ The page that comes back is a complete HTML document that posts the token by its
 
 ### ASP.NET Core (minimal API)
 
-Load the private key once, at startup. The path comes from configuration, the key file from your secret store.
+Load the private key once, at startup. The path comes from configuration, the key file from your secret store (or from your
+deployment package: section 2a shows the loading code for that).
 
 ```csharp
 using System.Security.Claims;
@@ -199,11 +368,19 @@ it must include the hub's origin. Without the script the page still works: it sh
 
 ### ASP.NET MVC 5 on .NET Framework 4.8
 
+**Using the XML key file from section 2a?** Then this section's certificate code and the `KeyThumbprint` setting don't apply:
+use the controller in section 2a, which signs with `QueryBuilderLaunchKey.Key`. The thumbprint only identifies a certificate in a
+certificate store.
+
 The package targets `netstandard2.0`, which .NET Framework 4.7.2 and later can use. Load the private key from the Windows
 certificate store (or a PFX the account can read) and take it as an `RSA` with `GetRSAPrivateKey()`. Do not use
 `cert.PrivateKey`. On .NET Framework this is an `RSACng` for a key created with the commands above; `LaunchSigningKey` accepts
-any `RSA`. PEM loading is not built into .NET Framework, which is why the key lives in a certificate. Keep only the
-thumbprint in `web.config`, never the key or a PFX password.
+any `RSA`. PEM loading is not built into .NET Framework, which is why the key lives in a certificate (or, more simply, in an
+XML key file in `App_Data`: section 2a). Keep only the thumbprint in `web.config`, never the key or a PFX password.
+
+**On Azure App Service** there is no machine store you can use: upload the PFX under the app's **Certificates**, add the app setting
+`WEBSITE_LOAD_CERTIFICATES` = the thumbprint, and read `StoreLocation.CurrentUser` instead of `LocalMachine` below (Linux apps find
+it as the file `/var/ssl/private/<thumbprint>.p12`). The Free and Shared plans cannot load certificates.
 
 ```csharp
 using System;
@@ -258,6 +435,21 @@ For a key in an ECDSA certificate use `GetECDsaPrivateKey()` with `LaunchSigning
 app runs: `LaunchSigningKey` does not own it. The `hub` value must be just the scheme, host and port: the hub is never
 served under a path.
 
+### Put the button on your page
+
+The endpoint above answers a plain GET, so the button is an ordinary link. Opening it in a new tab keeps your app open:
+
+```html
+<!-- ASP.NET Core (Razor), endpoint mapped at /open-querybuilder -->
+<a class="btn btn-primary" href="/open-querybuilder" target="_blank" rel="noopener">Open QueryBuilder</a>
+
+<!-- ASP.NET MVC 5, QueryBuilderController.Open -->
+<a class="btn btn-primary" href="@Url.Action("Open", "QueryBuilder")" target="_blank" rel="noopener">Open QueryBuilder</a>
+```
+
+Show it only to users who should reach QueryBuilder; the endpoint's `[Authorize]` / `RequireAuthorization()` is what actually
+enforces it. Each click makes a new token, so the link can be clicked any number of times.
+
 ### What to send
 
 - **`LaunchUser(id, name, email)`**: `id` is how the hub tells your users apart, so it must be stable and never reused for
@@ -271,6 +463,50 @@ served under a path.
 - **Lifetime**: the default is 60 seconds and the maximum is 120. Create the token when the user clicks, not earlier.
 - A new launch replaces the user's current hub session, so role and scope changes take effect on the next click. A hub
   session lasts at most 8 hours and ends after 1 hour without use, after which the user clicks your button again.
+
+### A user with no scope value (for example, no ProgramId)
+
+A token can't say "this user is scoped, but has no ProgramId". Both this library and the hub refuse:
+
+- a scope with no keys (`ScopeMissing`);
+- a key with no values (`LaunchScope.For` throws: "has no values; leave the key out instead");
+- an empty string as a value (`LaunchScope.For` throws: "has an empty value").
+
+That is on purpose: a missing value must never turn into "see everything" by accident. Decide what such a user should see.
+
+**1. Nothing: they shouldn't use QueryBuilder.** Hide the button for them, and refuse in the endpoint before making a token:
+
+```csharp
+var programIds = GetProgramIdsForCurrentUser();   // from your own data
+if (programIds.Count == 0)
+{
+    return new HttpStatusCodeResult(403, "You have no programs assigned in QueryBuilder.");   // ASP.NET Core: Forbid()
+}
+var scope = LaunchScope.For(new Dictionary<string, IEnumerable<string>> { ["ProgramId"] = programIds });
+```
+
+**2. The views and dashboards that aren't scoped, but no ProgramId rows.** Send a value that matches no row:
+
+```csharp
+var scope = LaunchScope.For(new Dictionary<string, IEnumerable<string>>
+{
+    ["ProgramId"] = programIds.Count > 0 ? programIds : new[] { "-1" }   // -1: no program has this id
+});
+```
+
+Views the hub admin marked "Not scoped" work normally. Views filtered on ProgramId run with `ProgramId IN (-1)` and return no
+rows, so their charts and dashboard tiles show no data. Pick a value that can never be a real id and that fits the column's type:
+`-1` for a number column, something like `__none__` for a text column. Write the choice down, so nobody later creates a program
+with that id.
+
+**3. Everything.** Only then send `LaunchScope.Unrestricted`, for users who may genuinely see all programs (your internal
+admins, for example). Never use it as the fallback for a missing value.
+
+Two more rules apply to any scope you send:
+
+- Every key must be declared for your app (or one of its data sources) in the hub, or the launch is refused with `UndeclaredScopeKey`.
+- A scoped user never sees a view whose scope key they have no values for: such views are hidden (fail closed). So sending
+  only another key (say `Region`) hides every ProgramId-filtered view from that user, rather than showing it unfiltered.
 
 ## 5. Not using .NET: the token by hand
 

@@ -173,6 +173,61 @@ public class DashboardContextRenderTests
         Assert.Equal(HttpStatusCode.Forbidden, cross.StatusCode);
     });
 
+    private static string ExportUrl(Guid query, Guid viz) => $"{Api}/queries/{query}/visualizations/{viz}/export";
+
+    [MetadataSqlFact]
+    public Task Viewer_downloads_a_published_tile_with_their_scope_and_it_is_audited() => HubApiHost.RunAsync(async env =>
+    {
+        var s = await SeedAsync(env);
+        var body = new { format = "csv", parameterValues = new { }, dashboardId = s.Published, tileId = s.PublishedTile };
+
+        var all = await ViewerAsync(env);
+        var response = await all.PostAsync(ExportUrl(s.Query, s.Viz), body);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("text/csv", response.Content.Headers.ContentType?.MediaType);
+        Assert.Equal("chart.csv", response.Content.Headers.ContentDisposition?.FileName?.Trim('"'));
+        var lines = (await response.Content.ReadAsStringAsync()).Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        Assert.Equal(["ProgramId,label", "10,ten-a", "10,ten-b", "20,twenty"], lines);
+
+        var twenty = await ViewerAsync(env, "ProgramId=20");
+        var scoped = await (await twenty.PostAsync(ExportUrl(s.Query, s.Viz), body)).Content.ReadAsStringAsync();
+        Assert.Contains("twenty", scoped, StringComparison.Ordinal);
+        Assert.DoesNotContain("ten-a", scoped, StringComparison.Ordinal);
+
+        await using var db = env.HubWideDb();
+        var exported = await db.AuditLogEntries.Where(e => e.AppId == env.AppA && e.Action == AuditAction.QueryExported).CountAsync();
+        Assert.Equal(2, exported);
+    });
+
+    [MetadataSqlFact]
+    public Task Viewer_download_without_valid_dashboard_context_or_format_is_refused() => HubApiHost.RunAsync(async env =>
+    {
+        var s = await SeedAsync(env);
+        var viewer = await ViewerAsync(env);
+
+        var cases = new (string Label, object Body, HttpStatusCode Status)[]
+        {
+            ("no context", new { format = "csv", parameterValues = new { } }, HttpStatusCode.Forbidden),
+            ("dashboard not visible", new { format = "csv", parameterValues = new { }, dashboardId = s.Private, tileId = s.PrivateTile }, HttpStatusCode.Forbidden),
+            ("tile of another dashboard", new { format = "xlsx", parameterValues = new { }, dashboardId = s.Published, tileId = s.OtherPublishedTile }, HttpStatusCode.Forbidden),
+            ("numeric format", new { format = "1", parameterValues = new { }, dashboardId = s.Published, tileId = s.PublishedTile }, HttpStatusCode.BadRequest),
+            ("unknown format", new { format = "pdf", parameterValues = new { }, dashboardId = s.Published, tileId = s.PublishedTile }, HttpStatusCode.BadRequest)
+        };
+
+        var failures = new List<string>();
+        foreach (var (label, body, status) in cases)
+        {
+            var response = await viewer.PostAsync(ExportUrl(s.Query, s.Viz), body);
+            var text = await response.Content.ReadAsStringAsync();
+            if (response.StatusCode != status || text.Contains("ten-a", StringComparison.Ordinal))
+            {
+                failures.Add($"{label} -> {(int)response.StatusCode}");
+            }
+        }
+
+        Assert.True(failures.Count == 0, string.Join("; ", failures));
+    });
+
     private sealed record MappedTiles(Guid Query, Guid Viz, Guid Dashboard, Guid MappedTile, Guid UnmappedTile);
 
     // A query with two optional parameters: lbl (label equals) and pid (program id equals).

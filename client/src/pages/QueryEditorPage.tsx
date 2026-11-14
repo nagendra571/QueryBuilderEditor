@@ -41,6 +41,7 @@ import { savedQueriesApi } from '@/lib/api'
 import { ApiError } from '@/lib/api-client'
 import { cn } from '@/lib/utils'
 import type { ParameterType, RunQueryRequest, VisualizationDto } from '@/types'
+import { downloadBlob } from '@/lib/download'
 
 const ALL_PARAMETER_TYPES: ParameterType[] = ['text', 'number', 'date', 'dateTime', 'dateRange', 'dateTimeRange', 'list', 'queryList', 'boolean']
 
@@ -696,15 +697,4 @@ function BuilderSection({
 
 function buildRunRequest(dataSourceId: string, definition: RunQueryRequest['definition'], savedQueryId: string | null): RunQueryRequest {
   return { dataSourceId, definition, parameterValues: {}, maxRows: 1000, savedQueryId }
-}
-
-function downloadBlob(blob: Blob, fileName: string) {
-  const url = URL.createObjectURL(blob)
-  const link = document.createElement('a')
-  link.href = url
-  link.download = fileName
-  document.body.appendChild(link)
-  link.click()
-  document.body.removeChild(link)
-  URL.revokeObjectURL(url)
 }

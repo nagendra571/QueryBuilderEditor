@@ -13,15 +13,7 @@ public class RenderVisualizationCommandTests
     private static Dictionary<string, object?> Row(string? region, decimal? total, string channel = "Web", decimal orders = 1) =>
         new() { ["Region"] = region, ["Channel"] = channel, ["Total"] = total, ["Orders"] = orders, ["HiddenNote"] = "secret" };
 
-    private static RenderVisualizationCommandHandler Handler(VizFixture f)
-    {
-        var grant = new QueryBuilder.Application.Dashboards.DashboardGrant();
-        return new(
-            f.Queries, f.Visualizations, f.DataSources, f.Catalog, f.Builders, f.Executor, f.Guard,
-            new VizFixture.FakeScope(), f.Limits, new FakeAppSettings(f.AppCeiling), f.Audit, f.User,
-            new QueryBuilder.Application.Parameters.ParameterBinder(null!, TimeProvider.System),
-            grant, new QueryBuilder.Application.Dashboards.DashboardGrantResolver(null!, grant));
-    }
+    private static RenderVisualizationCommandHandler Handler(VizFixture f) => new(f.Loader(), new VizFixture.FakeScope(), f.Audit);
 
     private static Task<QueryBuilder.Application.Dtos.VisualizationDataDto> Render(VizFixture f, QueryVisualization viz, Dictionary<string, string?>? parameters = null) =>
         Handler(f).Handle(new RenderVisualizationCommand(f.Query.Id, viz.Id, parameters ?? []), default);
@@ -336,6 +328,19 @@ public class RenderVisualizationCommandTests
         Assert.True(data.Truncated);
         Assert.Equal(2, data.RowCount);
         Assert.Equal(2, data.RowLimit);
+    }
+
+    [Fact]
+    public async Task Table_drawn_with_a_limit_above_the_chart_cap_still_fetches_only_the_chart_cap()
+    {
+        var (f, viz) = Arrange(type: VisualizationType.Table,
+            options: new VisualizationOptions { Table = new TableOptions { Columns = ["Region", "Total"] } });
+        f.Limits = new RecordLimitSettings(5_000);
+
+        var data = await Render(f, viz);
+
+        Assert.Equal(RecordLimits.ChartMaxRows, f.Executor.ReceivedMaxRows);
+        Assert.Equal(RecordLimits.ChartMaxRows, data.RowLimit);
     }
 
     [Fact]

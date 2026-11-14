@@ -314,7 +314,8 @@ database can run out of order; keep the default.
    app admins use it but cannot change it, until you unlock it). The hub never uses its own metadata database as a data
    source, and refuses a data source that points at it.
 6. Send the app owner the app key, the audience (`Hub:Audience`), the scope keys and the
-   [`QueryBuilder.Launch` guide](../QueryBuilder.Launch/README.md).
+   [`QueryBuilder.Launch` guide](../QueryBuilder.Launch/README.md). Its section 2a shows the simplest way to keep the app's
+   private key: a file in the app's deployment package (`.pem` for .NET 6+, `.xml` for .NET Framework 4.8).
 
 Turning an app off, or revoking one of its keys, ends that app's sessions within about 30 seconds.
 

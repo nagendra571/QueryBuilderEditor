@@ -83,6 +83,15 @@ internal sealed class VizFixture
         return viz;
     }
 
+    public QueryBuilder.Application.Visualizations.VisualizationDataLoader Loader()
+    {
+        var grant = new QueryBuilder.Application.Dashboards.DashboardGrant();
+        return new(
+            Queries, Visualizations, DataSources, Catalog, Builders, Executor, Guard, Limits, new FakeAppSettings(AppCeiling), User,
+            new QueryBuilder.Application.Parameters.ParameterBinder(null!, TimeProvider.System),
+            grant, new QueryBuilder.Application.Dashboards.DashboardGrantResolver(null!, grant));
+    }
+
     public static VisualizationOptions BarOptions() => new() { X = "Region", Measures = ["Total"] };
 
     public static QueryResultSet Result(IEnumerable<Dictionary<string, object?>> rows, bool truncated = false, params (string Name, ColumnDataType Type)[] columns)

@@ -9,7 +9,7 @@
 
   <PropertyGroup>
     <PackageId>QueryBuilder.Launch</PackageId>
-    <Version>1.0.0</Version>
+    <Version>1.0.1</Version>
     <Authors>Nagendra Chinnam</Authors>
     <Description>Signs the launch token and renders the auto-submitting form that sends a user from your app to a QueryBuilder hub. No dependencies; works from .NET Framework 4.7.2+ and modern .NET.</Description>
     <PackageTags>query-builder;sso;jwt;launch</PackageTags>
