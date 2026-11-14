@@ -45,7 +45,9 @@ now 400s on "1"/"pdf" instead of 500/accepting numbers) and `ExportNames` (file 
 chars; sheet names: Excel's rules, 31 chars, "History") in `Abstractions/IExportService.cs`; never cut a surrogate pair. Client:
 `ChartDownloadMenu` (query chart panel + compact icon in dashboard tile header), `download-name.ts`, shared `lib/download.ts`.
 Launch README gained install commands, a full .NET 4.8 controller using the XML key, and "Put the button on your page". No
-migration: the 2.0.0 schema script still applies. **Open for the user:** CSV formula injection (cells starting `= + - @` open as
+migration: the 2.0.0 schema script still applies. **Launch 1.0.1 is pushed to NuGet by the user.** Waiting for the next Launch
+release (1.0.2+): an uncommitted Launch README section "A user with no scope value (for example, no ProgramId)", added after
+1.0.1 shipped. **Open for the user:** CSV formula injection (cells starting `= + - @` open as
 formulas in Excel; the results export has always done this; the reviewer suggested escaping text cells) — not changed, asked.
 
 **2026-11-13, user's first hub is running (Azure; apps on .NET 6, 8 and Framework 4.8, all on Azure App Service).** The user's

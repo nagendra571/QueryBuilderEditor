@@ -464,6 +464,50 @@ enforces it. Each click makes a new token, so the link can be clicked any number
 - A new launch replaces the user's current hub session, so role and scope changes take effect on the next click. A hub
   session lasts at most 8 hours and ends after 1 hour without use, after which the user clicks your button again.
 
+### A user with no scope value (for example, no ProgramId)
+
+A token can't say "this user is scoped, but has no ProgramId". Both this library and the hub refuse:
+
+- a scope with no keys (`ScopeMissing`);
+- a key with no values (`LaunchScope.For` throws: "has no values; leave the key out instead");
+- an empty string as a value (`LaunchScope.For` throws: "has an empty value").
+
+That is on purpose: a missing value must never turn into "see everything" by accident. Decide what such a user should see.
+
+**1. Nothing: they shouldn't use QueryBuilder.** Hide the button for them, and refuse in the endpoint before making a token:
+
+```csharp
+var programIds = GetProgramIdsForCurrentUser();   // from your own data
+if (programIds.Count == 0)
+{
+    return new HttpStatusCodeResult(403, "You have no programs assigned in QueryBuilder.");   // ASP.NET Core: Forbid()
+}
+var scope = LaunchScope.For(new Dictionary<string, IEnumerable<string>> { ["ProgramId"] = programIds });
+```
+
+**2. The views and dashboards that aren't scoped, but no ProgramId rows.** Send a value that matches no row:
+
+```csharp
+var scope = LaunchScope.For(new Dictionary<string, IEnumerable<string>>
+{
+    ["ProgramId"] = programIds.Count > 0 ? programIds : new[] { "-1" }   // -1: no program has this id
+});
+```
+
+Views the hub admin marked "Not scoped" work normally. Views filtered on ProgramId run with `ProgramId IN (-1)` and return no
+rows, so their charts and dashboard tiles show no data. Pick a value that can never be a real id and that fits the column's type:
+`-1` for a number column, something like `__none__` for a text column. Write the choice down, so nobody later creates a program
+with that id.
+
+**3. Everything.** Only then send `LaunchScope.Unrestricted`, for users who may genuinely see all programs (your internal
+admins, for example). Never use it as the fallback for a missing value.
+
+Two more rules apply to any scope you send:
+
+- Every key must be declared for your app (or one of its data sources) in the hub, or the launch is refused with `UndeclaredScopeKey`.
+- A scoped user never sees a view whose scope key they have no values for: such views are hidden (fail closed). So sending
+  only another key (say `Region`) hides every ProgramId-filtered view from that user, rather than showing it unfiltered.
+
 ## 5. Not using .NET: the token by hand
 
 Anything that can sign a JWT can launch. The token must be a compact JWT (three base64url parts, no padding).
