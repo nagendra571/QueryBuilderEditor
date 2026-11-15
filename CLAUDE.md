@@ -34,10 +34,14 @@ integration ergonomics (single-call registration, embedded SPA, DBA-friendly mig
 
 ## Where we left off (update this at the end of each session)
 
-**2026-11-15, end of session: START HERE.** State: `main` = `25b17e4` (PR #5 merged). NuGet: **Editor 2.1.0, Launch 1.0.2**
-(both published by the user). Next versions: Editor 2.1.1+, Launch 1.0.3+. The schema script is still `QueryBuilder.schema.2.0.0.sql`.
-This `CLAUDE.md` has uncommitted edits (release notes); `main` is PR-only, so commit them on the next branch.
-- **2026-11-15: free public Azure demo LIVE (phase 1), branch `feature/azure-demo`.** Design
+**2026-11-15, end of session: START HERE.** State: `main` = `5c192cd` (PR #6, the Azure demo, merged). NuGet: **Editor 2.1.0,
+Launch 1.0.2** (both published by the user; the demo changed neither). Next versions: Editor 2.1.1+, Launch 1.0.3+. The schema
+script is still `QueryBuilder.schema.2.0.0.sql`. Merged local branches that can go (ask first): `feature/azure-demo`,
+`feature/chart-download`, `docs/launch-key-file`, `fix/launch-audience-check`. `.superpowers/` (brainstorm mockups) is untracked:
+never commit.
+- **2026-11-15: free public Azure demo LIVE and complete, on `main` via PR #6.** Any demo change: edit under `demo/`, then
+  republish (`dotnet publish demo/NorthwindPrograms -c Release`, zip, `az webapp deploy -g qb-demo -n qb-demo-northwind --type zip`;
+  the hub the same from `src/QueryBuilder.Hub` to `qb-demo-hub`). Design
   `docs/superpowers/specs/2026-11-15-free-azure-demo-design.md`, guide `demo/README.md`. Northwind Programs simulator
   (`demo/NorthwindPrograms`, .NET 10, NuGet QueryBuilder.Launch 1.0.2, 4 people Alex/Mary/Raj/Lee) at
   https://qb-demo-northwind.azurewebsites.net/, hub at https://qb-demo-hub.azurewebsites.net/. Azure account
@@ -52,7 +56,10 @@ This `CLAUDE.md` has uncommitted edits (release notes); `main` is PR-only, so co
   `az webapp config appsettings list` if needed; never commit. The SQL admin (`qbadmin`) password is in no setting: reset it with
 `az sql server update -g qb-demo -n qb-demo-sql -p <new>` when needed. **Reset demo DONE** (`demo/sql/reset-setup.sql`: `demo` schema baseline + `demo.ResetNorthwind` EXECUTE AS OWNER, user `demo_reset` EXECUTE-only; app setting `ConnectionStrings__HubReset`; re-capture with `EXEC demo.CaptureNorthwindBaseline`). **App B cleanup DONE**
   (`demo/sql/remove-app.sql`, sqlcmd vars AppKey + Confirm; refuses northwind/Default/apps with SeenUsers). **Lock decided (user, 2026-11-15): the demo data source stays locked**
-  (prospects never try the scope-mapping screen; reset restores content only). Unverified: real cold start after an idle hour.
+  (prospects never try the scope-mapping screen; reset restores content only). **Waiting on the user:** the real cold-start time
+  after an idle hour (they'll try it); whether to upgrade the Free Trial to pay-as-you-go before it ends (demo goes offline
+  otherwise); handing `demo/README.md` + the live URLs to a video agent for the marketing video. The SQL firewall allows only the
+  setup PC's IP of 2026-11-15 (70.181.x) besides Azure services; add the current IP before running sqlcmd from here.
 - **The user's hub works end to end:** App A (.NET Framework 4.8, XML private key in `App_Data`, `QueryBuilderLaunchKey.Key`
   static class) launches into the Azure hub. The first refusals were `AppDisabled` (app not turned on in the console), then
   `WrongAudience` (`QueryBuilder:HubUrl` had a trailing `/`; fixed in App A, and Launch 1.0.2 now refuses it before signing).
@@ -68,8 +75,7 @@ This `CLAUDE.md` has uncommitted edits (release notes); `main` is PR-only, so co
 - **Open questions for the user (unanswered):**
   1. CSV formula injection: text cells starting `= + - @` open as formulas in Excel (results export and the new chart
      download). Escape them (e.g. prefix `'`) in Editor 2.1.1?
-  2. Delete the merged local branches `feature/chart-download`, `docs/launch-key-file`, `fix/launch-audience-check`?
-  3. Older items still listed below: `TemplateBuilderClient` still on 1.3.0; whether to drop net8.0; PostgreSQL test group,
+  2. Older items still listed below: `TemplateBuilderClient` still on 1.3.0; whether to drop net8.0; PostgreSQL test group,
      real Entra/OIDC tenant and Azure SQL unverified; embedding charts in host pages; `LaunchSigningKey.FromPem` for 4.8;
      `docs/superpowers/plans/2026-11-12-hub-part4-questions.md`.
 - Untracked at the root, never commit: `.impeccable/`, `.playwright-mcp/`, `DESIGN.md`, `PRODUCT.md`, `MANAGING-KEYS.local.md`,
