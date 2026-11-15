@@ -42,6 +42,19 @@ session.
 
 Prospects never get super admin; they start at Northwind Programs.
 
+**Recording scene 1 again.** App B stays in the console after a take, and the hub has no "delete app" screen. Remove it with
+`demo/sql/remove-app.sql` on the hub database (as the database admin), first to look, then to remove:
+
+```
+sqlcmd -S tcp:qb-demo-sql.database.windows.net,1433 -U qbadmin -d hub -I -b -v AppKey="app-b" Confirm="no"  -i demo/sql/remove-app.sql
+sqlcmd -S tcp:qb-demo-sql.database.windows.net,1433 -U qbadmin -d hub -I -b -v AppKey="app-b" Confirm="yes" -i demo/sql/remove-app.sql
+```
+
+Use the key App B was registered with. It removes the app with its keys, return URLs, any data sources, content and its
+audit entries, so the same key can be registered again. It refuses `northwind`, the built-in Default app, and any app someone
+has launched into. Your PC's address must be allowed by the SQL server's firewall (Azure portal, `qb-demo-sql`, Networking),
+and the admin password can be reset there if lost.
+
 ## Getting a super admin sign-in code
 
 Codes are made on the server, never on a web page.
