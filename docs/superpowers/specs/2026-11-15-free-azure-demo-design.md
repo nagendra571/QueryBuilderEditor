@@ -10,7 +10,7 @@ App B cleanup script, and the data-source lock decision.** The Reset demo button
 placeholder button either); the "Reset demo" and "App B cleanup" sections below describe phase 2 and are kept so phase 1
 doesn't make choices that block them.
 
-**Data source lock (my call for phase 1, the user hasn't decided):** the demo data source is added by the super admin and
+**Data source lock (decided by the user 2026-11-15: stays locked; Reset demo and the App B cleanup are built):** the demo data source is added by the super admin and
 left **locked**, so prospect Admins can query it but can't change its connection, catalog settings or scope rules. Without
 Reset in phase 1, an unlocked source could be broken or pointed at an outside server with no way back. Unlocking later is
 a phase 2 decision (it would let prospects try the scope-mapping screen, at the cost of a bigger reset).
