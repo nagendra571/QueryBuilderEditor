@@ -13,6 +13,7 @@ integration ergonomics (single-call registration, embedded SPA, DBA-friendly mig
   `TemplateBuilderClient` references it. **1.1.0** (targets `net8.0` with EF Core 9.0.22 and `net10.0` with EF
   Core 10.0.14) is published and committed on the same branch, not merged to `main`. `TemplateBuilderClient` hasn't
   moved to it yet. Any further change needs a new version.
+- **2.1.0 + Launch 1.0.1 are PUBLISHED (2026-11-14)**: chart data downloads (CSV/XLSX); on `main` via PR #4.
 - **2.0.0 is PUBLISHED (2026-11-12): `QueryBuilder.Editor` 2.0.0 and the new `QueryBuilder.Launch` 1.0.0 were pushed to
   NuGet by the user.** Everything up to the hub (feature/rea1 1.0.14–1.5.0 and feature/hub) was merged to `main` through
   PR #1 (`8d150d9`). The release commit (version bump, `QueryBuilder.schema.2.0.0.sql`) is on branch `release/2.0.0` and
@@ -45,9 +46,13 @@ now 400s on "1"/"pdf" instead of 500/accepting numbers) and `ExportNames` (file 
 chars; sheet names: Excel's rules, 31 chars, "History") in `Abstractions/IExportService.cs`; never cut a surrogate pair. Client:
 `ChartDownloadMenu` (query chart panel + compact icon in dashboard tile header), `download-name.ts`, shared `lib/download.ts`.
 Launch README gained install commands, a full .NET 4.8 controller using the XML key, and "Put the button on your page". No
-migration: the 2.0.0 schema script still applies. **Launch 1.0.1 is pushed to NuGet by the user.** Waiting for the next Launch
-release (1.0.2+): an uncommitted Launch README section "A user with no scope value (for example, no ProgramId)", added after
-1.0.1 shipped. **Open for the user:** CSV formula injection (cells starting `= + - @` open as
+migration: the 2.0.0 schema script still applies. **RELEASED 2026-11-14: Editor 2.1.0 and Launch 1.0.1 pushed to NuGet by the
+user; merged to `main` via PR #4 (`ce2e339`). Any further change needs Editor 2.1.1+ / Launch 1.0.2+.** **Launch 1.0.2 (branch `fix/launch-audience-check`,
+not packed yet):** `LaunchToken.Create` now refuses an audience the hub could never match (trailing `/`, path, query, fragment,
+credentials, surrounding spaces, http except localhost) with an exact message; it never normalises (case could still differ). Why:
+the user's first App A launch failed as `WrongAudience` because `QueryBuilder:HubUrl` had a trailing slash, which
+`LaunchForm.Html` accepts but the hub's ordinal `aud` check doesn't (an earlier refusal was `AppDisabled`). Also ships the README
+section "A user with no scope value (for example, no ProgramId)" (`9385632`, already on `main`). **Open for the user:** CSV formula injection (cells starting `= + - @` open as
 formulas in Excel; the results export has always done this; the reviewer suggested escaping text cells) — not changed, asked.
 
 **2026-11-13, user's first hub is running (Azure; apps on .NET 6, 8 and Framework 4.8, all on Azure App Service).** The user's

@@ -35,6 +35,8 @@ namespace QueryBuilder.Launch
                 throw new ArgumentException("The audience is required.", nameof(audience));
             }
 
+            CheckAudience(audience);
+
             if (key == null) throw new ArgumentNullException(nameof(key));
             if (user == null) throw new ArgumentNullException(nameof(user));
             if (scope == null) throw new ArgumentNullException(nameof(scope));
@@ -72,6 +74,41 @@ namespace QueryBuilder.Launch
 
             var signingInput = Base64Url.Encode(Utf8(header.ToString())) + "." + Base64Url.Encode(Utf8(payload.ToString()));
             return signingInput + "." + Base64Url.Encode(key.Sign(Encoding.ASCII.GetBytes(signingInput)));
+        }
+
+        // The hub compares aud with its Hub:Audience character for character, and that setting is only ever scheme, host and
+        // port. A trailing slash or a path (often copied from the hub URL setting, which LaunchForm.Html accepts with either) would
+        // otherwise surface only as a WrongAudience refusal in the hub's audit log. Not normalised: the result could still differ
+        // from the hub's setting (case, say), and an exact error here beats a silent rewrite.
+        private static void CheckAudience(string audience)
+        {
+            const string shape = "The audience must be the hub's address exactly as the hub has it in Hub:Audience, for example 'https://hub.example.com': scheme, host and optional port only";
+            if (audience != audience.Trim() || audience.Any(char.IsControl))
+            {
+                throw new ArgumentException(shape + ", with no spaces around it.", nameof(audience));
+            }
+
+            if (!Uri.TryCreate(audience, UriKind.Absolute, out var uri) || audience.IndexOf("//", StringComparison.Ordinal) < 0)
+            {
+                throw new ArgumentException(shape + ".", nameof(audience));
+            }
+
+            var local = uri.Scheme == Uri.UriSchemeHttp && string.Equals(uri.Host, "localhost", StringComparison.OrdinalIgnoreCase);
+            if (uri.Scheme != Uri.UriSchemeHttps && !local)
+            {
+                throw new ArgumentException(shape + ", using https (http is allowed only for localhost).", nameof(audience));
+            }
+
+            if (audience.EndsWith("/", StringComparison.Ordinal))
+            {
+                throw new ArgumentException(shape + ". Remove the trailing '/': use '" + audience.TrimEnd('/') + "'.", nameof(audience));
+            }
+
+            if (uri.UserInfo.Length != 0 || uri.Query.Length != 0 || uri.Fragment.Length != 0 || uri.AbsolutePath != "/"
+                || audience.IndexOf('?') >= 0 || audience.IndexOf('#') >= 0)
+            {
+                throw new ArgumentException(shape + ", with no path (not even /querybuilder), query or fragment.", nameof(audience));
+            }
         }
 
         // Same shape rule as the hub's return-URL registry, so a URL it could never have registered fails here with a reason

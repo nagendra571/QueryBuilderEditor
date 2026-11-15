@@ -1060,7 +1060,7 @@ The full claims table, the 6,144-byte scope limit and a decoded example are in
 | `RevokedKey` | Add a new key and sign with it. |
 | `AlgorithmNotAllowed` | Not RS256/ES256, or not the algorithm the key was registered with. |
 | `BadSignature` | Wrong key pair, or the token was altered; compare fingerprints. |
-| `WrongAudience` | `aud` differs from the hub's `Hub:Audience`. |
+| `WrongAudience` | `aud` differs from the hub's `Hub:Audience`: often a trailing `/` or `/querybuilder` copied from the app's hub URL setting, or a different case or host name. QueryBuilder.Launch 1.0.2 refuses a trailing slash or path before signing. |
 | `Expired` / `NotYetValid` | Clock off by more than 30 seconds, or the token sat unused. |
 | `LifetimeTooLong` | `exp - iat` over 120 seconds; use 60. |
 | `Replayed` | The `jti` was already used; make a new token each time. |
