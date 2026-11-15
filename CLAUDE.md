@@ -14,6 +14,7 @@ integration ergonomics (single-call registration, embedded SPA, DBA-friendly mig
   Core 10.0.14) is published and committed on the same branch, not merged to `main`. `TemplateBuilderClient` hasn't
   moved to it yet. Any further change needs a new version.
 - **2.1.0 + Launch 1.0.1 are PUBLISHED (2026-11-14)**: chart data downloads (CSV/XLSX); on `main` via PR #4.
+  **Launch 1.0.2 is PUBLISHED (2026-11-15)**: audience check before signing; on `main` via PR #5. Editor still 2.1.0.
 - **2.0.0 is PUBLISHED (2026-11-12): `QueryBuilder.Editor` 2.0.0 and the new `QueryBuilder.Launch` 1.0.0 were pushed to
   NuGet by the user.** Everything up to the hub (feature/rea1 1.0.14–1.5.0 and feature/hub) was merged to `main` through
   PR #1 (`8d150d9`). The release commit (version bump, `QueryBuilder.schema.2.0.0.sql`) is on branch `release/2.0.0` and
@@ -33,6 +34,48 @@ integration ergonomics (single-call registration, embedded SPA, DBA-friendly mig
 
 ## Where we left off (update this at the end of each session)
 
+**2026-11-15, end of session: START HERE.** State: `main` = `25b17e4` (PR #5 merged). NuGet: **Editor 2.1.0, Launch 1.0.2**
+(both published by the user). Next versions: Editor 2.1.1+, Launch 1.0.3+. The schema script is still `QueryBuilder.schema.2.0.0.sql`.
+This `CLAUDE.md` has uncommitted edits (release notes); `main` is PR-only, so commit them on the next branch.
+- **2026-11-15: free public Azure demo LIVE (phase 1), branch `feature/azure-demo`.** Design
+  `docs/superpowers/specs/2026-11-15-free-azure-demo-design.md`, guide `demo/README.md`. Northwind Programs simulator
+  (`demo/NorthwindPrograms`, .NET 10, NuGet QueryBuilder.Launch 1.0.2, 4 people Alex/Mary/Raj/Lee) at
+  https://qb-demo-northwind.azurewebsites.net/, hub at https://qb-demo-hub.azurewebsites.net/. Azure account
+  **nagendrachinnam2027@gmail.com**, tenant `3e45d4b8-…`, subscription "Azure subscription 1" = **Free Trial** (disabled when
+  the trial ends unless upgraded). RG `qb-demo` West US 3 (no F1 quota in eastus2/centralus/eastus/westus2), F1 Windows plan
+  `qb-demo-plan-westus3`, SQL `qb-demo-sql` with free-offer DBs `hub` (user `hub_app`) and `programs` (user `programs_reader`),
+  AutoPause on exhaustion; firewall: Azure services + setup PC IP. Data source = raw-SQL route (`ConnectionStrings__Programs`
+  on the hub, locked). Starting set via `demo/setup/setup.mjs` (idempotent; one sign-in code per run). Sign-in codes made
+  through Kudu: `az rest --method post --url https://qb-demo-hub.scm.azurewebsites.net/api/command --resource
+  https://management.core.windows.net/` with `dotnet QueryBuilder.Hub.dll signin-code …` in `site\wwwroot`. Demo secrets were
+  generated into the job's tmp folder (gone with the job) and live in the apps' Azure settings — read them back with
+  `az webapp config appsettings list` if needed; never commit. The SQL admin (`qbadmin`) password is in no setting: reset it with
+`az sql server update -g qb-demo -n qb-demo-sql -p <new>` when needed. **Reset demo DONE** (`demo/sql/reset-setup.sql`: `demo` schema baseline + `demo.ResetNorthwind` EXECUTE AS OWNER, user `demo_reset` EXECUTE-only; app setting `ConnectionStrings__HubReset`; re-capture with `EXEC demo.CaptureNorthwindBaseline`). **App B cleanup DONE**
+  (`demo/sql/remove-app.sql`, sqlcmd vars AppKey + Confirm; refuses northwind/Default/apps with SeenUsers). **Lock decided (user, 2026-11-15): the demo data source stays locked**
+  (prospects never try the scope-mapping screen; reset restores content only). Unverified: real cold start after an idle hour.
+- **The user's hub works end to end:** App A (.NET Framework 4.8, XML private key in `App_Data`, `QueryBuilderLaunchKey.Key`
+  static class) launches into the Azure hub. The first refusals were `AppDisabled` (app not turned on in the console), then
+  `WrongAudience` (`QueryBuilder:HubUrl` had a trailing `/`; fixed in App A, and Launch 1.0.2 now refuses it before signing).
+  Debugging recipe: the refusal page never says why; read `LaunchRefused` entries in `/querybuilder/hub/audit` or
+  `SELECT TOP 10 TimestampUtc, Summary, DetailsJson FROM AuditLogEntries WHERE Summary LIKE 'Launch refused%' ORDER BY TimestampUtc DESC`.
+  The reasons table is in the Launch README §6. Reasons before the signature (`Malformed`, `UnknownApp`, `AppDisabled`, `UnknownKey`,
+  `RevokedKey`, `AlgorithmNotAllowed`, `BadSignature`) are logged hub-level as "unauthenticated".
+- **Answered:** a user with no scope value (e.g. no ProgramId) can't be sent: empty value / empty key / no keys are all refused.
+  Choices: (1) no access (hide the button, 403 before a token); (2) a sentinel value matching no row (`-1`), so "Not scoped" views
+  work and ProgramId views show no rows; (3) `Unrestricted` only for genuine all-data users, never as a fallback. Documented in
+  the Launch README ("A user with no scope value"). Offered, not built: a real `LaunchScope.None` (token format change; Launch
+  1.1.0 + Editor 2.2.0).
+- **Open questions for the user (unanswered):**
+  1. CSV formula injection: text cells starting `= + - @` open as formulas in Excel (results export and the new chart
+     download). Escape them (e.g. prefix `'`) in Editor 2.1.1?
+  2. Delete the merged local branches `feature/chart-download`, `docs/launch-key-file`, `fix/launch-audience-check`?
+  3. Older items still listed below: `TemplateBuilderClient` still on 1.3.0; whether to drop net8.0; PostgreSQL test group,
+     real Entra/OIDC tenant and Azure SQL unverified; embedding charts in host pages; `LaunchSigningKey.FromPem` for 4.8;
+     `docs/superpowers/plans/2026-11-12-hub-part4-questions.md`.
+- Untracked at the root, never commit: `.impeccable/`, `.playwright-mcp/`, `DESIGN.md`, `PRODUCT.md`, `MANAGING-KEYS.local.md`,
+  `Notes.txt`, `Sample-AppUsers.sql`, `Sample-DataScope.sql`, `reports/`, `research_notes/`. Local `nupkg/` holds the released
+  packages (the local `QueryBuilder.Launch.1.0.1.nupkg` was repacked after release and differs from NuGet's; never push it).
+
 **2026-11-13, chart data downloads → Editor 2.1.0 + Launch 1.0.1 (branch `feature/chart-download`, off the unpushed
 `docs/launch-key-file` `7a06dbe`).** User decisions: file = the chart's own columns only (same rows the chart draws), hub
 Viewers may download from dashboards they can see (audited), formats CSV + XLSX only. Built: `VisualizationDataLoader`
@@ -47,8 +90,8 @@ chars; sheet names: Excel's rules, 31 chars, "History") in `Abstractions/IExport
 `ChartDownloadMenu` (query chart panel + compact icon in dashboard tile header), `download-name.ts`, shared `lib/download.ts`.
 Launch README gained install commands, a full .NET 4.8 controller using the XML key, and "Put the button on your page". No
 migration: the 2.0.0 schema script still applies. **RELEASED 2026-11-14: Editor 2.1.0 and Launch 1.0.1 pushed to NuGet by the
-user; merged to `main` via PR #4 (`ce2e339`). Any further change needs Editor 2.1.1+ / Launch 1.0.2+.** **Launch 1.0.2 (branch `fix/launch-audience-check`,
-not packed yet):** `LaunchToken.Create` now refuses an audience the hub could never match (trailing `/`, path, query, fragment,
+user; merged to `main` via PR #4 (`ce2e339`). Any further change needs Editor 2.1.1+ / Launch 1.0.2+.** **Launch 1.0.2 — PUBLISHED 2026-11-15 by the user, on `main`
+via PR #5 (`25b17e4`); any further Launch change needs 1.0.3+:** `LaunchToken.Create` now refuses an audience the hub could never match (trailing `/`, path, query, fragment,
 credentials, surrounding spaces, http except localhost) with an exact message; it never normalises (case could still differ). Why:
 the user's first App A launch failed as `WrongAudience` because `QueryBuilder:HubUrl` had a trailing slash, which
 `LaunchForm.Html` accepts but the hub's ordinal `aud` check doesn't (an earlier refusal was `AppDisabled`). Also ships the README
