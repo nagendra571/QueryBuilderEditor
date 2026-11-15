@@ -32,7 +32,7 @@ Agree these with the hub's super admin before you write code:
 | Item | What it is |
 |---|---|
 | **App key** | The id the hub registered your app under (the token's `iss`). 2 to 63 characters: lowercase letters, digits and hyphens, for example `agency-a`. |
-| **Audience** | The hub's public https address exactly as the hub has it in `Hub:Audience` (for example `https://hub.example.com`): scheme, host and optional port, no trailing slash. The token's `aud` must equal it character for character. |
+| **Audience** | The hub's public https address exactly as the hub has it in `Hub:Audience` (for example `https://hub.example.com`): scheme, host and optional port, no trailing slash. The token's `aud` must equal it character for character. Since 1.0.2, `LaunchToken.Create` throws on a trailing slash, a path (such as `/querybuilder`), a query, spaces around it or `http` (except `localhost`), because the hub would refuse those as `WrongAudience`. It can't check case or the host itself, so copy the value from the hub's setting. |
 | **Key id (`kid`)** | A name you give each signing key, for example `2026-11`. 1 to 64 characters: letters, digits, `.`, `_`, `-`, starting with a letter or digit. |
 | **Scope keys** | The names of the row-level scope values you will send (for example `ProgramId`), declared for your app in the hub console. A token that names a key the hub does not know is refused. |
 | **Return URL** (optional) | Where "Back to your app" and logout send the user. Registered in the console, in the canonical form `https://app.example.com/` (https only; `http://localhost` is allowed for development). The token's `returnUrl` must match one registered URL exactly. |
@@ -593,7 +593,7 @@ by default). Everyone behind one office network address shares that limit; the h
 | `RevokedKey` | That key was revoked | Add a new key, sign with it |
 | `AlgorithmNotAllowed` | Not RS256/ES256, or not the algorithm the key was registered with | Register the key with the right algorithm |
 | `BadSignature` | The signature does not verify against the registered public key | Wrong key pair, or the token was altered; compare fingerprints (step 3) |
-| `WrongAudience` | `aud` differs from the hub's `Hub:Audience` | Use the hub's exact public https URL |
+| `WrongAudience` | `aud` differs from the hub's `Hub:Audience` | Use the hub's exact public https URL. Common causes: a trailing `/` (often from a hub URL setting that `LaunchForm.Html` accepts either way; 1.0.2 refuses it before signing), `/querybuilder` on the end, a different case, or the `*.azurewebsites.net` name where the hub has a custom domain (or the other way round) |
 | `Expired` / `NotYetValid` | The clock is off by more than 30 seconds, or the token sat unused | Fix the server clock; create the token on click |
 | `LifetimeTooLong` | `exp - iat` is over 120 seconds | Use 60 |
 | `Replayed` | The `jti` was already used | Generate a new token each time (the page's Back button or a double click reuses one) |

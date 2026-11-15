@@ -293,6 +293,40 @@ public class LaunchTokenTests
     }
 
     [Theory]
+    [InlineData("https://hub.example/", "Remove the trailing '/': use 'https://hub.example'")]
+    [InlineData("https://hub.example/querybuilder", "no path")]
+    [InlineData("https://hub.example/querybuilder/launch", "no path")]
+    [InlineData("https://hub.example?x=1", "no path")]
+    [InlineData("https://hub.example#f", "no path")]
+    [InlineData("https://u:p@hub.example", "no path")]
+    [InlineData("http://hub.example", "allowed only for localhost")]
+    [InlineData("hub.example", "for example")]
+    [InlineData(" https://hub.example", "no spaces")]
+    [InlineData("https://hub.example\n", "no spaces")]
+    public void Audience_that_can_never_match_the_hub_is_refused_before_signing(string audience, string message)
+    {
+        using var rsa = RSA.Create(2048);
+        var key = LaunchSigningKey.Rsa("k", rsa);
+        var ex = Assert.Throws<ArgumentException>(() =>
+            LaunchToken.Create("a", audience, key, new LaunchUser("u"), LaunchRole.Admin, LaunchScope.Unrestricted));
+        Assert.Equal("audience", ex.ParamName);
+        Assert.Contains(message, ex.Message);
+    }
+
+    [Theory]
+    [InlineData("https://hub.example")]
+    [InlineData("https://hub.example:8443")]
+    [InlineData("https://QB-Hub.example")]
+    [InlineData("http://localhost:5080")]
+    public void Audience_is_sent_exactly_as_given(string audience)
+    {
+        using var rsa = RSA.Create(2048);
+        var key = LaunchSigningKey.Rsa("k", rsa);
+        var token = LaunchToken.Create("a", audience, key, new LaunchUser("u"), LaunchRole.Admin, LaunchScope.Unrestricted);
+        Assert.Contains("\"aud\":\"" + audience + "\"", Payload(token));
+    }
+
+    [Theory]
     [InlineData("http://hub.example.com")]
     [InlineData("hub.example.com")]
     [InlineData("https://hub.example.com/sub")]
