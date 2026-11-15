@@ -1,0 +1,34 @@
+* { box-sizing: border-box; }
+body { margin: 0; font: 15px/1.5 "Segoe UI", system-ui, sans-serif; color: #1c2430; background: #f3f4f6; display: flex; flex-direction: column; min-height: 100vh; }
+header { background: #1f3a5f; color: #fff; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 16px; }
+header .brand { font-size: 18px; font-weight: 600; }
+header form { margin: 0; display: flex; align-items: center; gap: 6px; }
+header label { font-size: 13px; opacity: .85; }
+header select { font: inherit; padding: 4px 6px; border-radius: 4px; border: 1px solid #8fa3bf; max-width: 100%; }
+header button { font: inherit; padding: 4px 10px; border-radius: 4px; border: 0; background: #e8eef7; color: #1f3a5f; cursor: pointer; }
+.layout { display: flex; flex: 1; }
+nav { background: #e5e7eb; width: 190px; padding: 12px 0; flex-shrink: 0; }
+nav a { display: block; padding: 8px 18px; color: #1c2430; text-decoration: none; }
+nav a:hover { background: #d6d9de; }
+nav a.active { background: #fff; font-weight: 600; border-left: 3px solid #1f3a5f; padding-left: 15px; }
+main { background: #fff; flex: 1; padding: 20px 24px; min-width: 0; }
+h1 { font-size: 22px; margin: 0 0 12px; color: #1f3a5f; }
+h2 { font-size: 17px; margin: 18px 0 8px; }
+.table-wrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 14px; }
+th, td { text-align: left; padding: 6px 10px; border-bottom: 1px solid #e5e7eb; white-space: nowrap; }
+th { background: #f3f4f6; }
+td.num, th.num { text-align: right; }
+.btn { display: inline-block; background: #1f3a5f; color: #fff; padding: 12px 22px; border-radius: 6px; text-decoration: none; font-size: 16px; margin: 12px 0 8px; }
+.btn:hover { background: #2b4d7d; }
+.notice { background: #fff7e0; border: 1px solid #e9d28a; padding: 10px 14px; border-radius: 4px; }
+.error { background: #fdecec; border: 1px solid #e0a3a3; padding: 10px 14px; border-radius: 4px; }
+.muted { color: #5b6573; }
+footer { padding: 10px 16px; font-size: 12.5px; color: #5b6573; border-top: 1px solid #d6d9de; background: #f3f4f6; }
+@media (max-width: 700px) {
+  .layout { flex-direction: column; }
+  nav { width: 100%; display: flex; flex-wrap: wrap; padding: 0; }
+  nav a { padding: 10px 14px; }
+  nav a.active { border-left: 0; border-bottom: 3px solid #1f3a5f; padding-left: 14px; }
+  main { padding: 16px; }
+}
