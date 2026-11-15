@@ -56,6 +56,9 @@ VALUES (NEWID(), '<app id>', 'Northwind Programs', 0, 'Programs', 'sales', '', 0
 
 Then run the script again without `--app-only`.
 
+To enable the **Reset demo** button, run `demo/sql/reset-setup.sql` on the hub database once the starting set exists (it saves
+that set and creates the `demo_reset` user), then give the Northwind app `ConnectionStrings__HubReset`. See `demo/README.md`.
+
 ## Local runs and the development certificate
 
 A local hub uses a self-signed development certificate. If Node says `self-signed certificate`, run with

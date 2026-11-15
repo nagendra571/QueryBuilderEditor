@@ -54,10 +54,18 @@ Codes are made on the server, never on a web page.
 
 ## What prospects can change
 
-Prospect Admins can edit, delete or unpublish the starting queries and dashboard. The data source is locked (only a super
-admin can change it), so they cannot break the connection or the program scoping. Until the **Reset demo** button exists
-(planned), restore the starting set by re-running `demo/setup/setup.mjs` (it recreates anything missing by name; see
-`demo/setup/README.md`).
+Prospect Admins can edit, delete, share or unpublish the starting queries and dashboard. The data source is locked (only a
+super admin can change it), so they cannot break the connection or the program scoping.
+
+**Reset demo** (bottom right of every Northwind page, then **Reset the demo**) puts the starting set back for everyone: the four
+queries, their charts and the published Program overview dashboard, with their original ids; anything visitors created, shared
+or unpublished goes away. It never touches the app's registration, keys, data source, scope rules or App B. Press it before
+recording or before sending the link to a prospect. Visitors who had QueryBuilder open must reload.
+
+How it works: `demo/sql/reset-setup.sql` (run once on the hub database after `demo/setup/setup.mjs`) saves the starting set in a
+`demo` schema and adds a procedure `demo.ResetNorthwind`; the Northwind app runs it as the database user `demo_reset`, which may
+execute that procedure and nothing else (setting `ConnectionStrings__HubReset`). To change the starting set on purpose, change it
+in QueryBuilder and then run `EXEC demo.CaptureNorthwindBaseline` as the database admin.
 
 ## How it is hosted (all Azure free offers)
 

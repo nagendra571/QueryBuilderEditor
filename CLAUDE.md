@@ -50,7 +50,7 @@ This `CLAUDE.md` has uncommitted edits (release notes); `main` is PR-only, so co
   https://management.core.windows.net/` with `dotnet QueryBuilder.Hub.dll signin-code …` in `site\wwwroot`. Demo secrets were
   generated into the job's tmp folder (gone with the job) and live in the apps' Azure settings — read them back with
   `az webapp config appsettings list` if needed; never commit. The SQL admin (`qbadmin`) password is in no setting: reset it with
-`az sql server update -g qb-demo -n qb-demo-sql -p <new>` when needed. **Phase 2 (not built):** Reset demo button, App B cleanup
+`az sql server update -g qb-demo -n qb-demo-sql -p <new>` when needed. **Reset demo DONE** (`demo/sql/reset-setup.sql`: `demo` schema baseline + `demo.ResetNorthwind` EXECUTE AS OWNER, user `demo_reset` EXECUTE-only; app setting `ConnectionStrings__HubReset`; re-capture with `EXEC demo.CaptureNorthwindBaseline`). **Phase 2 left:** App B cleanup
   script, lock decision. Unverified: real cold start after an idle hour.
 - **The user's hub works end to end:** App A (.NET Framework 4.8, XML private key in `App_Data`, `QueryBuilderLaunchKey.Key`
   static class) launches into the Azure hub. The first refusals were `AppDisabled` (app not turned on in the console), then

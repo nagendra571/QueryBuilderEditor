@@ -38,6 +38,11 @@ var appKey = cfg["Demo:AppKey"] is { Length: > 0 } k ? k : "northwind";
 var hubUrl = cfg["Demo:HubUrl"] ?? "";
 var returnUrl = cfg["Demo:ReturnUrl"] is { Length: > 0 } r ? r : null;
 var connString = cfg.GetConnectionString("Programs");
+var resetConnString = cfg.GetConnectionString("HubReset");
+var resetGate = new SemaphoreSlim(1, 1);
+var lastResetUtc = DateTime.MinValue;
+// Browsers keep site.css between deploys; a version from the file's timestamp makes a redeploy reach them.
+var cssVersion = app.Environment.WebRootFileProvider.GetFileInfo("site.css").LastModified.ToUnixTimeSeconds();
 
 LaunchSigningKey? signingKey = null;
 var pem = cfg["Demo:PrivateKeyPem"];
@@ -88,14 +93,14 @@ async Task<IResult> Page(HttpContext ctx, string active, string title, Func<Pers
 
     var html = $"""
 <!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{H(title)} - Northwind Programs</title><link rel="stylesheet" href="/site.css"></head><body>
+<title>{H(title)} - Northwind Programs</title><link rel="stylesheet" href="/site.css?v={cssVersion}"></head><body>
 <header><span class="brand">Northwind Programs</span>
 <form method="post" action="/switch"><input type="hidden" name="{H(tokens.FormFieldName)}" value="{H(tokens.RequestToken)}">
 <label for="person">Signed in as</label><select id="person" name="person" onchange="this.form.submit()">{options}</select>
 <noscript><button type="submit">Switch</button></noscript></form></header>
 <div class="layout"><nav>{Link("/", "home", "Home")}{Link("/enrolments", "enrolments", "Enrolments")}{Link("/budgets", "budgets", "Budgets")}{Link("/open-querybuilder", "reports", "Reports ↗")}</nav>
 <main><h1>{H(title)}</h1>{content}</main></div>
-<footer>First visit can take up to a minute while the demo wakes up. This is a demo app with made-up data.</footer></body></html>
+<footer><span>First visit can take up to a minute while the demo wakes up. This is a demo app with made-up data.</span>{(string.IsNullOrWhiteSpace(resetConnString) ? "" : "<a class=\"reset-link\" href=\"/reset\">Reset demo</a>")}</footer></body></html>
 """;
     return Results.Content(html, "text/html; charset=utf-8");
 }
@@ -151,7 +156,7 @@ app.MapPost("/switch", async (HttpContext ctx, IAntiforgery af) =>
 app.MapGet("/", (Delegate)((HttpContext ctx) => Page(ctx, "home", "Home", async me =>
 {
     var access = me.ProgramId is int pid
-        ? $"{H(me.First)} is {(me.RoleText == "Admin" ? "an Admin" : "a Viewer")} for program {pid} ({H(programNames.GetValueOrDefault(pid, "?"))}). In QueryBuilder {(me.First == "Lee" ? "he" : "she")} sees only program {pid}'s rows" +
+        ? $"{H(me.First)} is {(me.RoleText == "Admin" ? "an Admin" : "a Viewer")} for program {pid} ({H(programNames.GetValueOrDefault(pid, "?"))}). In QueryBuilder {H(me.First)} sees only program {pid}'s rows" +
           (me.RoleText == "Viewer" ? ", and can open only the dashboards that have been published to the app." : ", and can build and share reports.")
         : $"{H(me.First)} is an Admin for all programs. In QueryBuilder {H(me.First)} sees every program's rows.";
     var sb = new StringBuilder();
@@ -203,6 +208,50 @@ app.MapGet("/open-querybuilder", (Delegate)((HttpContext ctx) =>
             $"<p class=\"error\">Demo configuration error: {H(ex.Message)}</p>"));
     }
 }));
+
+// Reset demo: a confirmation page (no script, so it works everywhere), then a POST that runs the hub-side procedure
+// demo.ResetNorthwind (demo/sql/reset-setup.sql) as a user that may execute only that procedure.
+app.MapGet("/reset", (Delegate)((HttpContext ctx) =>
+{
+    if (string.IsNullOrWhiteSpace(resetConnString)) return Task.FromResult(Results.NotFound());
+    var tokens = ctx.RequestServices.GetRequiredService<IAntiforgery>().GetAndStoreTokens(ctx);
+    return Page(ctx, "reset", "Reset demo", _ => Task.FromResult(
+        "<p>This puts Northwind's queries, charts and dashboards in QueryBuilder back to the starting set, <strong>for everyone</strong> " +
+        "using the demo. Anything visitors created, changed, shared or unpublished is undone. People, programs and the data itself " +
+        "are not affected.</p>" +
+        $"<form method=\"post\" action=\"/reset\"><input type=\"hidden\" name=\"{H(tokens.FormFieldName)}\" value=\"{H(tokens.RequestToken)}\">" +
+        "<button class=\"btn danger\" type=\"submit\">Reset the demo</button> <a href=\"/\">Cancel</a></form>"));
+}));
+
+app.MapPost("/reset", async (HttpContext ctx, IAntiforgery af) =>
+{
+    if (string.IsNullOrWhiteSpace(resetConnString)) return Results.NotFound();
+    try { await af.ValidateRequestAsync(ctx); }
+    catch (AntiforgeryValidationException) { return Results.StatusCode(400); }
+
+    const string done = "<p class=\"notice\">Done. The starting queries, charts and the published <strong>Program overview</strong> dashboard are back. " +
+                        "If QueryBuilder is open in another tab, reload it.</p><a class=\"btn\" href=\"/\">Back to Home</a>";
+    return await Page(ctx, "reset", "Reset demo", async _ =>
+    {
+        await resetGate.WaitAsync();
+        try
+        {
+            // A reset that just happened already gives the next visitor the starting set; don't let a stream of clicks
+            // keep the free database awake or churn ids under people mid-visit.
+            if (DateTime.UtcNow - lastResetUtc < TimeSpan.FromSeconds(30)) return done;
+            await using var conn = new SqlConnection(resetConnString);
+            await conn.OpenAsync();
+            await using var cmd = conn.CreateCommand();
+            cmd.CommandTimeout = 120;
+            cmd.CommandText = "EXEC demo.ResetNorthwind";
+            await cmd.ExecuteNonQueryAsync();
+            lastResetUtc = DateTime.UtcNow;
+            log.LogInformation("Demo reset to the starting set.");
+            return done;
+        }
+        finally { resetGate.Release(); }
+    });
+});
 
 app.Run();
 

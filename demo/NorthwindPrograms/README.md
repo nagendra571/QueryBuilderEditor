@@ -29,6 +29,7 @@ Azure App Service, application settings with the same names).
 | `Demo:PrivateKeyPem` | The PEM text of the RSA private key (PKCS#1 or PKCS#8). Secret. |
 | `Demo:ReturnUrl` | Optional. Must be registered in the hub and canonical, for example `https://my-demo-app.azurewebsites.net/`. Adds "Back to your app" in the hub. |
 | `ConnectionStrings:Programs` | SQL Server connection string for the sample data (`demo/sql/programs.sql`). |
+| `ConnectionStrings:HubReset` | Optional. Connection string to the **hub** database as the `demo_reset` user (see `demo/sql/reset-setup.sql`). When set, the footer shows **Reset demo**; when empty, the button is hidden. |
 
 If the key or hub address is missing the app still starts, and the Reports button shows "Demo not configured".
 
