@@ -97,5 +97,6 @@ To remove everything: `az group delete -n qb-demo`.
 - [QueryBuilder.Launch guide](../src/QueryBuilder.Launch/README.md) (how an app signs users in to the hub)
 - [Hub host guide](../src/QueryBuilder.Hub/README.md)
 - [Product README](../README.md)
+- The marketing video hand-off: [`VIDEO-BRIEF.md`](VIDEO-BRIEF.md).
 - The simulator: [`NorthwindPrograms/README.md`](NorthwindPrograms/README.md); the setup script: [`setup/README.md`](setup/README.md);
   the sample data: [`sql/programs.sql`](sql/programs.sql).
