@@ -128,6 +128,21 @@ public static class HubHost
             o.DataSourceManagement.PreviousEncryptionKeys = [.. settings.PreviousDataSourceKeys];
         });
 
+        if (settings.StartupDatabaseWaitSeconds is < 0 or > 110)
+        {
+            throw new InvalidOperationException("Hub:StartupDatabaseWaitSeconds must be from 0 to 110.");
+        }
+
+        // First of all hosted services, so the migration and mode guard the package inserts at the front start only once
+        // the database answers. A server command never starts the host, so it gets no wait.
+        if (!forCommand && settings.StartupDatabaseWaitSeconds > 0)
+        {
+            var connectionString = settings.ConnectionString!;
+            var budget = TimeSpan.FromSeconds(settings.StartupDatabaseWaitSeconds);
+            builder.Services.Insert(0, ServiceDescriptor.Singleton<IHostedService>(sp =>
+                new MetadataDatabaseWait(connectionString, budget, sp.GetRequiredService<ILogger<MetadataDatabaseWait>>())));
+        }
+
         // The package registers the cookie schemes and takes over Data Protection; the host adds only the remote handler.
         if (kind is not null)
         {

@@ -24,6 +24,13 @@ public sealed class HubHostOptions
 
     /// <summary>Set to false when a DBA applies the schema script; the host then never runs migrations.</summary>
     public bool ApplyMigrations { get; set; } = true;
+
+    /// <summary>
+    /// How long startup waits for the metadata database while it answers "not currently available" (an Azure SQL
+    /// serverless database resuming from auto-pause, a failover). 0 turns the wait off; at most 110, because IIS and
+    /// App Service give an in-process app 120 seconds to start.
+    /// </summary>
+    public int StartupDatabaseWaitSeconds { get; set; } = 90;
 }
 
 public sealed class SignInSettings

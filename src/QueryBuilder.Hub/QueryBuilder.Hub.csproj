@@ -20,4 +20,8 @@
     <ProjectReference Include="..\QueryBuilder.Editor\QueryBuilder.Editor.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="QueryBuilder.Tests" />
+  </ItemGroup>
+
 </Project>
