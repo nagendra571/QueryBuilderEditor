@@ -1,7 +1,9 @@
 # Demo setup script
 
 `setup.mjs` registers the "Northwind Programs" app in a QueryBuilder Hub, sets up its data source policy, and creates the
-starting set (four queries with charts and a published "Program overview" dashboard). Node 20+, no npm packages.
+starting set: four queries with charts and a published "Program overview" dashboard, plus eleven showcase queries and two more published dashboards, "Program performance" and "Funnel and outcomes" (Counter, Trend, Line, Area, Combo, Horizontal bar, Funnel, Waterfall, Scatter, Pivot, Table).
+
+**Run `demo/sql/programs.sql` and then `demo/sql/programs-showcase.sql` on the programs database first.** The second file (re-runnable) adds `sales.ProgramMonthly`, `ProgramStages`, `ProgramSessions` and the views `vw_ProgramMonthly`, `vw_ProgramFunnel`, `vw_ProgramSessions`; the script adds them to the allowlist and scopes each by `ProgramId`. Node 20+, no npm packages.
 Safe to run again: it finds things by name or key and updates them instead of duplicating.
 
 ```
@@ -39,8 +41,8 @@ const { publicKey, privateKey } = generateKeyPairSync('rsa', { modulusLength: 20
 2. Creates the app `northwind` ("Northwind Programs") if missing; sets scope keys `["ProgramId"]`, record ceiling 5000, "app admins can add data sources" off, turned on; adds the signing key and the return URL.
 3. Switches into the app.
 4. Data source "Northwind Programs": `managed` creates it (or re-applies the connection) through the admin endpoint, so it is locked; `existing` expects a row with that name already in the app. It checks the source is locked and locks it if not.
-5. Catalog policy: views only, allowlist `sales.vw_ProgramEnrollments`, `vw_ProgramSummary`, `vw_ProgramBudgets`, `vw_Programs`; record limit 5000; scope rules (Enrollments and Summary `ProgramId` to `ProgramId`, Budgets `ProgramId` to `OwningProgramId`, `vw_Programs` not scoped).
-6. Launches as Alex (Admin, unrestricted) and creates the queries, charts and dashboard, publishes the dashboard, and draws each chart once.
+5. Catalog policy: views only, allowlist `sales.vw_ProgramEnrollments`, `vw_ProgramSummary`, `vw_ProgramBudgets`, `vw_Programs`, `vw_ProgramMonthly`, `vw_ProgramFunnel`, `vw_ProgramSessions`; record limit 5000; scope rules (Enrollments, Summary, Monthly, Funnel and Sessions `ProgramId` to `ProgramId`, Budgets `ProgramId` to `OwningProgramId`, `vw_Programs` not scoped).
+6. Launches as Alex (Admin, unrestricted) and creates the queries, charts and dashboards, publishes them, and draws each chart once (a showcase chart that returns no rows stops the script).
 7. `--verify`: Mary (ProgramId 10, Admin), Raj (20, Admin), Lee (10, Viewer) each launch; their chart data, Lee's dashboard tiles and Lee's refusals are checked.
 
 ## "existing" mode: the raw-SQL data source row

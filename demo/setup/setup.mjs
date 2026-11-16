@@ -1,5 +1,6 @@
 // Sets up the "Northwind Programs" app in a QueryBuilder Hub: registration, data source policy, and the starting set
-// of queries, charts and a published dashboard. Idempotent. Node 20+, no dependencies. See README.md for the inputs.
+// of queries, charts and three published dashboards (Program overview, Program performance, Funnel and outcomes).
+// Run demo/sql/programs.sql and demo/sql/programs-showcase.sql on the programs database first. Idempotent. Node 20+, no dependencies. See README.md for the inputs.
 //
 //   node demo/setup/setup.mjs              everything
 //   node demo/setup/setup.mjs --app-only   register the app and its key, then stop (prints the app id)
@@ -31,7 +32,10 @@ const DS_MODE = env('QB_DS_MODE', false) || 'existing'
 const publicPem = () => readFileSync(env('QB_APP_PUBLIC_PEM_FILE'), 'utf8')
 const privateKey = () => createPrivateKey(readFileSync(env('QB_APP_PRIVATE_PEM_FILE'), 'utf8'))
 const BASE = '/querybuilder'
-const ALLOWED = ['sales.vw_ProgramEnrollments', 'sales.vw_ProgramSummary', 'sales.vw_ProgramBudgets', 'sales.vw_Programs']
+const ALLOWED = [
+  'sales.vw_ProgramEnrollments', 'sales.vw_ProgramSummary', 'sales.vw_ProgramBudgets', 'sales.vw_Programs',
+  'sales.vw_ProgramMonthly', 'sales.vw_ProgramFunnel', 'sales.vw_ProgramSessions', // demo/sql/programs-showcase.sql
+]
 
 // ---------- HTTP with a hand-made cookie jar ----------
 
@@ -223,6 +227,9 @@ async function dataSourceSetup(sa, app) {
     { objectName: 'sales.vw_ProgramSummary', state: 'Scoped', mappings: { ProgramId: 'ProgramId' } },
     { objectName: 'sales.vw_ProgramBudgets', state: 'Scoped', mappings: { ProgramId: 'OwningProgramId' } },
     { objectName: 'sales.vw_Programs', state: 'NotScoped' },
+    { objectName: 'sales.vw_ProgramMonthly', state: 'Scoped', mappings: { ProgramId: 'ProgramId' } },
+    { objectName: 'sales.vw_ProgramFunnel', state: 'Scoped', mappings: { ProgramId: 'ProgramId' } },
+    { objectName: 'sales.vw_ProgramSessions', state: 'Scoped', mappings: { ProgramId: 'ProgramId' } },
   ]
   await sa.api('PUT', `/admin/data-sources/${ds.id}/data-scope`, { objects: rules })
   const after = (await sa.api('GET', `/admin/data-sources/${ds.id}`)).json
@@ -237,13 +244,14 @@ async function dataSourceSetup(sa, app) {
 const col = (alias, name, dataType, aggregate = 'None', outAlias = null, i = 0) => ({
   tableAlias: alias, columnName: name, alias: outAlias, dataType, aggregate, orderIndex: i, isVisible: true,
 })
-const def = (obj, columns, sorts = []) => ({
+// A sort is a column name (ascending) or [column name, 'Desc'].
+const def = (obj, columns, sorts = [], rowLimit = 1000) => ({
   source: { schemaName: 'sales', objectName: obj, kind: 'View', alias: 'v' },
   joins: [], columns: columns.map((c, i) => ({ ...c, orderIndex: i })),
   filters: { operator: 'And', conditions: [], groups: [] },
   groupBy: [], having: null,
-  sorts: sorts.map((s, i) => ({ tableAlias: 'v', columnName: s, direction: 'Asc', orderIndex: i })),
-  parameters: [], rowLimit: 1000,
+  sorts: sorts.map((s, i) => ({ tableAlias: 'v', columnName: [].concat(s)[0], direction: [].concat(s)[1] ?? 'Asc', orderIndex: i })),
+  parameters: [], rowLimit,
 })
 
 const CONTENT = [
@@ -278,48 +286,180 @@ const CONTENT = [
   },
 ]
 
+const COMPACT = { style: 'compact', decimals: 1 }
+
+// Showcase queries: demo/sql/programs-showcase.sql. Each has one chart; names are the identity used to find them again.
+const SHOWCASE = {
+  enrolTotal: {
+    name: 'Total enrolments against target',
+    description: 'All enrolments from January 2025 to December 2026, next to the target set for the same months.',
+    definition: def('vw_ProgramMonthly', [col('v', 'Enrolments', 'Number', 'Sum', 'Total enrolments'), col('v', 'EnrolmentTarget', 'Number', 'Sum', 'Enrolment target')]),
+    chart: { name: 'Enrolments vs target', type: 'Counter', options: { version: 1, measures: [], counter: { value: 'Total enrolments', label: 'Enrolments, Jan 2025 - Dec 2026', decimals: 0, target: 'Enrolment target' } } },
+  },
+  enrolTrend: {
+    name: 'Enrolments by month',
+    description: 'Enrolments across all programs, month by month, with the change from the month before.',
+    definition: def('vw_ProgramMonthly', [col('v', 'MonthStart', 'Date'), col('v', 'Enrolments', 'Number', 'Sum', 'Enrolments')], ['MonthStart']),
+    chart: { name: 'Enrolment trend', type: 'Trend', options: { version: 1, x: 'MonthStart', measures: ['Enrolments'] } },
+  },
+  enrolByProgram: {
+    name: 'Enrolments by month and program',
+    description: 'Monthly enrolments for each program, to compare size and seasonality.',
+    definition: def('vw_ProgramMonthly', [col('v', 'MonthLabel', 'Text'), col('v', 'ProgramName', 'Text'), col('v', 'Enrolments', 'Number', 'Sum', 'Enrolments')], ['MonthLabel', 'ProgramName']),
+    chart: { name: 'Enrolments by program over time', type: 'Line', options: { version: 1, x: 'MonthLabel', series: 'ProgramName', measures: ['Enrolments'] } },
+  },
+  completions: {
+    name: 'Completions by month and program',
+    description: 'People who finished each month, stacked by program.',
+    definition: def('vw_ProgramMonthly', [col('v', 'MonthLabel', 'Text'), col('v', 'ProgramName', 'Text'), col('v', 'Completions', 'Number', 'Sum', 'Completions')], ['MonthLabel', 'ProgramName']),
+    chart: { name: 'Completions stacked by program', type: 'Area', options: { version: 1, x: 'MonthLabel', series: 'ProgramName', measures: ['Completions'], stacked: true } },
+  },
+  spendBudget: {
+    name: 'Spend and budget by month',
+    description: 'What was spent each month (bars) against what was budgeted (line).',
+    definition: def('vw_ProgramMonthly', [col('v', 'MonthLabel', 'Text'), col('v', 'Spend', 'Number', 'Sum', 'Spend'), col('v', 'Budget', 'Number', 'Sum', 'Budget')], ['MonthLabel']),
+    chart: { name: 'Spend vs budget', type: 'Combo', options: { version: 1, x: 'MonthLabel', measures: ['Spend', 'Budget'], lineMeasures: ['Budget'], format: COMPACT } },
+  },
+  attendance: {
+    name: 'Attendance rate by program',
+    description: 'Average share of enrolled people who attended, per program.',
+    definition: def('vw_ProgramMonthly', [col('v', 'ProgramName', 'Text'), col('v', 'AttendanceRate', 'Number', 'Avg', 'Attendance rate')], ['ProgramName']),
+    chart: { name: 'Average attendance rate', type: 'HorizontalBar', options: { version: 1, x: 'ProgramName', measures: ['Attendance rate'], sortX: 'desc', format: { style: 'number', decimals: 1 } } },
+  },
+  funnel: {
+    name: 'Participants by stage',
+    description: 'How many people reach each stage, from applying to finding work.',
+    definition: def('vw_ProgramFunnel', [col('v', 'StageOrder', 'Number'), col('v', 'Stage', 'Text'), col('v', 'Participants', 'Number', 'Sum', 'Participants')], ['StageOrder']),
+    chart: { name: 'Participant funnel', type: 'Funnel', options: { version: 1, x: 'Stage', measures: ['Participants'], sortX: 'none' } },
+  },
+  variance: {
+    name: 'Budget variance by program',
+    description: 'Budget minus spend for each program over the two years: positive means under budget.',
+    definition: def('vw_ProgramMonthly', [col('v', 'ProgramName', 'Text'), col('v', 'Variance', 'Number', 'Sum', 'Budget variance')], ['ProgramName']),
+    chart: { name: 'Under and over budget', type: 'Waterfall', options: { version: 1, x: 'ProgramName', measures: ['Budget variance'], sortX: 'none', format: COMPACT } },
+  },
+  sessions: {
+    name: 'Session size and cost',
+    description: 'Every 2026 session: how many came, what each seat cost, and how people rated it.',
+    definition: def('vw_ProgramSessions', [
+      col('v', 'ProgramName', 'Text'), col('v', 'Attendees', 'Number'),
+      col('v', 'CostPerAttendee', 'Number', 'None', 'Cost per attendee'), col('v', 'Satisfaction', 'Number'),
+    ], ['ProgramName', 'Attendees']),
+    chart: { name: 'Attendees vs cost per attendee', type: 'Scatter', options: { version: 1, x: 'Attendees', series: 'ProgramName', measures: ['Cost per attendee'], size: 'Satisfaction' } },
+  },
+  spendByYear: {
+    name: 'Spend by program and year',
+    description: 'Total spend per program in 2025 and 2026.',
+    definition: def('vw_ProgramMonthly', [col('v', 'ProgramName', 'Text'), col('v', 'YearNumber', 'Number'), col('v', 'Spend', 'Number', 'Sum', 'Spend')], ['ProgramName', 'YearNumber']),
+    chart: { name: 'Spend by program and year', type: 'Pivot', options: { version: 1, measures: [], pivot: { rows: ['ProgramName'], column: 'YearNumber', values: ['Spend'], totals: true, shade: true }, format: { style: 'currency', currency: 'USD', decimals: 0 } } },
+  },
+  topSessions: {
+    name: 'Sessions ranked by satisfaction',
+    description: 'Every session, best rated first. A program admin sees only their own program.',
+    definition: def('vw_ProgramSessions', [
+      col('v', 'SessionName', 'Text'), col('v', 'ProgramName', 'Text'), col('v', 'SessionDate', 'Date'),
+      col('v', 'Attendees', 'Number'), col('v', 'CostPerAttendee', 'Number', 'None', 'Cost per attendee'), col('v', 'Satisfaction', 'Number'),
+    ], [['Satisfaction', 'Desc'], 'SessionName']),
+    chart: { name: 'Sessions by satisfaction', type: 'Table', options: { version: 1, measures: [], table: { columns: ['SessionName', 'ProgramName', 'SessionDate', 'Attendees', 'Cost per attendee', 'Satisfaction'] } } },
+  },
+}
+
+const SHOWCASE_DASHBOARDS = [
+  {
+    name: 'Program performance',
+    description: 'Enrolments, completions, spending and attendance across programs, month by month.',
+    tiles: [
+      { section: ['Headline numbers', 'Enrolments against target, and how they are moving'], y: 0 },
+      { key: 'enrolTotal', x: 0, y: 1, w: 4, h: 6 },
+      { key: 'enrolTrend', x: 4, y: 1, w: 8, h: 6 },
+      { section: ['Seasonality and mix', 'Each program peaks at a different time of year'], y: 7 },
+      { key: 'enrolByProgram', x: 0, y: 8, w: 6, h: 9 },
+      { key: 'completions', x: 6, y: 8, w: 6, h: 9 },
+      { section: ['Money and attendance', 'Spending against budget, and who turns up'], y: 17 },
+      { key: 'spendBudget', x: 0, y: 18, w: 7, h: 9 },
+      { key: 'attendance', x: 7, y: 18, w: 5, h: 9 },
+    ],
+  },
+  {
+    name: 'Funnel and outcomes',
+    description: 'How people move through programs, where money goes, and which sessions work best.',
+    tiles: [
+      { section: ['From application to work', 'Where people drop out, and which programs are over or under budget'], y: 0 },
+      { key: 'funnel', x: 0, y: 1, w: 5, h: 7 },
+      { key: 'variance', x: 5, y: 1, w: 7, h: 7 },
+      { section: ['Sessions and spending', 'Bigger sessions cost less per person'], y: 8 },
+      { key: 'sessions', x: 0, y: 9, w: 7, h: 10 },
+      { key: 'spendByYear', x: 7, y: 9, w: 5, h: 10 },
+      { section: ['Sessions ranked', 'Every session, best rated first'], y: 19 },
+      { key: 'topSessions', x: 0, y: 20, w: 12, h: 10 },
+    ],
+  },
+]
+
+async function ensureQuery(alex, queries, c, dataSourceId, { strict }) {
+  const found = queries.find((q) => q.name === c.name)
+  const saved = (await alex.api('POST', '/queries', { id: found?.id ?? null, name: c.name, description: c.description, dataSourceId, definition: c.definition })).json
+  const queryId = saved.id
+  const vizList = (await alex.api('GET', `/queries/${queryId}/visualizations`)).json
+  const foundViz = vizList.find((v) => v.name === c.chart.name)
+  const body = { name: c.chart.name, type: c.chart.type, options: c.chart.options }
+  const viz = foundViz
+    ? (await alex.api('PUT', `/queries/${queryId}/visualizations/${foundViz.id}`, body)).json
+    : (await alex.api('POST', `/queries/${queryId}/visualizations`, body)).json
+  const data = (await alex.api('POST', `/queries/${queryId}/visualizations/${viz.id}/data`, { parameterValues: {} })).json
+  console.log(`  ${found ? 'updated' : 'created'} query "${c.name}" + ${c.chart.type} "${c.chart.name}": ${data.rowCount} rows${data.truncated ? ' (TRUNCATED)' : ''}`)
+  if (strict && (!(data.rowCount > 0) || data.truncated)) fail(`Chart "${c.chart.name}" drew ${data.rowCount} rows${data.truncated ? ' and was truncated' : ''}.`)
+  return { ...c, queryId, vizId: viz.id }
+}
+
+// Finds the dashboard by name (creates it if missing), puts the tiles in, publishes it.
+async function ensureDashboard(alex, name, description, specs) {
+  const dashboards = (await alex.api('GET', '/dashboards')).json
+  let dash = dashboards.find((d) => d.name === name)
+  if (!dash) dash = (await alex.api('POST', '/dashboards', { name, description })).json
+  let detail = (await alex.api('GET', `/dashboards/${dash.id}`)).json
+  const existing = (pred) => detail.tiles.find(pred)?.id ?? null
+  const isSection = (t) => String(t.kind).toLowerCase() === 'section'
+  const tiles = specs.map((t, order) => {
+    if (t.section) {
+      const [title, text] = t.section
+      return { id: existing((x) => isSection(x) && x.title === title), kind: 'Section', order, x: 0, y: t.y, width: 12, height: 1, autoHeight: false, title, text, visualizationId: null }
+    }
+    return {
+      id: existing((x) => x.chart?.visualizationId === t.made.vizId), kind: 'Chart', order, x: t.x, y: t.y, width: t.w, height: t.h, autoHeight: false,
+      title: null, text: null, visualizationId: t.made.vizId,
+    }
+  })
+  await alex.api('PUT', `/dashboards/${dash.id}/tiles`, { version: detail.version, tiles })
+  await alex.api('PUT', `/dashboards/${dash.id}/published`, { published: true })
+  detail = (await alex.api('GET', `/dashboards/${dash.id}`)).json
+  console.log(`  dashboard "${name}" ${dash.id}: ${detail.tiles.length} tiles, published: ${detail.published}`)
+  return { id: dash.id, name, detail }
+}
+
 async function startingSet(dataSourceId) {
   step(6, 'Launch as Alex and create the starting set')
   const alex = await launch(PEOPLE.alex)
   const queries = (await alex.api('GET', '/queries')).json
   const made = []
-  for (const c of CONTENT) {
-    const found = queries.find((q) => q.name === c.name)
-    const saved = (await alex.api('POST', '/queries', { id: found?.id ?? null, name: c.name, description: c.description, dataSourceId, definition: c.definition })).json
-    const queryId = saved.id
-    const vizList = (await alex.api('GET', `/queries/${queryId}/visualizations`)).json
-    const foundViz = vizList.find((v) => v.name === c.chart.name)
-    const body = { name: c.chart.name, type: c.chart.type, options: c.chart.options }
-    const viz = foundViz
-      ? (await alex.api('PUT', `/queries/${queryId}/visualizations/${foundViz.id}`, body)).json
-      : (await alex.api('POST', `/queries/${queryId}/visualizations`, body)).json
-    const data = (await alex.api('POST', `/queries/${queryId}/visualizations/${viz.id}/data`, { parameterValues: {} })).json
-    console.log(`  ${found ? 'updated' : 'created'} query "${c.name}" + ${c.chart.type} "${c.chart.name}": ${data.rowCount} rows${data.truncated ? ' (TRUNCATED)' : ''}`)
-    made.push({ ...c, queryId, vizId: viz.id })
-  }
+  for (const c of CONTENT) made.push(await ensureQuery(alex, queries, c, dataSourceId, { strict: false }))
 
-  const dashName = 'Program overview'
-  const dashboards = (await alex.api('GET', '/dashboards')).json
-  let dash = dashboards.find((d) => d.name === dashName)
-  if (!dash) dash = (await alex.api('POST', '/dashboards', { name: dashName, description: 'Enrolments, budgets and programs at a glance.' })).json
-  let detail = (await alex.api('GET', `/dashboards/${dash.id}`)).json
-  const existingTile = (pred) => detail.tiles.find(pred)?.id ?? null
-  const chartTile = (m, x, y, w, h, order) => ({
-    id: existingTile((t) => t.chart?.visualizationId === m.vizId), kind: 'Chart', order, x, y, width: w, height: h, autoHeight: false,
-    title: null, text: null, visualizationId: m.vizId,
-  })
-  const tiles = [
-    { id: existingTile((t) => String(t.kind).toLowerCase() === 'section'), kind: 'Section', order: 0, x: 0, y: 0, width: 12, height: 1, autoHeight: false, title: 'Program overview', text: 'Enrolments, budgets and programs at a glance', visualizationId: null },
-    chartTile(made[0], 0, 1, 6, 8, 1),
-    chartTile(made[1], 6, 1, 6, 8, 2),
-    chartTile(made[2], 0, 9, 12, 8, 3),
-    chartTile(made[3], 0, 17, 12, 8, 4),
-  ]
-  await alex.api('PUT', `/dashboards/${dash.id}/tiles`, { version: detail.version, tiles })
-  await alex.api('PUT', `/dashboards/${dash.id}/published`, { published: true })
-  detail = (await alex.api('GET', `/dashboards/${dash.id}`)).json
-  console.log(`  dashboard "${dashName}" ${dash.id}: ${detail.tiles.length} tiles, published: ${detail.published}`)
-  return { dashboardId: dash.id, made, detail }
+  const overview = await ensureDashboard(alex, 'Program overview', 'Enrolments, budgets and programs at a glance.', [
+    { section: ['Program overview', 'Enrolments, budgets and programs at a glance'], y: 0 },
+    { made: made[0], x: 0, y: 1, w: 6, h: 8 },
+    { made: made[1], x: 6, y: 1, w: 6, h: 8 },
+    { made: made[2], x: 0, y: 9, w: 12, h: 8 },
+    { made: made[3], x: 0, y: 17, w: 12, h: 8 },
+  ])
+
+  step('6b', 'Showcase queries, charts and dashboards (needs demo/sql/programs-showcase.sql)')
+  const showcase = {}
+  for (const [key, c] of Object.entries(SHOWCASE)) showcase[key] = await ensureQuery(alex, queries, c, dataSourceId, { strict: true })
+  const dashboards = [overview]
+  for (const d of SHOWCASE_DASHBOARDS) {
+    dashboards.push(await ensureDashboard(alex, d.name, d.description, d.tiles.map((t) => (t.key ? { ...t, made: showcase[t.key] } : t))))
+  }
+  return { dashboardId: overview.id, made, detail: overview.detail, showcase, dashboards }
 }
 
 // ---------- verification as each person ----------
@@ -327,14 +467,45 @@ async function startingSet(dataSourceId) {
 const rowsOf = (r) => r.json.rows
 const distinct = (rows, key) => [...new Set(rows.map((x) => x[key]))].sort((a, b) => a - b)
 
+let verifyFailures = 0
+const check = (ok, text) => {
+  if (!ok) verifyFailures++
+  console.log(`  ${ok ? 'ok  ' : 'FAIL'} ${text}`)
+}
+
+const drawShowcase = async (session, m) => (await session.api('POST', `/queries/${m.queryId}/visualizations/${m.vizId}/data`, { parameterValues: {} })).json
+const firstMeasureTotal = (m, data) => {
+  const o = m.chart.options
+  const name = o.counter?.value ?? o.measures[0] ?? o.pivot?.values[0]
+  return data.rows.reduce((n, r) => n + Number(r[name]), 0)
+}
+
+// A program admin sees only their own program on every showcase chart; charts with no program column are checked by size.
+async function verifyShowcaseScope(person, session, set) {
+  const alexS = await launch(PEOPLE.alex)
+  const programName = { 10: 'Youth Coding Academy', 20: 'Adult Literacy' }[person.programId]
+  for (const m of Object.values(set.showcase)) {
+    const mine = await drawShowcase(session, m)
+    const all = await drawShowcase(alexS, m)
+    const names = mine.columns.some((c) => c.name === 'ProgramName') ? [...new Set(mine.rows.map((r) => r['ProgramName']))] : null
+    if (names) {
+      check(mine.rowCount > 0 && names.length === 1 && names[0] === programName, `${person.label} "${m.chart.name}": ${mine.rowCount} row(s), programs ${JSON.stringify(names)} (Alex: ${all.rowCount} rows)`)
+    } else {
+      const a = firstMeasureTotal(m, all)
+      const b = firstMeasureTotal(m, mine)
+      check(mine.rowCount > 0 && b > 0 && b < a, `${person.label} "${m.chart.name}": no program column, measure total ${b} against Alex's ${a}`)
+    }
+  }
+  // The counter has no program column, so tie it to the line chart, which does: the program's monthly enrolments must add up.
+  const line = await drawShowcase(alexS, set.showcase.enrolByProgram)
+  const expected = line.rows.filter((r) => r['ProgramName'] === programName).reduce((n, r) => n + Number(r['Enrolments']), 0)
+  const counter = firstMeasureTotal(set.showcase.enrolTotal, await drawShowcase(session, set.showcase.enrolTotal))
+  check(counter === expected, `${person.label} counter total ${counter} equals ${programName}'s monthly enrolments summed from Alex's line chart (${expected})`)
+}
+
 async function verify(set) {
   step(7, 'Verify what Mary, Raj and Lee see')
   const [q1, , q3] = set.made
-  let failures = 0
-  const check = (ok, text) => {
-    if (!ok) failures++
-    console.log(`  ${ok ? 'ok  ' : 'FAIL'} ${text}`)
-  }
   for (const key of ['mary', 'raj']) {
     const p = PEOPLE[key]
     const s = await launch(p)
@@ -345,6 +516,7 @@ async function verify(set) {
     check(budget.length > 0 && distinct(budget, 'ProgramName').length === 1, `${p.label} "Budget by program": ${budget.length} row(s), programs: ${JSON.stringify(distinct(budget, 'ProgramName'))}`)
     const list = (await s.api('GET', '/queries')).json
     console.log(`       ${p.label} sees ${list.length} saved queries`)
+    await verifyShowcaseScope(p, s, set)
   }
   const alexS = await launch(PEOPLE.alex)
   const all = rowsOf(await alexS.api('POST', `/queries/${q1.queryId}/visualizations/${q1.vizId}/data`, { parameterValues: {} }))
@@ -354,24 +526,28 @@ async function verify(set) {
   const queriesAsLee = await lee.api('GET', '/queries', undefined, [200, 401, 403, 404])
   check(queriesAsLee.status === 403 || (queriesAsLee.status === 200 && queriesAsLee.json.length === 0), `Lee cannot list queries (HTTP ${queriesAsLee.status}${queriesAsLee.json?.length != null ? ', ' + queriesAsLee.json.length + ' items' : ''})`)
   const dashes = (await lee.api('GET', '/dashboards')).json
-  check(dashes.length === 1 && dashes[0].name === 'Program overview', `Lee sees ${dashes.length} dashboard(s): ${JSON.stringify(dashes.map((d) => d.name))}`)
-  const ld = (await lee.api('GET', `/dashboards/${set.dashboardId}`)).json
-  const chartTiles = ld.tiles.filter((t) => String(t.kind).toLowerCase() === 'chart')
-  for (const t of chartTiles) {
-    const meta = (await lee.api('GET', `/dashboards/${set.dashboardId}/tiles/${t.id}/chart`)).json
-    const data = (await lee.api('POST', `/queries/${meta.savedQueryId}/visualizations/${meta.visualization.id}/data`, { parameterValues: {}, dashboardId: set.dashboardId, tileId: t.id })).json
-    const programs = data.columns.some((c) => c.name === 'ProgramName') ? distinct(data.rows, 'ProgramName') : null
-    const isPrograms = meta.visualization.name === 'Programs'
-    check(isPrograms ? data.rowCount === 5 : data.rowCount > 0 && programs?.length !== 5,
-      `Lee tile "${meta.visualization.name}": ${data.rowCount} row(s)${programs ? ', programs ' + JSON.stringify(programs) : ' (no program column)'}`)
-    if (meta.visualization.name === 'Enrolments by status') {
-      const n = data.rows.reduce((a, r) => a + Number(r['Enrolments']), 0)
-      check(n === 20, `Lee "Enrolments by status" counts add up to ${n} (program 10 has 20 enrolments)`)
+  const wantNames = set.dashboards.map((d) => d.name).sort()
+  check(same(dashes.map((d) => d.name).sort(), wantNames), `Lee sees ${dashes.length} dashboard(s): ${JSON.stringify(dashes.map((d) => d.name))}`)
+  for (const dashboard of set.dashboards) {
+    const ld = (await lee.api('GET', `/dashboards/${dashboard.id}`)).json
+    const chartTiles = ld.tiles.filter((t) => String(t.kind).toLowerCase() === 'chart')
+    check(chartTiles.length === dashboard.detail.tiles.filter((t) => String(t.kind).toLowerCase() === 'chart').length, `Lee opens "${dashboard.name}": ${chartTiles.length} chart tile(s)`)
+    for (const t of chartTiles) {
+      const meta = (await lee.api('GET', `/dashboards/${dashboard.id}/tiles/${t.id}/chart`)).json
+      const data = (await lee.api('POST', `/queries/${meta.savedQueryId}/visualizations/${meta.visualization.id}/data`, { parameterValues: {}, dashboardId: dashboard.id, tileId: t.id })).json
+      const programs = data.columns.some((c) => c.name === 'ProgramName') ? distinct(data.rows, 'ProgramName') : null
+      const isPrograms = meta.visualization.name === 'Programs'
+      check(isPrograms ? data.rowCount === 5 : data.rowCount > 0 && (programs?.length ?? 0) <= 1 && programs?.length !== 5,
+        `Lee "${dashboard.name}" tile "${meta.visualization.name}": ${data.rowCount} row(s)${programs ? ', programs ' + JSON.stringify(programs) : ' (no program column)'}`)
+      if (meta.visualization.name === 'Enrolments by status') {
+        const n = data.rows.reduce((a, r) => a + Number(r['Enrolments']), 0)
+        check(n === 20, `Lee "Enrolments by status" counts add up to ${n} (program 10 has 20 enrolments)`)
+      }
     }
   }
   const direct = await lee.api('POST', `/queries/${q1.queryId}/visualizations/${q1.vizId}/data`, { parameterValues: {} }, [200, 403, 404])
   check(direct.status !== 200, `Lee asking for a chart outside a dashboard is refused (HTTP ${direct.status})`)
-  return failures
+  return verifyFailures
 }
 
 // ---------- main ----------
@@ -387,7 +563,8 @@ let failures = 0
 if (args.has('--verify')) failures = await verify(set)
 
 console.log('\nSummary')
-console.log(`  app ${app.id} (${APP_KEY}), data source ${dsId}, ${set.made.length} queries with charts, dashboard ${set.dashboardId} (${set.detail.tiles.length} tiles, published)`)
+console.log(`  app ${app.id} (${APP_KEY}), data source ${dsId}, ${set.made.length + Object.keys(set.showcase).length} queries with charts`)
+for (const d of set.dashboards) console.log(`  dashboard "${d.name}" ${d.id} (${d.detail.tiles.length} tiles, published)`)
 if (failures) {
   console.log(`  ${failures} verification check(s) FAILED`)
   process.exit(2)

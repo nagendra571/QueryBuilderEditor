@@ -21,7 +21,7 @@ Pick one with the **Signed in as** switcher (top right of Northwind Programs), t
 | Alex Morgan | Admin | all programs | Queries, Dashboards and Admin. "Enrolments by program" shows 5 programs, 100 enrolments. |
 | Mary Chen | Admin | program 10 | The same queries and dashboard, but every chart shows only Youth Coding Academy (20 enrolments). Badge "ZONE · ProgramId 10". |
 | Raj Patel | Admin | program 20 | Same as Mary, but only Adult Literacy (20 enrolments). |
-| Lee Brooks | Viewer | program 10 | Only **Dashboards**: the published "Program overview", drawn for program 10 only. No queries, no SQL. |
+| Lee Brooks | Viewer | program 10 | Only **Dashboards**: the published "Program overview", "Program performance" and "Funnel and outcomes", drawn for program 10 only. No queries, no SQL. |
 
 The Northwind screens (Enrolments, Budgets) show the same rows the hub will show for that person, so you can compare.
 "Back to Northwind Programs" in the hub returns to the app; switching person and clicking the button again replaces the hub
@@ -67,7 +67,9 @@ Codes are made on the server, never on a web page.
 
 ## What prospects can change
 
-Prospect Admins can edit, delete, share or unpublish the starting queries and dashboard. The data source is locked (only a
+The starting set has three published dashboards: **Program overview** (bar, pie, stacked bar, table), **Program performance** (counter with target, trend, line, stacked area, combo, horizontal bar) and **Funnel and outcomes** (funnel, waterfall, scatter/bubble, pivot with shading, ranked table). Their data comes from `demo/sql/programs.sql` and `demo/sql/programs-showcase.sql`.
+
+Prospect Admins can edit, delete, share or unpublish the starting queries and dashboards. The data source is locked (only a
 super admin can change it), so they cannot break the connection or the program scoping.
 
 **Reset demo** (bottom right of every Northwind page, then **Reset the demo**) puts the starting set back for everyone: the four
