@@ -1,0 +1,3 @@
+# Review-only output of sheet.cjs and the first exploratory 1x captures; rebuilt on demand.
+out/sheet*
+shots/explore/

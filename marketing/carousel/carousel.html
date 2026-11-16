@@ -1,0 +1,456 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>QueryBuilder Hub carousel</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Public+Sans:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ground: #eef1ec; --grid: #dde3da; --navy: #1e2a38; --navy-grid: #263547; --white: #ffffff;
+    --blue: #2f6db5; --blue-night: #6fa3e0; --yellow: #f2c94c; --yellow-ink: #3b2c00;
+    --violet: #6f51a0; --violet-night: #a98bd6; --red: #b83a36; --red-night: #e8736f;
+    --muted: #52605b; --muted-night: #9fadb7; --edge: #c9d1c7; --edge-night: #2c3a48; --ink-night: #e6ecf1;
+    --m: 76px;
+  }
+  @page { size: 1080px 1350px; margin: 0; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--navy); font-family: 'Public Sans', sans-serif; color: var(--navy); -webkit-font-smoothing: antialiased; }
+  ::selection { background: var(--violet); color: var(--white); }
+
+  .slide { width: 1080px; height: 1350px; position: relative; overflow: hidden; break-after: page;
+    background-color: var(--ground);
+    background-image: linear-gradient(var(--grid) 1px, transparent 1px), linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+    background-size: 54px 54px; background-position: -1px -1px; }
+  .slide.inside { background-color: var(--navy); color: var(--ink-night);
+    background-image: linear-gradient(var(--navy-grid) 1px, transparent 1px), linear-gradient(90deg, var(--navy-grid) 1px, transparent 1px); }
+
+  .band { position: absolute; left: var(--m); right: var(--m); top: 46px; display: flex; justify-content: space-between; align-items: center;
+    font-family: 'Barlow Condensed'; font-weight: 600; font-size: 26px; letter-spacing: .02em; color: var(--muted); }
+  .inside .band { color: var(--muted-night); }
+  .band .mark { display: flex; gap: 12px; align-items: center; color: var(--navy); font-family: 'Public Sans'; font-weight: 800; font-size: 24px; letter-spacing: 0; }
+  .inside .band .mark { color: var(--white); }
+  .band svg { width: 28px; height: 28px; }
+
+  /* Content always stops above the route strip's rule (y 1150). */
+  .body { position: absolute; left: var(--m); right: var(--m); top: 130px; height: 1000px; display: flex; flex-direction: column; }
+  .body > * { flex-shrink: 0; }
+  h1, h2 { font-weight: 800; letter-spacing: -0.035em; line-height: .96; text-wrap: balance; }
+  h1 { font-size: 104px; }
+  h2 { font-size: 88px; }
+  .inside h1, .inside h2 { color: var(--white); }
+  .lede { font-size: 33px; line-height: 1.34; margin-top: 28px; max-width: 900px; color: var(--muted); }
+  .inside .lede { color: var(--muted-night); }
+  .lede b, .says b { color: var(--navy); font-weight: 700; }
+  .inside .lede b, .inside .says b { color: var(--white); }
+  .says { font-size: 29px; line-height: 1.38; color: var(--muted); }
+  .inside .says { color: var(--muted-night); }
+  .num { font-family: 'Barlow Condensed'; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+  /* Real screenshots, framed as surveyed parcels: the frame carries the registration ticks, the crop inside clips. */
+  .frame { position: relative; }
+  .frame::before, .frame::after { content: ''; position: absolute; width: 30px; height: 30px; pointer-events: none; z-index: 4; }
+  .frame::before { left: -14px; top: -14px; border-left: 3px solid var(--navy); border-top: 3px solid var(--navy); }
+  .frame::after { right: -14px; bottom: -14px; border-right: 3px solid var(--navy); border-bottom: 3px solid var(--navy); }
+  .inside .frame::before, .inside .frame::after { border-color: var(--violet-night); }
+  .crop { position: relative; overflow: hidden; background: var(--white); outline: 2px solid var(--navy); box-shadow: 0 18px 40px -18px rgba(30,42,56,.45); }
+  .inside .crop { outline-color: var(--ink-night); box-shadow: 0 22px 50px -16px rgba(13,20,28,.7); }
+  .crop img { position: absolute; display: block; }
+
+  .schedule { display: grid; margin-top: 36px; }
+  .schedule .row { display: grid; grid-template-columns: 290px 1fr; gap: 28px; padding: 20px 0 18px; border-top: 2px solid var(--navy); align-items: baseline; }
+  .inside .schedule .row { border-color: var(--edge-night); }
+  .schedule .k { font-family: 'Barlow Condensed'; font-weight: 700; font-size: 38px; line-height: 1; }
+  .inside .schedule .k { color: var(--white); }
+  .schedule .v { font-size: 27px; line-height: 1.36; color: var(--muted); }
+  .inside .schedule .v { color: var(--ink-night); }
+
+  .code { font-family: 'JetBrains Mono', monospace; }
+  .route { position: absolute; left: 0; top: 0; width: 1080px; height: 1350px; pointer-events: none; z-index: 5; }
+</style>
+</head>
+<body>
+
+<!-- 1 · Cover -->
+<section class="slide" data-stop="Your apps">
+  <div class="band"><span class="mark"><svg viewBox="0 0 24 24" fill="none" stroke="#1e2a38" stroke-width="2.2"><path d="M12 22s7-6.2 7-12a7 7 0 1 0-14 0c0 5.8 7 12 7 12z"/><circle cx="12" cy="10" r="2.6" fill="#6f51a0" stroke="none"/></svg>QueryBuilder Hub</span><span>Sheet 01 / 14</span></div>
+  <div class="body">
+    <h1 style="font-size:90px">One reporting hub.<br>Every app you run.</h1>
+    <p class="lede">Multi-tenant, self-service reporting. Each app hands its users over signed in, and every person sees only the rows that are theirs.</p>
+    <svg viewBox="0 0 1004 540" style="margin-top:46px;width:1004px;height:540px" aria-label="Plan: app parcels feeding the QueryBuilder Hub; the route continues off the sheet">
+      <g font-family="Barlow Condensed" font-weight="700" font-size="30" fill="#1e2a38">
+        <rect x="0" y="0" width="300" height="180" fill="#ffffff" stroke="#1e2a38" stroke-width="3"/>
+        <text x="22" y="46">Northwind Programs</text>
+        <text x="22" y="80" font-family="Public Sans" font-weight="600" font-size="20" fill="#52605b">.NET 10 · launches its users</text>
+        <rect x="0" y="215" width="300" height="140" fill="#ffffff" stroke="#1e2a38" stroke-width="3"/>
+        <text x="22" y="261">Your .NET 4.8 app</text>
+        <rect x="0" y="390" width="300" height="140" fill="none" stroke="#1e2a38" stroke-width="3" stroke-dasharray="12 9"/>
+        <text x="22" y="436">Any JWT-signing app</text>
+        <rect x="540" y="110" width="388" height="300" fill="#1e2a38"/>
+        <text x="572" y="190" fill="#ffffff" font-family="Public Sans" font-weight="800" font-size="44">QueryBuilder</text>
+        <text x="572" y="240" fill="#ffffff" font-family="Public Sans" font-weight="800" font-size="44">Hub</text>
+        <text x="572" y="306" fill="#a98bd6" font-size="27">queries · charts · dashboards</text>
+        <text x="572" y="344" fill="#9fadb7" font-size="27">one tenant per app</text>
+        <path d="M300 90 C 440 90, 420 220, 540 220" stroke="#6f51a0" stroke-width="8" fill="none"/>
+        <path d="M300 285 C 410 285, 430 260, 540 260" stroke="#6f51a0" stroke-width="4" stroke-dasharray="2 11" stroke-linecap="round" fill="none"/>
+        <path d="M300 460 C 440 460, 420 300, 540 300" stroke="#6f51a0" stroke-width="4" stroke-dasharray="2 11" stroke-linecap="round" fill="none"/>
+        <path d="M928 220 C 970 220, 980 300, 1004 300" stroke="#6f51a0" stroke-width="8" fill="none"/>
+      </g>
+    </svg>
+  </div>
+</section>
+
+<!-- 2 · Problem -->
+<section class="slide" data-stop="Today">
+  <div class="band"><span class="mark">QueryBuilder Hub</span><span>Sheet 02 / 14</span></div>
+  <div class="body">
+    <h2 style="font-size:80px">Every app rebuilds reporting. Every app decides again who sees what.</h2>
+    <p class="lede">Separate report builders, exports and access rules, each kept in step by hand. One missed check and a user reads another team's rows.</p>
+    <svg viewBox="0 0 928 470" style="margin-top:34px;width:860px;height:436px" aria-hidden="true">
+      <g font-family="Barlow Condensed" font-weight="700" font-size="32" fill="#1e2a38">
+        <rect x="0" y="0" width="420" height="240" fill="#ffffff" stroke="#1e2a38" stroke-width="3"/>
+        <text x="24" y="48">Programs</text>
+        <rect x="450" y="0" width="230" height="170" fill="#ffffff" stroke="#1e2a38" stroke-width="3"/>
+        <text x="472" y="48">HR</text>
+        <rect x="710" y="0" width="218" height="290" fill="#ffffff" stroke="#1e2a38" stroke-width="3"/>
+        <text x="732" y="48">Finance</text>
+        <rect x="0" y="270" width="290" height="200" fill="#ffffff" stroke="#1e2a38" stroke-width="3"/>
+        <text x="24" y="318">Grants</text>
+        <g transform="rotate(-4 470 330)"><rect x="330" y="230" width="250" height="160" fill="#f6f7f4" stroke="#1e2a38" stroke-width="3"/></g>
+        <rect x="350" y="268" width="250" height="160" fill="#ffffff" stroke="#1e2a38" stroke-width="3"/>
+        <text x="372" y="314">Field ops</text>
+        <rect x="640" y="320" width="288" height="150" fill="none" stroke="#1e2a38" stroke-width="3" stroke-dasharray="12 10"/>
+        <text x="662" y="366">Next app</text>
+        <g font-family="Public Sans" font-weight="600" font-size="22" fill="#52605b">
+          <text x="24" y="100">report builder v1, own access rules</text><text x="24" y="134">exports, own column filters</text>
+          <text x="472" y="100">report builder v3</text><text x="472" y="132">own access rules</text>
+          <text x="732" y="100">exports only</text><text x="732" y="132">own access rules</text>
+          <text x="24" y="370">report builder v2</text><text x="24" y="402">own access rules</text>
+          <text x="372" y="364">spreadsheets</text><text x="372" y="396">unwritten rules</text>
+          <text x="662" y="416">another build, more rules</text>
+        </g>
+        <g fill="#b83a36"><circle cx="390" cy="210" r="13"/><circle cx="572" cy="296" r="13"/><circle cx="898" cy="260" r="13"/></g>
+      </g>
+    </svg>
+    <p class="says" style="margin-top:24px;display:flex;align-items:center;gap:14px;font-size:26px"><svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="11" fill="#b83a36"/></svg>where a scope check can be forgotten</p>
+  </div>
+</section>
+
+<!-- 3 · The plan -->
+<section class="slide" data-stop="The plan">
+  <div class="band"><span class="mark">QueryBuilder Hub</span><span>Sheet 03 / 14</span></div>
+  <div class="body">
+    <h2>One hub. Every app a tenant.</h2>
+    <p class="lede">A super admin registers each app once: its signing key, the addresses it may return users to, its scope keys and a record ceiling.</p>
+    <svg viewBox="0 0 928 560" style="margin-top:40px;width:928px;height:560px" aria-label="Hub at the centre, apps around it">
+      <g font-family="Barlow Condensed" font-weight="700">
+        <circle cx="464" cy="280" r="250" fill="none" stroke="#c9d1c7" stroke-width="2"/>
+        <circle cx="464" cy="280" r="170" fill="none" stroke="#c9d1c7" stroke-width="2"/>
+        <g stroke="#6f51a0" stroke-width="5" fill="none">
+          <path d="M464 280 L 150 70"/><path d="M464 280 L 778 70"/><path d="M464 280 L 120 400"/><path d="M464 280 L 808 400"/><path d="M464 280 L 464 545"/>
+        </g>
+        <rect x="304" y="200" width="320" height="160" fill="#1e2a38"/>
+        <text x="464" y="276" fill="#fff" font-family="Public Sans" font-weight="800" font-size="34" text-anchor="middle">QueryBuilder Hub</text>
+        <text x="464" y="320" fill="#a98bd6" font-size="25" text-anchor="middle">one console · one audit log</text>
+        <g font-size="28" fill="#1e2a38">
+          <rect x="40" y="30" width="220" height="64" fill="#fff" stroke="#1e2a38" stroke-width="3"/><text x="150" y="72" text-anchor="middle">Northwind</text>
+          <rect x="668" y="30" width="220" height="64" fill="#fff" stroke="#1e2a38" stroke-width="3"/><text x="778" y="72" text-anchor="middle">Grants portal</text>
+          <rect x="0" y="368" width="240" height="64" fill="#fff" stroke="#1e2a38" stroke-width="3"/><text x="120" y="410" text-anchor="middle">HR system</text>
+          <rect x="688" y="368" width="240" height="64" fill="#fff" stroke="#1e2a38" stroke-width="3"/><text x="808" y="410" text-anchor="middle">Finance</text>
+          <rect x="354" y="496" width="220" height="64" fill="#eef1ec" stroke="#1e2a38" stroke-width="3" stroke-dasharray="10 8"/><text x="464" y="538" text-anchor="middle">Your next app</text>
+        </g>
+      </g>
+    </svg>
+    <p class="says" style="margin-top:26px">From then on its users arrive ready to work, inside their own walls.</p>
+  </div>
+</section>
+
+<!-- 4 · Station 1 -->
+<section class="slide" data-stop="Reports, in your app" data-station="1">
+  <div class="band"><span class="mark">QueryBuilder Hub</span><span>Sheet 04 / 14</span></div>
+  <div class="body">
+    <h2>It starts with a button in your own app.</h2>
+    <p class="lede">People click <b>Reports</b> where they already work. Your server decides their role and scope, every time.</p>
+    <div class="frame" style="margin-top:34px;width:928px"><div class="crop">
+      <img src="shots/mary-northwind.png" data-crop="0,0,1440,300" alt="Northwind Programs, signed in as Mary Chen, with the Open reports button">
+    </div>
+    <div style="position:absolute;z-index:5;right:28px;bottom:-46px;width:458px;height:102px;overflow:hidden;outline:4px solid #6f51a0;box-shadow:0 16px 34px -14px rgba(30,42,56,.55)">
+      <img src="shots/mary-northwind.png" style="position:absolute;width:2304px;left:-330px;top:-294px" alt="The Open reports in QueryBuilder button, enlarged">
+    </div></div>
+    <div class="code" style="margin-top:70px;background:#1e2a38;color:#e6ecf1;font-size:20px;line-height:1.55;padding:24px 28px;white-space:pre"><span style="color:#a98bd6">var</span> scope = LaunchScope.For(<span style="color:#a98bd6">new</span> Dictionary&lt;<span style="color:#a98bd6">string</span>, IEnumerable&lt;<span style="color:#a98bd6">string</span>&gt;&gt;
+    { [<span style="color:#f2c94c">"ProgramId"</span>] = programIds });
+<span style="color:#a98bd6">var</span> token = LaunchToken.Create(<span style="color:#f2c94c">"northwind"</span>, hub, key,
+    <span style="color:#a98bd6">new</span> LaunchUser(user.Id, user.Name, user.Email),
+    LaunchRole.Admin, scope);
+<span style="color:#a98bd6">return</span> Content(LaunchForm.Html(hub, token), <span style="color:#f2c94c">"text/html"</span>);</div>
+    <p class="says" style="margin-top:18px;font-size:24px">QueryBuilder.Launch: netstandard2.0, no dependencies, .NET Framework 4.7.2 and later.</p>
+  </div>
+</section>
+
+<!-- 5 · Station 2 -->
+<section class="slide inside" data-stop="A signed, single-use token" data-station="2">
+  <div class="band"><span class="mark">QueryBuilder Hub</span><span>Sheet 05 / 14</span></div>
+  <div class="body">
+    <h2>A signed ticket, good for one trip.</h2>
+    <div style="display:grid;grid-template-columns:480px 1fr;gap:44px;margin-top:56px;align-items:start">
+      <div style="background:#ffffff;color:#1e2a38;padding:30px 30px 26px;outline:2px solid #e6ecf1">
+        <div class="num" style="font-size:32px;color:#6f51a0">Launch token payload</div>
+        <div class="code" style="font-size:21px;line-height:1.8;margin-top:14px;white-space:pre">iss   <b>northwind</b>
+aud   <b>https://qb-demo-hub…</b>
+sub   <b>mary.chen@…</b>
+role  <b>Admin</b>
+scope <b>ProgramId: ["10"]</b>
+iat   <b>1794780000</b>
+exp   <b>iat + 60</b>
+jti   <b>new for every launch</b></div>
+        <div style="margin-top:20px;border-top:2px solid #1e2a38;padding-top:16px" class="num"><span style="font-size:32px">Signature: RS256 or ES256</span></div>
+      </div>
+      <div class="schedule" style="margin-top:0">
+        <div class="row" style="grid-template-columns:1fr;border-top:0;padding-top:0"><span class="k">At most 120 seconds</span><span class="v">to live. Sixty by default.</span></div>
+        <div class="row" style="grid-template-columns:1fr"><span class="k">Used once</span><span class="v">A replayed token id is refused.</span></div>
+        <div class="row" style="grid-template-columns:1fr"><span class="k">Addressed</span><span class="v">Its audience must equal this hub, exactly.</span></div>
+        <div class="row" style="grid-template-columns:1fr"><span class="k">Quiet refusals</span><span class="v">One generic page for the user; the reason goes to the audit log. Tokens are never logged.</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 6 · Station 3 -->
+<section class="slide inside" data-stop="A tenant session" data-station="3">
+  <div class="band"><span class="mark">QueryBuilder Hub</span><span>Sheet 06 / 14</span></div>
+  <div class="body">
+    <h2>Inside, a session that knows its app, its role and its rows.</h2>
+    <svg viewBox="0 0 928 300" style="margin-top:54px;width:928px;height:300px" aria-label="Session lifetime: one hour without use ends it, eight hours at most">
+      <g font-family="Barlow Condensed" font-weight="700">
+        <text x="0" y="40" fill="#e6ecf1" font-size="32">Launch</text>
+        <text x="928" y="40" fill="#e6ecf1" font-size="32" text-anchor="end">8 h at most</text>
+        <rect x="0" y="66" width="928" height="40" fill="#2c3a48"/>
+        <rect x="0" y="66" width="116" height="40" fill="#a98bd6"/>
+        <text x="0" y="150" fill="#a98bd6" font-size="32">1 h without use ends it</text>
+        <text x="0" y="216" fill="#9fadb7" font-family="Public Sans" font-weight="600" font-size="24">Cookie __Host-qb-hub: HttpOnly, Secure, SameSite=Lax.</text>
+        <text x="0" y="256" fill="#9fadb7" font-family="Public Sans" font-weight="600" font-size="24">Role and scope come from the latest token only, never stored as a grant.</text>
+      </g>
+    </svg>
+    <h3 style="margin-top:44px;font-weight:800;font-size:44px;letter-spacing:-.02em;color:#fff">The kill switch</h3>
+    <svg viewBox="0 0 928 220" style="margin-top:18px;width:928px;height:220px" aria-label="Turn an app off or revoke its key; its sessions end within about thirty seconds">
+      <g font-family="Barlow Condensed" font-weight="700">
+        <rect x="0" y="50" width="300" height="96" fill="#2c3a48"/>
+        <text x="24" y="92" fill="#e6ecf1" font-size="30">App turned off</text>
+        <text x="24" y="128" fill="#9fadb7" font-size="26">or a signing key revoked</text>
+        <path d="M300 98 H 620" stroke="#e8736f" stroke-width="6"/>
+        <path d="M606 82 L 626 98 L 606 114" stroke="#e8736f" stroke-width="6" fill="none"/>
+        <text x="464" y="34" fill="#e8736f" font-size="38" text-anchor="middle">within about 30 seconds</text>
+        <rect x="628" y="50" width="300" height="96" fill="none" stroke="#e8736f" stroke-width="3" stroke-dasharray="10 8"/>
+        <text x="652" y="92" fill="#e6ecf1" font-size="30">That app's sessions</text>
+        <text x="652" y="128" fill="#e8736f" font-size="30">end</text>
+        <text x="0" y="200" fill="#9fadb7" font-family="Public Sans" font-weight="600" font-size="25">No waiting for eight-hour sessions to run out.</text>
+      </g>
+    </svg>
+  </div>
+</section>
+
+<!-- 7 · Station 4 -->
+<section class="slide inside" data-stop="Walled tenants" data-station="4">
+  <div class="band"><span class="mark">QueryBuilder Hub</span><span>Sheet 07 / 14</span></div>
+  <div class="body">
+    <h2>Tenants share a hub. Never a row.</h2>
+    <svg viewBox="0 0 928 520" style="margin-top:50px;width:928px;height:520px" aria-label="Two tenants with the same email are two different people; a cross-tenant request returns 404">
+      <defs>
+        <pattern id="hy2" width="22" height="22" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="22" height="22" fill="#3b3a2c"/><rect width="9" height="22" fill="#f2c94c" opacity=".45"/></pattern>
+        <pattern id="hb2" width="22" height="22" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="22" height="22" fill="#24344a"/><rect width="9" height="22" fill="#6fa3e0" opacity=".45"/></pattern>
+        <marker id="ar" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L10 5 L0 10z" fill="#e8736f"/></marker>
+      </defs>
+      <g font-family="Barlow Condensed" font-weight="700">
+        <rect x="0" y="0" width="420" height="520" fill="url(#hy2)" stroke="#f2c94c" stroke-width="3"/>
+        <rect x="508" y="0" width="420" height="520" fill="url(#hb2)" stroke="#6fa3e0" stroke-width="3"/>
+        <rect x="448" y="0" width="32" height="520" fill="#e6ecf1"/>
+        <rect x="0" y="0" width="290" height="62" fill="#1e2a38"/><text x="20" y="44" fill="#f2c94c" font-size="36">Tenant: Northwind</text>
+        <rect x="508" y="0" width="330" height="62" fill="#1e2a38"/><text x="528" y="44" fill="#6fa3e0" font-size="36">Tenant: Grants portal</text>
+        <rect x="30" y="100" width="360" height="110" fill="#1e2a38"/><text x="52" y="146" fill="#fff" font-family="Public Sans" font-size="26" font-weight="700">pat@agency.example</text><text x="52" y="186" fill="#9fadb7" font-size="26">person 1, a Viewer</text>
+        <rect x="538" y="100" width="360" height="110" fill="#1e2a38"/><text x="560" y="146" fill="#fff" font-family="Public Sans" font-size="26" font-weight="700">pat@agency.example</text><text x="560" y="186" fill="#9fadb7" font-size="26">person 2, an Admin</text>
+        <rect x="30" y="250" width="360" height="90" fill="#1e2a38"/><text x="52" y="306" fill="#e6ecf1" font-size="28">Dashboard: Program overview</text>
+        <path d="M700 330 C 620 330, 600 300, 404 296" stroke="#e8736f" stroke-width="5" fill="none" marker-end="url(#ar)" stroke-dasharray="14 10"/>
+        <rect x="538" y="352" width="300" height="140" fill="#1e2a38"/>
+        <text x="560" y="436" fill="#e8736f" font-size="88">404</text>
+        <text x="560" y="474" fill="#e6ecf1" font-family="Public Sans" font-weight="600" font-size="23">and nothing changes</text>
+      </g>
+    </svg>
+    <p class="says" style="margin-top:30px">A person is the pair <b>(app, user id)</b>: the same email in two apps is two people. Ask for another app's query, dashboard, share or data source and the answer is <b>404</b>.</p>
+  </div>
+</section>
+
+<!-- 8 · Station 5 -->
+<section class="slide inside" data-stop="Scope written into the SQL" data-station="5" data-target="where">
+  <div class="band"><span class="mark">QueryBuilder Hub</span><span>Sheet 08 / 14</span></div>
+  <div class="body">
+    <h2 style="font-size:82px">The filter is written into the SQL. On the server.</h2>
+    <div class="frame" style="margin-top:44px;width:760px;margin-left:160px"><div class="crop" id="sql">
+      <img src="shots/mary-sql.png" data-crop="345,286,470,152" alt="Generated SQL with WHERE ProgramId IN (@__scope0)">
+      <div id="where" style="position:absolute;z-index:3;left:4px;right:4px;top:0;height:0;outline:5px solid #a98bd6;background:rgba(169,139,214,.16)"></div>
+    </div></div>
+    <p class="num" style="margin-top:22px;margin-left:160px;font-size:40px;color:#a98bd6">@__scope0 = 10, bound as a parameter</p>
+    <div class="schedule" style="margin-top:30px;margin-left:160px">
+      <div class="row" style="grid-template-columns:220px 1fr"><span class="k">Every path</span><span class="v">Runs, exports, charts and dashboard tiles all pass through it.</span></div>
+      <div class="row" style="grid-template-columns:220px 1fr"><span class="k">Fails closed</span><span class="v">A view no admin has mapped stays hidden from scoped users.</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- 9 · Station 6 -->
+<section class="slide inside" data-stop="Same report, different rows" data-station="6">
+  <div class="band"><span class="mark">QueryBuilder Hub</span><span>Sheet 09 / 14</span></div>
+  <div class="body">
+    <h1 style="font-size:112px">Same report.<br>Different rows.</h1>
+    <p class="lede" style="margin-top:22px">Mary runs program 10. Raj runs program 20. Same app, same chart, same moment.</p>
+    <div style="display:flex;gap:40px;margin-top:40px">
+      <figure style="width:444px;padding:22px;background:repeating-linear-gradient(135deg, rgba(242,201,76,.42) 0 11px, rgba(242,201,76,.12) 11px 24px);outline:3px solid #f2c94c">
+        <div class="frame"><div class="crop" style="height:384px"><img src="shots/mary-tile-enrolments.png" style="width:682px;left:-252px;top:-36px" alt="Mary's chart: Youth Coding Academy only, zone ProgramId 10"><div style="position:absolute;z-index:3;top:14px;right:14px;width:288px;height:44px;overflow:hidden;outline:2px solid #1e2a38"><img src="shots/mary-tile-enrolments.png" style="width:1250px;left:-808px;top:-24px" alt=""></div></div></div>
+      </figure>
+      <figure style="width:444px;padding:22px;background:repeating-linear-gradient(135deg, rgba(111,163,224,.42) 0 11px, rgba(111,163,224,.12) 11px 24px);outline:3px solid #6fa3e0">
+        <div class="frame"><div class="crop" style="height:384px"><img src="shots/raj-tile-enrolments.png" style="width:682px;left:-252px;top:-36px" alt="Raj's chart: Adult Literacy only, zone ProgramId 20"><div style="position:absolute;z-index:3;top:14px;right:14px;width:288px;height:44px;overflow:hidden;outline:2px solid #1e2a38"><img src="shots/raj-tile-enrolments.png" style="width:1250px;left:-808px;top:-24px" alt=""></div></div></div>
+      </figure>
+    </div>
+    <div style="display:flex;gap:40px;margin-top:20px">
+      <p style="width:444px;font-weight:800;font-size:34px;color:#fff;line-height:1.15">Mary Chen<br><span class="num" style="font-weight:600;font-size:30px;color:#f2c94c">Youth Coding Academy, 20</span></p>
+      <p style="width:444px;font-weight:800;font-size:34px;color:#fff;line-height:1.15">Raj Patel<br><span class="num" style="font-weight:600;font-size:30px;color:#6fa3e0">Adult Literacy, 20</span></p>
+    </div>
+    <p class="says" style="margin-top:20px;font-size:25px">Alex, launched with no row restriction, opens it too and sees all five. One report, built once.</p>
+  </div>
+</section>
+
+<!-- 10 · Self-service -->
+<section class="slide" data-stop="The workspace">
+  <div class="band"><span class="mark">QueryBuilder Hub</span><span>Sheet 10 / 14</span></div>
+  <div class="body">
+    <h2>Self-service, without a line of SQL.</h2>
+    <p class="lede">Pick a view, pick columns, add totals and filters. Save, share, chart, and put it on a dashboard.</p>
+    <div class="frame" style="margin-top:38px;width:928px"><div class="crop">
+      <img src="shots/mary-builder.png" data-crop="540,160,900,330" alt="The query builder: source, columns with totals">
+    </div></div>
+    <div style="margin-top:40px;display:grid;grid-template-columns:repeat(3,1fr);gap:10px 30px" class="num">
+      <span style="font-size:34px">Bar, horizontal bar</span><span style="font-size:34px">Line, area, trend</span><span style="font-size:34px">Combo, waterfall</span>
+      <span style="font-size:34px">Pie, funnel</span><span style="font-size:34px">Scatter, bubble</span><span style="font-size:34px">Table, pivot, counter</span>
+    </div>
+    <p class="says" style="margin-top:22px;font-size:26px">Thirteen chart types. Parameters with relative dates and dropdowns. Dashboards on a twelve-column grid. CSV and Excel.</p>
+  </div>
+</section>
+
+<!-- 11 · Viewers -->
+<section class="slide" data-stop="Viewers">
+  <div class="band"><span class="mark">QueryBuilder Hub</span><span>Sheet 11 / 14</span></div>
+  <div class="body">
+    <h2>Viewers get dashboards. Only dashboards.</h2>
+    <div class="frame" style="margin-top:40px;width:928px"><div class="crop">
+      <img src="shots/lee-hub-landing.png" data-crop="0,0,760,150" alt="Lee Brooks, Viewer: only the Dashboards item">
+    </div></div>
+    <p class="says" style="margin-top:34px">A Viewer's whole reach on the server is <b>eight endpoints</b>, and nothing else answers:</p>
+    <ol class="num" style="list-style:none;margin-top:18px;display:grid;grid-template-columns:1fr 1fr;gap:0 40px;font-size:30px;font-weight:600">
+      <li style="padding:10px 0;border-top:2px solid #1e2a38">1 · the dashboard list</li><li style="padding:10px 0;border-top:2px solid #1e2a38">5 · a query's options, via a dashboard</li>
+      <li style="padding:10px 0;border-top:2px solid #1e2a38">2 · one dashboard</li><li style="padding:10px 0;border-top:2px solid #1e2a38">6 · a chart render, via a dashboard</li>
+      <li style="padding:10px 0;border-top:2px solid #1e2a38">3 · a tile's chart</li><li style="padding:10px 0;border-top:2px solid #1e2a38">7 · a chart's data download</li>
+      <li style="padding:10px 0;border-top:2px solid #1e2a38">4 · dashboard parameter options</li><li style="padding:10px 0;border-top:2px solid #1e2a38">8 · their own profile</li>
+    </ol>
+    <p class="says" style="margin-top:22px;font-size:25px">No query list, no builder, no SQL. Each chart is drawn with the Viewer's own scope.</p>
+  </div>
+</section>
+
+<!-- 12 · Console -->
+<section class="slide inside" data-stop="The console">
+  <div class="band"><span class="mark">QueryBuilder Hub</span><span>Sheet 12 / 14</span></div>
+  <div class="body">
+    <h2>Governed from one console.</h2>
+    <div class="frame" style="margin-top:40px;width:928px"><div class="crop">
+      <img src="shots/super-apps.png" data-crop="410,62,860,290" alt="Super admin console: the Apps list with Northwind Programs turned on">
+    </div></div>
+    <div class="schedule" style="margin-top:30px">
+      <div class="row"><span class="k">Sign-in</span><span class="v">Microsoft Entra ID, any OpenID Connect provider, or one-time codes issued only on the server.</span></div>
+      <div class="row"><span class="k">Data sources</span><span class="v">Locked by super admins, moved between apps, passwords sealed with AES-256-GCM.</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- 13 · Estate -->
+<section class="slide" data-stop="Your estate">
+  <div class="band"><span class="mark">QueryBuilder Hub</span><span>Sheet 13 / 14</span></div>
+  <div class="body">
+    <h2>Built for the estate you already run.</h2>
+    <div class="schedule" style="margin-top:52px">
+      <div class="row"><span class="k">Your apps</span><span class="v">.NET 6, 8 and 10. .NET Framework 4.7.2 and 4.8. Any stack that can sign a JWT.</span></div>
+      <div class="row"><span class="k">Your data</span><span class="v">SQL Server and PostgreSQL, side by side, through the views you already trust.</span></div>
+      <div class="row"><span class="k">Your hosting</span><span class="v">A ready-made hub host, or the QueryBuilder.Editor package (net8.0 and net10.0) inside your own ASP.NET Core app.</span></div>
+      <div class="row"><span class="k">Your DBAs</span><span class="v">Automatic migrations, or an idempotent SQL script for locked-down databases.</span></div>
+      <div class="row"><span class="k">Your licence</span><span class="v">MIT. Fonts bundled; nothing loads from a font CDN.</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- 14 · CTA -->
+<section class="slide inside" data-stop="Your turn">
+  <div class="band"><span class="mark">QueryBuilder Hub</span><span>Sheet 14 / 14</span></div>
+  <div class="body">
+    <h1 style="font-size:112px">Walk the route yourself.</h1>
+    <p class="lede">The demo is live. Be Mary, then Raj, and watch the rows change.</p>
+    <div style="margin-top:52px;background:#ffffff;color:#1e2a38;padding:34px 38px;outline:3px solid #a98bd6">
+      <div class="num" style="font-size:54px;line-height:1">qb-demo-northwind.azurewebsites.net</div>
+      <p style="font-size:26px;margin-top:14px;font-weight:600;color:#52605b">Pick a person top right, then Open reports in QueryBuilder. Made-up data.</p>
+    </div>
+    <div class="schedule" style="margin-top:40px">
+      <div class="row"><span class="k">NuGet</span><span class="v">QueryBuilder.Editor, QueryBuilder.Launch</span></div>
+      <div class="row"><span class="k">GitHub</span><span class="v">github.com/nagendra571/QueryBuilderEditor</span></div>
+    </div>
+  </div>
+</section>
+
+<script>
+  // Crops: data-crop="x,y,w,h" in the 1440×900 capture; the frame width sets the zoom.
+  for (const img of document.querySelectorAll('img[data-crop]')) {
+    const [x, y, w, h] = img.dataset.crop.split(',').map(Number)
+    const frame = img.parentElement, s = frame.clientWidth / w
+    Object.assign(img.style, { width: 1440 * s + 'px', left: -x * s + 'px', top: -y * s + 'px' })
+    if (!frame.style.height) frame.style.height = h * s + 'px'
+    frame.dataset.scale = s; frame.dataset.y0 = y
+  }
+  // Slide 8: the WHERE line sits at y 386 in the capture; box it in violet, the colour of the active query.
+  const sql = document.getElementById('sql')
+  if (sql) {
+    const s = +sql.dataset.scale, y0 = +sql.dataset.y0, box = document.getElementById('where')
+    Object.assign(box.style, { top: (378 - y0) * s + 'px', height: 16 * s + 'px' })
+  }
+  // The route strip: one violet line along the foot of every sheet. The marker advances as you swipe,
+  // so the carousel reads as travel along one route.
+  const slides = [...document.querySelectorAll('.slide')]
+  const Y = 1222, N = slides.length
+  slides.forEach((s, i) => {
+    const inside = s.classList.contains('inside')
+    const line = inside ? '#a98bd6' : '#6f51a0'
+    const ink = inside ? '#e6ecf1' : '#1e2a38'
+    const muted = inside ? '#9fadb7' : '#52605b'
+    const station = s.dataset.station
+    const next = slides[i + 1]
+    const wave = (x) => Y + Math.sin((i * 1080 + x) / 300) * 14
+    let d = `M 0 ${wave(0).toFixed(1)}`
+    for (let x = 20; x <= 1080; x += 20) d += ` L ${x} ${wave(x).toFixed(1)}`
+    const sx = 110 + Math.round(i * (860 - 110) / (N - 1)), sy = wave(sx)
+    const right = sx > 540
+    const mark = station
+      ? `<circle cx="${sx}" cy="${sy}" r="30" fill="${line}"/><text x="${sx}" y="${sy + 11}" text-anchor="middle" font-family="Barlow Condensed" font-weight="700" font-size="32" fill="${inside ? '#1e2a38' : '#fff'}">${station}</text>`
+      : `<circle cx="${sx}" cy="${sy}" r="18" fill="${inside ? '#1e2a38' : '#eef1ec'}" stroke="${line}" stroke-width="7"/>`
+    const title = station ? `Station ${station} of 6: ${s.dataset.stop}` : s.dataset.stop
+    const titleSvg = `<text x="76" y="${Y + 72}" font-family="Public Sans" font-weight="800" font-size="28" fill="${ink}">${title}</text>`
+    const nextSvg = next ? `<text x="1004" y="${Y + 108}" text-anchor="end" font-family="Barlow Condensed" font-weight="600" font-size="25" fill="${muted}">Next: ${next.dataset.stop}</text>` : ''
+    let land = ''
+    if (s.dataset.target === 'where' && sql) {
+      const r = sql.getBoundingClientRect(), base = s.getBoundingClientRect(), b = document.getElementById('where').getBoundingClientRect()
+      const ty = b.top - base.top + b.height / 2, tx = r.left - base.left
+      land = `<path d="M ${sx} ${sy - 30} C ${sx} 1110, 112 1150, 112 1060 L 112 ${ty + 44} Q 112 ${ty} 156 ${ty} L ${tx - 8} ${ty}" fill="none" stroke="${line}" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>`
+    }
+    s.insertAdjacentHTML('beforeend', `<svg class="route" viewBox="0 0 1080 1350" aria-hidden="true">
+      <rect x="76" y="1150" width="928" height="2" fill="${inside ? '#2c3a48' : '#c9d1c7'}"/>
+      ${land}
+      <path d="${d}" fill="none" stroke="${line}" stroke-width="9" stroke-linecap="round"/>
+      ${mark}${titleSvg}${nextSvg}
+    </svg>`)
+  })
+</script>
+</body>
+</html>
