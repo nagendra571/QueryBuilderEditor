@@ -235,6 +235,7 @@ in an environment variable name stands for `:`.
 | `Hub:ForwardedHeaders:ForwardLimit` | no | `1` | How many proxy hops of `X-Forwarded-For` to read, counted from the right. At least 1. |
 | `Hub:DefaultMaxRecords` | no | none | Row limit (1 to 100,000) for data sources with none of their own. |
 | `Hub:ApplyMigrations` | no | `true` | `false` when a DBA applies the schema script. |
+| `Hub:StartupDatabaseWaitSeconds` | no | `90` | Startup retries for this long while the metadata database is resuming (Azure SQL serverless auto-pause) or failing over. 0 to 110; 0 turns it off. |
 | `AllowedHosts` | no | `*` | Set to the hub's public host name, for example `hub.example.com`. |
 
 The host refuses to start if a required setting is missing, the key is not base64 of 32 bytes, an old key repeats the
@@ -1169,6 +1170,7 @@ plus the data source's `AppUsers` view (the picker reads its first 500 rows). Th
 | "needs its own empty metadata database" / "belongs to an Embedded-mode installation" | The database was used by an embedded QueryBuilder | Use a new empty database. |
 | "Cannot find an authentication provider for 'ActiveDirectoryManagedIdentity'" (or another `ActiveDirectory...` name) | The connection string uses Entra authentication and the app lacks `Microsoft.Data.SqlClient.Extensions.Azure` | Rebuild the ready-made hub from current `main` (it includes the package), or add the package to your own host (B1). |
 | `CREATE TABLE permission denied in database '...'` at the first start | `Hub:ApplyMigrations` is `true` and the login cannot create tables | Grant `db_ddladmin` (plus `db_datareader`, `db_datawriter`), or let a DBA run the script and set `Hub:ApplyMigrations` to `false` (A2). |
+| `HTTP Error 500.30 - ASP.NET Core app failed to start`, and the log shows `Database '...' is not currently available` | The metadata database was paused (Azure SQL serverless) or failing over for longer than `Hub:StartupDatabaseWaitSeconds` | Raise the wait (at most 110), or turn off auto-pause on that database. A failed start stays failed until the app is stopped and started again. |
 | `AADSTS50011` at Entra, or a redirect-URI error at another provider | Registered redirect URI differs from `https://<host>` + `CallbackPath`, or the proxy's headers are not trusted (the URI is built as `http://...`) | Register the exact URL; fix `KnownProxies`/`KnownNetworks` (A5). |
 | Sign-in loops, or redirects to `http://` | Proxy headers not trusted | Fix A5. |
 | After provider sign-in: generic "This link to QueryBuilder isn't valid or has expired" (403) | Not on the allowlist, or in too many groups for Entra to list | A super admin reads `SuperAdminSignInRefused` in the audit log (`NotAllowlisted`, `WrongTenant`, `GroupsOverage`, `NoStableId`); add the entry and restart. |
