@@ -25,6 +25,11 @@ export function toWireValue(value: unknown, dataType: ColumnDataType): string | 
   return typeof value === 'string' ? value : String(value)
 }
 
+// A key past 2^53 was already rounded when the response JSON was parsed, so sending it back would match the wrong row (or none).
+// A missing key must not become a null step, which would match rows whose value is NULL.
+const unusableKey = (v: unknown) =>
+  v === undefined || (typeof v === 'number' && (!Number.isFinite(v) || (Number.isInteger(v) && !Number.isSafeInteger(v))))
+
 const isPlain = (c: QueryResultColumnDto) => !c.aggregate || c.aggregate === 'none'
 
 export function isAggregated(columns: QueryResultColumnDto[]): boolean {
@@ -53,6 +58,7 @@ export function stepsForMark(
       }
     }
     const col = mark.pivot.columnValue
+    if (Object.values(mark.pivot.rowValues).some(unusableKey) || (col && unusableKey(col.value))) return null
     if (col) steps.push({ column: col.column, value: toWireValue(col.value, typeOf(col.column)) })
     return steps
   }
@@ -70,6 +76,8 @@ export function stepsForMark(
     if (isPlain(c) && (referenced.has(c.name) || keys.has(c.name))) names.push(c.name)
   }
   for (const k of keyColumns) if (!byName.has(k) && !names.includes(k)) names.push(k)
+
+  if (names.some((name) => unusableKey(row[name]))) return null
 
   return names.map((name) => ({ column: name, value: toWireValue(row[name], typeOf(name)) }))
 }

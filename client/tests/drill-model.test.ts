@@ -108,6 +108,20 @@ test('table: every non-aggregated column of the row; not drillable on a non-aggr
   )
 })
 
+test('a mark whose key is unsafe or missing is not clickable', () => {
+  const columns = [dim('Id', 'number'), agg('Total')]
+  const o = opts({ x: 'Id', measures: ['Total'] })
+  assert.equal(stepsForMark('bar', o, columns, [], { row: { Id: 9007199254740993, Total: 1 }, anchor }), null)
+  assert.deepEqual(stepsForMark('bar', o, columns, [], { row: { Id: 9007199254740991, Total: 1 }, anchor }), [
+    { column: 'Id', value: '9007199254740991' },
+  ])
+  assert.equal(stepsForMark('bar', o, columns, [], { row: { Total: 1 }, anchor }), null)
+  assert.deepEqual(stepsForMark('bar', o, columns, [], { row: { Id: null, Total: 1 }, anchor }), [{ column: 'Id', value: null }])
+  const po = opts({ pivot: { rows: ['Id'], values: ['Total'], totals: true, shade: false } })
+  assert.equal(stepsForMark('pivot', po, columns, [], { pivot: { rowValues: { Id: 2 ** 60 } }, anchor }), null)
+  assert.equal(stepsForMark('pivot', po, columns, [], { pivot: { rowValues: { Id: undefined } }, anchor }), null)
+})
+
 test('menuItems', () => {
   const base = { aggregated: true, onDashboard: true, clickToFilter: true }
   assert.deepEqual(menuItems({ ...base, type: 'bar' }), ['rows', 'breakdown', 'filter'])
