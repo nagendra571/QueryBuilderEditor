@@ -34,6 +34,25 @@ integration ergonomics (single-call registration, embedded SPA, DBA-friendly mig
 
 ## Where we left off (update this at the end of each session)
 
+**2026-11-18: chart drill-down BUILT on local branch `feature/chart-drill-down` (27 commits on `main` f6281a8, NOT pushed,
+no version bump). START HERE.** Why: a client demo asked for Monday.com-style drill-down. Spec
+`docs/superpowers/specs/2026-11-17-chart-drill-down-design.md`, plan `docs/superpowers/plans/2026-11-17-chart-drill-down.md`.
+Built: See these rows (page `/queries/:q/charts/:v/drill?s=&f=&d=&t=&n=`), Break down by (in place, trail), Filter this
+dashboard (click-to-filter, per-dashboard switch `Dashboards.ClickToFilterEnabled`, migration `AddDashboardClickToFilter`),
+results-row drill (`/queries/:id/drill`), filtered chart downloads, "Columns to show when drilling" per chart
+(`options.drill.columns`, ≤20), audit `QueryDrilled = 37`, Viewer allowlist now 10 routes. Security core: browser sends only
+the click trail; `DrillDefinitions` + `VisualizationDataLoader.ExecuteAsync` is the ONLY path to SQL (scope wraps everything);
+zone proven against real SQL Server (LocalDB) and PostgreSQL 16 (`Drill/DrillScope*Tests`). Shared changes to EXISTING behaviour
+(release notes): `QueryLiteral` (exponent numbers accepted; `Z`/offset date-times → UTC), SQL Server binds fractional date-times
+as datetime2 only for native datetime2/datetimeoffset columns (`FilterCondition.NativeType` stamped by the catalog, persisted in
+saved JSON), chart data rows carry `keyColumns`. Break down by only offers drill columns (the click pins every plain column).
+Verified: net10 1489 + net8 1425 passed / 0 failed (PG group 352/352 each, separately); client 255; full browser acceptance
+(bars, pie, line/area taps, combo bands, keyboard, http copy link, tampered link → 0 rows, switch off, results-row drill,
+breakdown). Next: user decides merge/PR; release = Editor 2.2.0 + DBA script `QueryBuilder.schema.2.2.0.sql` (only when asked).
+Parked follow-ups: `EmptyTextIsValue` accepted from browser-sent definitions (no scope impact) → clear on Run/Export/Preview/Save;
+other stale `f` kinds 400 every tile; SQL Server `time` columns can't be filtered (pre-existing). Demo chart "Enrolments per
+program" in local `QueryBuilderAppDb` now has drill columns [Status, ProgramName]. The 2026-11-17 notes below are older.
+
 **2026-11-17, end of session: START HERE.** State: `main` = `f6281a8` (PRs #6–#9 merged). NuGet unchanged: **Editor 2.1.0,
 Launch 1.0.2** (nothing since touched either package). Next versions: Editor 2.1.1+, Launch 1.0.3+. Schema script still
 `QueryBuilder.schema.2.0.0.sql`. This `CLAUDE.md` has these notes UNCOMMITTED on `main` (PR-only): commit them on the next branch.
