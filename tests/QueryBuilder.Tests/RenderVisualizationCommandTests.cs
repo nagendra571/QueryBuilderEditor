@@ -616,9 +616,13 @@ public class RenderVisualizationCommandTests
         var data = await Render(f, viz);
 
         Assert.Equal(expected.Order(), data.Columns.Select(c => c.Name).Order());
+        // The visible plain columns (Region, Channel) not already in the chart are its row keys; a counter has none.
+        var plainKeys = new[] { "Region", "Channel" }.Except(expected).ToArray();
+        string[]? expectedKeys = type == VisualizationType.Counter || plainKeys.Length == 0 ? null : plainKeys;
+        Assert.Equal(expectedKeys, data.KeyColumns);
         Assert.All(data.Rows, r =>
         {
-            Assert.Equal(expected.Concat(data.KeyColumns ?? []).Order(), r.Keys.Order());
+            Assert.Equal(expected.Concat(expectedKeys ?? []).Order(), r.Keys.Order());
             Assert.DoesNotContain("HiddenNote", r.Keys);
             Assert.DoesNotContain("Min1", r.Keys);
         });
@@ -753,7 +757,12 @@ public class RenderVisualizationCommandTests
         var data = await Render(f, viz);
 
         Assert.Equal(expected, data.Columns.Select(c => c.Name));
-        Assert.All(data.Rows, r => Assert.Equal(expected.Concat(data.KeyColumns ?? []).Order(), r.Keys.Order()));
+        Assert.Equal(["Channel"], data.KeyColumns);
+        Assert.All(data.Rows, r =>
+        {
+            Assert.Equal(expected.Append("Channel").Order(), r.Keys.Order());
+            Assert.DoesNotContain("HiddenNote", r.Keys);
+        });
     }
 
     [Fact]

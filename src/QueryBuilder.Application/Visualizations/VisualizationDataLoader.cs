@@ -27,20 +27,41 @@ public sealed record LoadedVisualizationData(
     bool Truncated,
     List<string>? KeyColumns = null);
 
-public sealed record VisualizationContext(
-    SavedQuery SavedQuery,
-    QueryVisualization Visualization,
-    QueryDefinition Definition,
-    VisualizationOptions Options,
-    DataSource DataSource,
-    Dictionary<string, string?> Values,
-    bool CanView);
+/// <summary>
+/// What <see cref="VisualizationDataLoader.ResolveAsync"/> proved about a request: the caller may see this chart, and
+/// <see cref="Values"/> are the parameter values they are allowed to use (already constrained for a dashboard-granted
+/// Viewer). Only the loader can build one, and it has no setters, so a handler cannot swap in values or a definition.
+/// </summary>
+public sealed class VisualizationContext
+{
+    internal VisualizationContext(
+        SavedQuery savedQuery, QueryVisualization visualization, QueryDefinition definition, VisualizationOptions options,
+        DataSource dataSource, Dictionary<string, string?> values, bool canView)
+    {
+        SavedQuery = savedQuery;
+        Visualization = visualization;
+        Definition = definition;
+        Options = options;
+        DataSource = dataSource;
+        Values = values;
+        CanView = canView;
+    }
+
+    public SavedQuery SavedQuery { get; }
+    public QueryVisualization Visualization { get; }
+    public QueryDefinition Definition { get; }
+    public VisualizationOptions Options { get; }
+    public DataSource DataSource { get; }
+    public Dictionary<string, string?> Values { get; }
+    public bool CanView { get; }
+}
 
 /// <summary>
 /// The rows behind a saved chart, for drawing it or downloading them. Both go through one path on purpose, so a download
 /// can never reach data the chart itself would not show: the definition is loaded from the database (never taken from the
 /// browser), access is checked against shares or a dashboard grant, and the catalog validation, the caller's row-level scope
-/// and the record limits all apply. Only the columns the chart references are returned.
+/// and the record limits all apply. Only the columns the chart references are returned, plus (when drawing) the
+/// visible plain columns of an aggregated query as row keys for drilling.
 /// </summary>
 public sealed class VisualizationDataLoader(
     ISavedQueryRepository savedQueries,
@@ -96,9 +117,7 @@ public sealed class VisualizationDataLoader(
             // truncated chart or pivot would silently draw wrong totals.
             if (visualization.Type != VisualizationType.Table)
             {
-                throw new RecordLimitExceededException(effectiveLimit is { } limit && limit <= RecordLimits.ChartMaxRows
-                    ? $"This query has more than {cap:N0} records — add filters or totals to chart it."
-                    : $"This chart has too many points to chart (max {RecordLimits.ChartMaxRows:N0}) — add filters or totals.");
+                throw ChartTooLarge(effectiveLimit, cap);
             }
         }
 
@@ -143,6 +162,14 @@ public sealed class VisualizationDataLoader(
 
         return new LoadedVisualizationData(savedQuery, visualization, definition, columns, rows, result.ExecutionTimeMs, cap, result.Truncated, keyColumns);
     }
+
+    public async Task<int?> EffectiveLimitAsync(VisualizationContext context, CancellationToken cancellationToken) =>
+        RecordLimits.Effective(context.DataSource.MaxRecords, await appSettings.MaxRecordsAsync(cancellationToken), recordLimitSettings);
+
+    internal static RecordLimitExceededException ChartTooLarge(int? effectiveLimit, int cap) =>
+        new(effectiveLimit is { } limit && limit <= RecordLimits.ChartMaxRows
+            ? $"This query has more than {cap:N0} records — add filters or totals to chart it."
+            : $"This chart has too many points to chart (max {RecordLimits.ChartMaxRows:N0}) — add filters or totals.");
 
     public async Task<VisualizationContext> ResolveAsync(
         Guid savedQueryId,
@@ -232,7 +259,7 @@ public sealed class VisualizationDataLoader(
             : $"This chart needs updating: {string.Join(" ", issues.Select(i => i.Message))}");
     }
 
-    private static List<QueryResultColumnDto> ProjectColumns(
+    internal static List<QueryResultColumnDto> ProjectColumns(
         QueryResultSet result, IReadOnlyList<string> referenced, VisualizationOptions options, VisualizationType type,
         QueryDefinition definition)
     {

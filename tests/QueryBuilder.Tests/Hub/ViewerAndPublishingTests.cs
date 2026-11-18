@@ -102,6 +102,8 @@ public partial class ViewerAndPublishingTests
                 "GET /api/me",
                 "GET /api/queries/{id}/parameters/{name}/options",
                 "POST /api/queries/{queryId}/visualizations/{visualizationId}/data",
+                "POST /api/queries/{queryId}/visualizations/{visualizationId}/drill",
+                "POST /api/queries/{queryId}/visualizations/{visualizationId}/drill/export",
                 "POST /api/queries/{queryId}/visualizations/{visualizationId}/export"
             }.Order(StringComparer.Ordinal),
             allowed.Order(StringComparer.Ordinal));

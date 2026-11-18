@@ -243,4 +243,24 @@ public class DrillDefinitionsTests
         Assert.Equal(["Region", "Channel", "Site"], DrillDefinitions.AllowedStepColumns(Saved(), ["Site"]));
         Assert.True(DrillDefinitions.IsAggregated(Saved()));
     }
+
+    [Theory]
+    [InlineData(ColumnDataType.Number, "abc", false)]
+    [InlineData(ColumnDataType.Number, "12.5", true)]
+    [InlineData(ColumnDataType.Date, "not a date", false)]
+    [InlineData(ColumnDataType.Date, "2026-11-17", true)]
+    [InlineData(ColumnDataType.DateTime, "2026-11-17T10:00:00", true)]
+    [InlineData(ColumnDataType.Guid, "nope", false)]
+    [InlineData(ColumnDataType.Text, "anything", true)]
+    public void A_step_value_must_parse_for_its_column_type(ColumnDataType type, string value, bool valid)
+    {
+        var d = Saved();
+        d.Columns.Add(new QueryColumn { TableAlias = "t0", ColumnName = "Extra", DataType = type });
+        var types = new Dictionary<string, ColumnDataType> { ["Extra"] = type };
+
+        if (valid)
+            DrillDefinitions.ForRows(d, [Step("Extra", value)], NoDrill, null, types);
+        else
+            Assert.Throws<CatalogValidationException>(() => DrillDefinitions.ForRows(d, [Step("Extra", value)], NoDrill, null, types));
+    }
 }

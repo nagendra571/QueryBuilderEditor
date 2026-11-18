@@ -50,6 +50,8 @@ public partial class CrossAppEndpointMatrixTests
 
     private const string RenderKey = "POST /api/queries/{queryId}/visualizations/{visualizationId}/data";
     private const string ChartExportKey = "POST /api/queries/{queryId}/visualizations/{visualizationId}/export";
+    private const string DrillKey = "POST /api/queries/{queryId}/visualizations/{visualizationId}/drill";
+    private const string DrillExportKey = "POST /api/queries/{queryId}/visualizations/{visualizationId}/drill/export";
 
     // A's contents, never to appear in a B response or a log line (ids are excluded from logs: the cross-app refusal warns with ids on purpose).
     private static readonly string[] Secrets = ["alpha-source", "alpha-query", "alpha-dashboard", "alpha-viz", "alpha-owner", "alpha-audit", "alpha@x", "alpha-managed", "alpha-seen", "alpha.example", "rsa-a"];
@@ -81,6 +83,8 @@ public partial class CrossAppEndpointMatrixTests
         "GET /api/dashboards/{id}",
         RenderKey,
         ChartExportKey,
+        DrillKey,
+        DrillExportKey,
         "GET /api/queries/{id}/parameters/{name}/options",
         "GET /api/dashboards/{id}/tiles/{tileId}/chart",
         "GET /api/dashboards/{id}/parameters/{name}/options"
@@ -148,7 +152,9 @@ public partial class CrossAppEndpointMatrixTests
         ["PUT /api/queries/{queryId}/visualizations/{visualizationId}"] = _ => new { name = "v", type = "Table", options = new { table = new { columns = new[] { "c" } } } },
         ["DELETE /api/queries/{queryId}/visualizations/{visualizationId}"] = _ => null,
         ["POST /api/queries/{queryId}/visualizations/{visualizationId}/data"] = _ => new { parameterValues = new { } },
-        ["POST /api/queries/{queryId}/visualizations/{visualizationId}/export"] = _ => new { format = "csv", parameterValues = new { } }
+        ["POST /api/queries/{queryId}/visualizations/{visualizationId}/export"] = _ => new { format = "csv", parameterValues = new { } },
+        [DrillKey] = _ => new { action = "Rows", steps = Array.Empty<object>(), parameterValues = new { } },
+        [DrillExportKey] = _ => new { action = "Rows", steps = Array.Empty<object>(), parameterValues = new { }, format = "csv" }
     };
 
     // Endpoints that call a business database nobody can reach in this test: B's own control call may fail with a server error.
@@ -260,6 +266,12 @@ public partial class CrossAppEndpointMatrixTests
             new("B query, A visualization export", HttpMethod.Post, $"/api/queries/{b.Query}/visualizations/{a.Visualization}/export", new { format = "csv", parameterValues = new { } }, Expect.NotFound,
                 new("B query, missing visualization export", HttpMethod.Post, $"/api/queries/{b.Query}/visualizations/{Guid.NewGuid()}/export", new { format = "csv", parameterValues = new { } }, Expect.Ok),
                 Key: ChartExportKey, Mixed: true),
+            new("B query, A visualization drill", HttpMethod.Post, $"/api/queries/{b.Query}/visualizations/{a.Visualization}/drill", new { action = "Rows", steps = Array.Empty<object>(), parameterValues = new { } }, Expect.NotFound,
+                new("B query, missing visualization drill", HttpMethod.Post, $"/api/queries/{b.Query}/visualizations/{Guid.NewGuid()}/drill", new { action = "Rows", steps = Array.Empty<object>(), parameterValues = new { } }, Expect.Ok),
+                Key: DrillKey, Mixed: true),
+            new("B query, A visualization drill export", HttpMethod.Post, $"/api/queries/{b.Query}/visualizations/{a.Visualization}/drill/export", new { action = "Rows", steps = Array.Empty<object>(), parameterValues = new { }, format = "csv" }, Expect.NotFound,
+                new("B query, missing visualization drill export", HttpMethod.Post, $"/api/queries/{b.Query}/visualizations/{Guid.NewGuid()}/drill/export", new { action = "Rows", steps = Array.Empty<object>(), parameterValues = new { }, format = "csv" }, Expect.Ok),
+                Key: DrillExportKey, Mixed: true),
             new("A query, B visualization", HttpMethod.Delete, $"/api/queries/{a.Query}/visualizations/{b.Visualization}", null, Expect.NotFound)
         ];
     }

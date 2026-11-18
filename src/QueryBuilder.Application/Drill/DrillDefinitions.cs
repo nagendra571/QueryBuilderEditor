@@ -1,3 +1,4 @@
+using System.Globalization;
 using QueryBuilder.Application.Common;
 using QueryBuilder.Application.Exceptions;
 using QueryBuilder.Application.Visualizations;
@@ -228,11 +229,23 @@ public static class DrillDefinitions
         }
         else
         {
+            // Checked here so a bad value is a clear 400, not a failure (or, on SQL Server, a 500) at execution time.
+            if (!IsValidLiteral(dataType, step.Value))
+                throw new CatalogValidationException($"'{step.Value}' is not a valid {dataType} value for '{step.Column}'.");
             condition.Operator = FilterOperator.Equals;
             condition.Value = step.Value;
         }
         return condition;
     }
+
+    // Mirrors QueryParameterValues, which converts the same literals when the query runs.
+    private static bool IsValidLiteral(ColumnDataType type, string value) => type switch
+    {
+        ColumnDataType.Number => decimal.TryParse(value, NumberStyles.Number, CultureInfo.InvariantCulture, out _),
+        ColumnDataType.Date or ColumnDataType.DateTime => DateTime.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.None, out _),
+        ColumnDataType.Guid => Guid.TryParse(value, out _),
+        _ => true
+    };
 
     private static ColumnDataType DrillColumnType(
         IReadOnlyDictionary<string, ColumnDataType>? types, string name, Func<string, string, bool>? same)
