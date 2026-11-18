@@ -103,3 +103,23 @@ test('exploreItems: counter has one item, a non-aggregated table none, and the l
   assert.equal(capped.items.length, MAX_EXPLORE_ITEMS)
   assert.equal(capped.more, 5)
 })
+
+test('exploreItems offers nothing where the renderer shows a message instead of the chart', () => {
+  const cols = [dim('P'), agg('T')]
+  const none = (type: Parameters<typeof exploreItems>[0], o: Partial<VisualizationOptions>, rows: Record<string, unknown>[], columns = cols) =>
+    assert.equal(exploreItems(type, opts(o), rows, columns).items.length, 0)
+
+  const many = Array.from({ length: 13 }, (_, i) => ({ P: `p${i}`, T: i + 1 }))
+  none('pie', { x: 'P', measures: ['T'] }, many)
+  none('pie', { x: 'P', measures: ['T'] }, [{ P: 'a', T: -1 }, { P: 'b', T: 2 }])
+  assert.equal(exploreItems('pie', opts({ x: 'P', measures: ['T'] }), many.slice(0, 3), cols).items.length, 3)
+
+  none('scatter', { x: 'T', measures: ['T'], label: 'P', size: 'T' }, [{ P: 'a', T: -1 }])
+  none('funnel', { x: 'P', measures: ['T'] }, [{ P: 'a', T: -1 }])
+  none('waterfall', { x: 'P', measures: ['T'] }, Array.from({ length: 31 }, (_, i) => ({ P: `p${i}`, T: 1 })))
+
+  const wide = Array.from({ length: 51 }, (_, i) => ({ P: 'r', C: `c${i}`, T: 1 }))
+  none('pivot', { pivot: { rows: ['P'], column: 'C', values: ['T'], totals: true } as never }, wide, [dim('P'), dim('C'), agg('T')])
+
+  none('bar', { x: 'P', measures: ['T'] }, [])
+})

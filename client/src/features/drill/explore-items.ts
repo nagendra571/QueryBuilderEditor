@@ -4,7 +4,7 @@ import { formatValue } from '../visualizations/format.ts'
 import { pickRow, rowsOf, seriesRowsOf } from '../visualizations/mark-sources.ts'
 import { counterText } from '../visualizations/single-number.ts'
 import { buildFunnel, buildTrend, buildWaterfall } from '../visualizations/story-models.ts'
-import { buildPivot } from '../visualizations/pivot-model.ts'
+import { buildPivot, MAX_PIVOT_COLUMNS } from '../visualizations/pivot-model.ts'
 import { isAggregated, stepsForMark } from './drill-model.ts'
 import type { MarkWithoutAnchor } from './mark-click.ts'
 
@@ -34,10 +34,14 @@ export function exploreItems(
       all.push({ id, label, value, mark })
     }
   }
+  const none = { items: [], more: 0 }
+  // Where a renderer shows a message instead of the chart there are no marks to explore.
+  if (rows.length === 0 && type !== 'counter') return none
   const num = (v: number | null) => (v === null ? '' : formatValue(v, format))
 
   if (type === 'pivot') {
     const model = buildPivot(options, rows, (n) => columns.find((c) => c.name === n)?.aggregate)
+    if (model.columnHeaders.length > MAX_PIVOT_COLUMNS) return none
     const rowNames = options.pivot?.rows ?? []
     const columnName = options.pivot?.column || null
     model.rowHeaders.forEach((header, ri) => {
@@ -55,6 +59,7 @@ export function exploreItems(
     })
   } else if (type === 'scatter') {
     const model = buildScatter(options, rows)
+    if (model.problem) return none
     model.groups.forEach((g, gi) =>
       g.points.forEach((p, i) => {
         const row = pickRow(rowsOf(p), keyColumns)
@@ -64,12 +69,16 @@ export function exploreItems(
       }),
     )
   } else if (type === 'funnel') {
-    buildFunnel(options, rows).steps.forEach((s, i) => {
+    const funnel = buildFunnel(options, rows)
+    if (funnel.problem) return none
+    funnel.steps.forEach((s, i) => {
       const row = pickRow(rowsOf(s), keyColumns)
       if (row) add(`f${i}`, s.name, num(s.value), { row })
     })
   } else if (type === 'waterfall') {
-    buildWaterfall(options, rows).bars.forEach((b, i) => {
+    const waterfall = buildWaterfall(options, rows)
+    if (waterfall.problem) return none
+    waterfall.bars.forEach((b, i) => {
       const row = pickRow(rowsOf(b), keyColumns)
       if (row) add(`w${i}`, b.name, num(b.value), { row })
     })
@@ -83,6 +92,7 @@ export function exploreItems(
     if (model.kind === 'counter') {
       add('c', model.label || 'Value', counterText(model.value, options.counter?.decimals ?? 0, format), {})
     } else if (model.kind === 'pie') {
+      if (model.problem) return none
       model.slices.forEach((s, i) => {
         const row = pickRow(rowsOf(s), keyColumns)
         if (row) add(`pie${i}`, s.name, num(s.value), { row })

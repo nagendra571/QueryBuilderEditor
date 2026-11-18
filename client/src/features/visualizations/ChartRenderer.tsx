@@ -430,13 +430,18 @@ function DrawnRenderer({
   const percent = model.kind === 'cartesian' && isPercentStack(type, options)
   const negativeShares = model.kind === 'cartesian' && percent ? negativeCategoryCount(model.points, model.series) : 0
   const format = options.format
+  const counterClickable = model.kind === 'counter' && !!drill && drill.canDrill({})
 
   return (
     <div className={`flex min-w-0 flex-col gap-3 ${fill ? 'h-full' : ''}`}>
       {model.kind === 'pie' && model.problem ? (
         <ProblemAlert message={model.problem} />
       ) : (
-        <div role="img" aria-label={`${name} — ${summary}`} className={fill ? 'min-h-[96px] min-w-0 flex-1 shrink-0' : 'min-w-0'}>
+        <div
+          // Children of role="img" are presentational, which would hide the counter's button from assistive tech.
+          {...(counterClickable ? {} : { role: 'img', 'aria-label': `${name} — ${summary}` })}
+          className={fill ? 'min-h-[96px] min-w-0 flex-1 shrink-0' : 'min-w-0'}
+        >
           {model.kind === 'counter' && (
             <CounterView model={model} decimals={options.counter?.decimals ?? 0} format={format} drill={drill} />
           )}
