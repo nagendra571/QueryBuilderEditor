@@ -13,6 +13,7 @@ import { downloadFileName } from '@/features/visualizations/download-name'
 import { visualizationsApi } from '@/lib/api'
 import { ApiError } from '@/lib/api-client'
 import { downloadBlob } from '@/lib/download'
+import type { CrossFilterValue } from '@/features/drill/drill-url'
 import type { DashboardContext, DownloadFormat } from '@/types'
 
 /**
@@ -25,6 +26,7 @@ export function ChartDownloadMenu({
   name,
   parameterValues,
   context,
+  crossFilters,
   compact,
 }: {
   queryId: string
@@ -33,13 +35,15 @@ export function ChartDownloadMenu({
   name: string
   parameterValues: Record<string, string | null>
   context?: DashboardContext
+  /** The dashboard's click-filters when the tile is drawn with them, so the file holds the rows the tile shows. */
+  crossFilters?: CrossFilterValue[]
   /** An icon-only trigger, for a dashboard tile header. */
   compact?: boolean
 }) {
   const queryClient = useQueryClient()
   const download = useMutation({
     mutationFn: async (format: DownloadFormat) => {
-      const blob = await visualizationsApi.download(queryId, visualizationId, { format, parameterValues, ...context })
+      const blob = await visualizationsApi.download(queryId, visualizationId, { format, parameterValues, ...context, crossFilters })
       downloadBlob(blob, downloadFileName(name, format))
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['audit', queryId] }),

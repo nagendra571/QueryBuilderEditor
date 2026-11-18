@@ -30,7 +30,7 @@ public class ExportVisualizationCommandTests
     }
 
     private static Task<ExportResult> Download(VizFixture f, QueryVisualization viz, ExportFormat format = ExportFormat.Csv) =>
-        new ExportVisualizationCommandHandler(f.Loader(), new ExportService(), new VizFixture.FakeScope(), f.Audit)
+        new ExportVisualizationCommandHandler(f.Loader(), new QueryBuilder.Application.Drill.CrossFilterResolver(f.Dashboards, f.DataSources, f.Catalog), new ExportService(), new VizFixture.FakeScope(), f.Audit)
             .Handle(new ExportVisualizationCommand(f.Query.Id, viz.Id, [], format), default);
 
     private static string[] Lines(ExportResult result) =>

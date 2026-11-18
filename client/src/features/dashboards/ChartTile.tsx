@@ -296,7 +296,7 @@ export function ChartTileBody({ tile, titleId, statusId }: { tile: DashboardTile
         )}
         {ready && data.data && !data.isError && drill.explore}
         {ready && data.data && !data.isError && (
-          <ChartDownloadMenu compact queryId={queryId} visualizationId={vizId} name={title} parameterValues={values} context={context} />
+          <ChartDownloadMenu compact queryId={queryId} visualizationId={vizId} name={title} parameterValues={values} context={context} crossFilters={crossFilters} />
         )}
         <span className="flex size-4 shrink-0 items-center justify-center" aria-hidden="true">
           {refreshing && <Loader2 className="size-3.5 animate-spin text-accent-foreground" />}

@@ -60,7 +60,7 @@ public static class VisualizationEndpoints
                 throw new BadHttpRequestException("'format' must be 'csv' or 'xlsx'.");
             }
             var result = await sender.Send(
-                new ExportVisualizationCommand(queryId, visualizationId, request.ParameterValues ?? [], format, request.DashboardId, request.TileId), ct);
+                new ExportVisualizationCommand(queryId, visualizationId, request.ParameterValues ?? [], format, request.DashboardId, request.TileId, request.CrossFilters), ct);
             return Results.File(result.Content, result.ContentType, result.FileName);
         }).AllowViewers();
 

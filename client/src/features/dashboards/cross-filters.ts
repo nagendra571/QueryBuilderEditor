@@ -22,6 +22,11 @@ export function tileFilters(enabled: boolean, list: CrossFilterValue[]): CrossFi
   return list.slice(0, MAX_CROSS_FILTERS)
 }
 
+/** A link's filters can name a tile that was since removed (or is not a chart): the server would refuse every tile over it. */
+export function liveFilters(list: CrossFilterValue[], chartTileIds: ReadonlySet<string>): CrossFilterValue[] {
+  return list.filter((f) => chartTileIds.has(f.sourceTileId))
+}
+
 export function chipLabel(f: CrossFilterValue): string {
   return `${f.column} = ${f.value === null ? '(none)' : f.value === '' ? '(blank)' : f.value}`
 }

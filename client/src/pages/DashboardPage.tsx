@@ -12,7 +12,7 @@ import { PublishedChip } from '@/features/hub/PublishedChip'
 import { AddChartDialog } from '@/features/dashboards/AddChartDialog'
 import { toast } from 'sonner'
 import { CrossFilterBar } from '@/features/dashboards/CrossFilterBar'
-import { addFilter, clearFilters, removeFilter } from '@/features/dashboards/cross-filters'
+import { addFilter, clearFilters, liveFilters, removeFilter } from '@/features/dashboards/cross-filters'
 import { DashboardFiltersContext } from '@/features/dashboards/filter-context'
 import { decodeFilters, encodeFilters, type CrossFilterValue } from '@/features/drill/drill-url'
 import { ConfirmDeleteDialog } from '@/features/dashboards/ConfirmDeleteDialog'
@@ -108,8 +108,10 @@ export function DashboardPage() {
   // Click-to-filter lives in the URL (`f`), so a filtered dashboard can be shared. A link that does not decode filters nothing.
   const rawFilters = useMemo<CrossFilterValue[]>(() => {
     const f = searchParams.get('f')
-    return (f ? decodeFilters(f) : null) ?? []
-  }, [searchParams])
+    const decoded = (f ? decodeFilters(f) : null) ?? []
+    // Tiles of the saved dashboard, not the draft: the server checks the saved one.
+    return dashboard ? liveFilters(decoded, new Set(dashboard.tiles.filter((t) => t.kind === 'chart').map((t) => t.id))) : decoded
+  }, [searchParams, dashboard])
   const clickToFilter = !!dashboard?.clickToFilterEnabled
   const effectiveFilters = useMemo(() => (clickToFilter ? rawFilters : []), [clickToFilter, rawFilters])
   const writeFilters = useCallback(

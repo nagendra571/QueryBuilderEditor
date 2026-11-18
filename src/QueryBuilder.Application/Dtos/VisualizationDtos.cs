@@ -20,7 +20,7 @@ public sealed record SaveVisualizationRequest(string Name, VisualizationType Typ
 public sealed record RenderVisualizationRequest(
     Dictionary<string, string?>? ParameterValues, Guid? DashboardId = null, Guid? TileId = null, List<Drill.CrossFilterDto>? CrossFilters = null);
 
-public sealed record ExportVisualizationRequest(string? Format, Dictionary<string, string?>? ParameterValues, Guid? DashboardId = null, Guid? TileId = null);
+public sealed record ExportVisualizationRequest(string? Format, Dictionary<string, string?>? ParameterValues, Guid? DashboardId = null, Guid? TileId = null, List<Drill.CrossFilterDto>? CrossFilters = null);
 
 /// <summary>The columns the chart references plus, on a draw, the query's visible plain columns as row keys (<see cref="KeyColumns"/>) — never hidden columns or the query's full output.</summary>
 public sealed record VisualizationDataDto(

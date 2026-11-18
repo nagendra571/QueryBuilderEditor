@@ -12,7 +12,8 @@ public sealed record ExportVisualizationCommand(
     Dictionary<string, string?> ParameterValues,
     ExportFormat Format,
     Guid? DashboardId = null,
-    Guid? TileId = null) : IRequest<ExportResult>;
+    Guid? TileId = null,
+    List<Drill.CrossFilterDto>? CrossFilters = null) : IRequest<ExportResult>;
 
 /// <summary>
 /// Downloads the rows a saved chart is drawn from, as CSV or Excel: the same rows and columns the caller would see drawn,
@@ -22,6 +23,7 @@ public sealed record ExportVisualizationCommand(
 /// </summary>
 public sealed class ExportVisualizationCommandHandler(
     VisualizationDataLoader loader,
+    Drill.CrossFilterResolver crossFilterResolver,
     IExportService exportService,
     ICurrentDataScope currentScope,
     IAuditLogger auditLogger)
@@ -31,7 +33,7 @@ public sealed class ExportVisualizationCommandHandler(
     {
         var data = await loader.LoadAsync(
             request.SavedQueryId, request.VisualizationId, request.ParameterValues, request.DashboardId, request.TileId,
-            VisualizationDataPurpose.Download, cancellationToken);
+            VisualizationDataPurpose.Download, cancellationToken, request.CrossFilters, crossFilterResolver);
 
         var resultSet = new QueryResultSet
         {
@@ -45,6 +47,25 @@ public sealed class ExportVisualizationCommandHandler(
 
         var source = data.Definition.Source;
         var entityName = $"{source.SchemaName}.{source.ObjectName}";
+        var scope = (await currentScope.GetAsync(cancellationToken)).Describe();
+        // Only when a click-filter narrowed the file, so a plain download's audit entry keeps its old shape.
+        var details = data.CrossFilterSteps is { Count: > 0 } steps
+            ? (object)new
+            {
+                VisualizationId = data.Visualization.Id,
+                request.Format,
+                RowCount = data.Rows.Count,
+                Scope = scope,
+                CrossFilters = steps.Select(s => new { s.Column, Value = Drill.DrillAudit.Truncate(s.Value) }).ToList()
+            }
+            : new
+            {
+                VisualizationId = data.Visualization.Id,
+                request.Format,
+                RowCount = data.Rows.Count,
+                Scope = scope
+            };
+
         await auditLogger.LogAsync(
             new AuditEntry(
                 AuditAction.QueryExported,
@@ -53,13 +74,7 @@ public sealed class ExportVisualizationCommandHandler(
                 entityName,
                 data.SavedQuery.DataSourceId,
                 $"Downloaded chart '{data.Visualization.Name}' on '{data.SavedQuery.Name}' as {request.Format} ({data.Rows.Count} row(s))",
-                new
-                {
-                    VisualizationId = data.Visualization.Id,
-                    request.Format,
-                    RowCount = data.Rows.Count,
-                    Scope = (await currentScope.GetAsync(cancellationToken)).Describe()
-                }),
+                details),
             cancellationToken);
 
         return new ExportResult(content, exportService.GetContentType(request.Format), name + exportService.GetFileExtension(request.Format));

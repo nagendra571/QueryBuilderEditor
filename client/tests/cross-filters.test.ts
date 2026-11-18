@@ -5,6 +5,7 @@ import {
   chipLabel,
   clearFilters,
   filterStepFor,
+  liveFilters,
   removeFilter,
   tileFilters,
 } from '../src/features/dashboards/cross-filters.ts'
@@ -68,4 +69,10 @@ test('filterStepFor on a pivot prefers the first row field, then the column fiel
     filterStepFor('pivot', opts({ pivot: { rows: [], column: 'Year', values: [] } as never }), steps),
     steps[1],
   )
+})
+
+test('liveFilters drops filters whose source tile is not a chart tile of the dashboard', () => {
+  const list = [f('a', '1', 't1'), f('b', '2', 'gone'), f('c', '3', 't2')]
+  assert.deepEqual(liveFilters(list, new Set(['t1', 't2'])), [list[0], list[2]])
+  assert.deepEqual(liveFilters(list, new Set()), [])
 })

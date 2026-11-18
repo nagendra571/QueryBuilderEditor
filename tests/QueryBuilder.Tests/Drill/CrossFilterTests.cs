@@ -185,6 +185,48 @@ public class CrossFilterTests
         Assert.DoesNotContain("crossFilter", JsonSerializer.Serialize(data, new JsonSerializerOptions(JsonSerializerDefaults.Web)));
     }
 
+    private static Task<QueryBuilder.Application.DataSources.ExportResult> Download(Setup s, params CrossFilterDto[] filters) =>
+        new ExportVisualizationCommandHandler(s.F.Loader(), Resolver(s.F), new QueryBuilder.Infrastructure.Export.ExportService(), new VizFixture.FakeScope(), s.F.Audit)
+            .Handle(new ExportVisualizationCommand(
+                s.F.Query.Id, s.TargetViz.Id, [], ExportFormat.Csv, s.Dashboard.Id, s.Target.Id, filters.ToList()), default);
+
+    [Fact]
+    public async Task Download_applies_the_cross_filter_through_the_same_guarded_path_and_audits_it()
+    {
+        var s = Arrange();
+
+        await Download(s, new CrossFilterDto(s.Source.Id, "Region", "EU"));
+
+        Assert.Equal(1, s.F.Guard.AuthorizeCalls);
+        Assert.Contains("[RegionCode]", s.F.Builders.Generated!.Sql);
+        Assert.Contains("EU", s.F.Builders.Generated.Parameters.Select(p => p.LiteralValue));
+        var audit = JsonSerializer.Serialize(Assert.Single(s.F.Audit.Entries).Details);
+        Assert.Contains("CrossFilters", audit);
+        Assert.Contains("RegionCode", audit);
+    }
+
+    [Fact]
+    public async Task Download_without_filters_is_unchanged()
+    {
+        var s = Arrange();
+        await Download(s);
+
+        Assert.DoesNotContain("EU", s.F.Builders.Generated!.Parameters.Select(p => p.LiteralValue));
+        Assert.DoesNotContain("CrossFilters", JsonSerializer.Serialize(Assert.Single(s.F.Audit.Entries).Details));
+    }
+
+    [Fact]
+    public async Task Download_with_the_switch_off_refuses_filters()
+    {
+        var s = Arrange();
+        s.Dashboard.ClickToFilterEnabled = false;
+
+        var ex = await Assert.ThrowsAsync<CatalogValidationException>(() => Download(s, new CrossFilterDto(s.Source.Id, "Region", "EU")));
+
+        Assert.Equal("Click-to-filter is turned off for this dashboard.", ex.Message);
+        Assert.Equal(0, s.F.Executor.Calls);
+    }
+
     [Fact]
     public async Task Switch_off_refuses_filters()
     {
