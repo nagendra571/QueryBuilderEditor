@@ -61,6 +61,32 @@ public class DrillDefinitionsTests
     }
 
     [Fact]
+    public void A_boolean_drill_column_step_becomes_is_true_or_is_false()
+    {
+        var types = new Dictionary<string, ColumnDataType> { ["Active"] = ColumnDataType.Boolean };
+
+        var t = DrillDefinitions.ForRows(Saved(), [Step("Active", "true")], ["Active"], null, types);
+        var f = DrillDefinitions.ForBreakdown(Saved(), VisualizationType.Bar, BarOptions(), [Step("Active", "false")], "Channel", ["Active"], types).Definition;
+
+        Assert.Equal(FilterOperator.IsTrue, t.Filters.Groups[^1].Conditions[0].Operator);
+        Assert.Equal(ColumnDataType.Boolean, t.Columns.Single(c => c.ColumnName == "Active").DataType);
+        Assert.Equal(FilterOperator.IsFalse, f.Filters.Groups[^1].Conditions[0].Operator);
+    }
+
+    [Fact]
+    public void Drill_column_types_are_looked_up_with_the_given_comparer_and_default_to_text()
+    {
+        var types = new Dictionary<string, ColumnDataType> { ["SITEID"] = ColumnDataType.Number };
+
+        var matched = DrillDefinitions.ForRows(Saved(), [Step("SiteId", "4")], ["SiteId"],
+            (a, b) => string.Equals(a, b, StringComparison.OrdinalIgnoreCase), types);
+        var unmatched = DrillDefinitions.ForRows(Saved(), [Step("SiteId", "4")], ["SiteId"], null, types);
+
+        Assert.Equal(ColumnDataType.Number, matched.Filters.Groups[^1].Conditions[0].DataType);
+        Assert.Equal(ColumnDataType.Text, unmatched.Filters.Groups[^1].Conditions[0].DataType);
+    }
+
+    [Fact]
     public void Rows_removes_grouping_and_having_and_replaces_aggregates_with_base_columns()
     {
         var result = DrillDefinitions.ForRows(Saved(), [], NoDrill);

@@ -44,4 +44,17 @@ public class DrillSqlTests
         Assert.StartsWith($"WHERE ({scopeSql}) AND ((", where);
         Assert.Matches(@"AND \(\(.* OR .*\) AND \(.*\)\)", where);
     }
+
+    [Theory]
+    [MemberData(nameof(Builders))]
+    public void A_number_drill_column_step_binds_as_a_number(IQuerySqlBuilder builder, string _)
+    {
+        var types = new Dictionary<string, ColumnDataType> { ["SiteId"] = ColumnDataType.Number };
+        var drilled = DrillDefinitions.ForRows(VizFixture.Definition(), [new DrillStep("SiteId", "7")], ["SiteId"], null, types);
+
+        var generated = builder.Build(drilled, Scope);
+
+        var p = Assert.Single(generated.Parameters, p => p.LiteralValue == "7");
+        Assert.Equal(ColumnDataType.Number, p.DataType);
+    }
 }

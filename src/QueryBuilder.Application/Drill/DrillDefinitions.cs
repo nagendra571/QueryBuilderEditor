@@ -31,7 +31,13 @@ public static class DrillDefinitions
             .ToList();
 
     public static QueryDefinition ApplySteps(
-        QueryDefinition definition, IReadOnlyList<DrillStep> steps, IReadOnlyList<string> drillColumns)
+        QueryDefinition definition, IReadOnlyList<DrillStep> steps, IReadOnlyList<string> drillColumns,
+        IReadOnlyDictionary<string, ColumnDataType>? drillColumnTypes = null) =>
+        ApplyStepsCore(definition, steps, drillColumns, drillColumnTypes, null);
+
+    private static QueryDefinition ApplyStepsCore(
+        QueryDefinition definition, IReadOnlyList<DrillStep> steps, IReadOnlyList<string> drillColumns,
+        IReadOnlyDictionary<string, ColumnDataType>? drillColumnTypes, Func<string, string, bool>? sameIdentifier)
     {
         var copy = Clone(definition);
         if (steps.Count == 0) return copy;
@@ -44,7 +50,7 @@ public static class DrillDefinitions
         {
             if (step.Value is { Length: > DrillLimits.MaxValueLength })
                 throw new CatalogValidationException($"A drill value can be at most {DrillLimits.MaxValueLength} characters.");
-            conditions.Add(ToCondition(definition, step, drillColumns));
+            conditions.Add(ToCondition(definition, step, drillColumns, drillColumnTypes, sameIdentifier));
         }
 
         var original = copy.Filters;
@@ -58,10 +64,12 @@ public static class DrillDefinitions
 
     public static QueryDefinition ForRows(
         QueryDefinition saved, IReadOnlyList<DrillStep> steps, IReadOnlyList<string> drillColumns,
-        Func<string, string, bool>? sameIdentifier = null)
+        Func<string, string, bool>? sameIdentifier = null,
+        IReadOnlyDictionary<string, ColumnDataType>? drillColumnTypes = null)
     {
+        var lookupIdentifier = sameIdentifier;
         sameIdentifier ??= (a, b) => string.Equals(a, b, StringComparison.OrdinalIgnoreCase);
-        var result = ApplySteps(saved, steps, drillColumns);
+        var result = ApplyStepsCore(saved, steps, drillColumns, drillColumnTypes, lookupIdentifier);
 
         var visible = result.Columns.Where(c => c.IsVisible).ToList();
         var columns = new List<QueryColumn>();
@@ -88,7 +96,12 @@ public static class DrillDefinitions
         foreach (var name in drillColumns)
         {
             if (Has(result.Source.Alias, name)) continue;
-            columns.Add(new QueryColumn { TableAlias = result.Source.Alias, ColumnName = name });
+            columns.Add(new QueryColumn
+            {
+                TableAlias = result.Source.Alias,
+                ColumnName = name,
+                DataType = DrillColumnType(drillColumnTypes, name, lookupIdentifier)
+            });
         }
 
         for (var i = 0; i < columns.Count; i++) columns[i].OrderIndex = i;
@@ -104,7 +117,8 @@ public static class DrillDefinitions
 
     public static (QueryDefinition Definition, VisualizationOptions Options) ForBreakdown(
         QueryDefinition saved, VisualizationType type, VisualizationOptions options,
-        IReadOnlyList<DrillStep> steps, string breakdownColumn, IReadOnlyList<string> drillColumns)
+        IReadOnlyList<DrillStep> steps, string breakdownColumn, IReadOnlyList<string> drillColumns,
+        IReadOnlyDictionary<string, ColumnDataType>? drillColumnTypes = null)
     {
         if (!BreakdownTypes.Contains(type) || !IsAggregated(saved))
             throw new CatalogValidationException("This chart can't be broken down.");
@@ -113,7 +127,7 @@ public static class DrillDefinitions
             || steps.Any(s => string.Equals(s.Column, breakdownColumn, StringComparison.Ordinal)))
             throw new CatalogValidationException($"'{breakdownColumn}' can't be used to break down this chart.");
 
-        var result = ApplySteps(saved, steps, drillColumns);
+        var result = ApplySteps(saved, steps, drillColumns, drillColumnTypes);
         var newOptions = VisualizationOptionsSerializer.Deserialize(VisualizationOptionsSerializer.Serialize(options));
         newOptions.Normalize();
 
@@ -124,7 +138,12 @@ public static class DrillDefinitions
         {
             if (columns.Any(c => c.EffectiveAlias == name)) return;
             var existing = visible.FirstOrDefault(c => c.Aggregate == AggregateFunction.None && c.EffectiveAlias == name);
-            columns.Add(existing ?? new QueryColumn { TableAlias = result.Source.Alias, ColumnName = name });
+            columns.Add(existing ?? new QueryColumn
+            {
+                TableAlias = result.Source.Alias,
+                ColumnName = name,
+                DataType = DrillColumnType(drillColumnTypes, name, null)
+            });
         }
 
         AddPlain(breakdownColumn);
@@ -162,7 +181,9 @@ public static class DrillDefinitions
         return (result, newOptions);
     }
 
-    private static FilterCondition ToCondition(QueryDefinition saved, DrillStep step, IReadOnlyList<string> drillColumns)
+    private static FilterCondition ToCondition(
+        QueryDefinition saved, DrillStep step, IReadOnlyList<string> drillColumns,
+        IReadOnlyDictionary<string, ColumnDataType>? drillColumnTypes, Func<string, string, bool>? sameIdentifier)
     {
         var source = saved.Columns.FirstOrDefault(c =>
             c.IsVisible && c.Aggregate == AggregateFunction.None && c.EffectiveAlias == step.Column);
@@ -175,7 +196,7 @@ public static class DrillDefinitions
         }
         else if (drillColumns.Contains(step.Column, StringComparer.Ordinal))
         {
-            (tableAlias, columnName, dataType) = (saved.Source.Alias, step.Column, ColumnDataType.Text);
+            (tableAlias, columnName, dataType) = (saved.Source.Alias, step.Column, DrillColumnType(drillColumnTypes, step.Column, sameIdentifier));
         }
         else
         {
@@ -202,6 +223,16 @@ public static class DrillDefinitions
             condition.Value = step.Value;
         }
         return condition;
+    }
+
+    private static ColumnDataType DrillColumnType(
+        IReadOnlyDictionary<string, ColumnDataType>? types, string name, Func<string, string, bool>? same)
+    {
+        if (types is null) return ColumnDataType.Text;
+        if (same is null) return types.TryGetValue(name, out var exact) ? exact : ColumnDataType.Text;
+        foreach (var (key, type) in types)
+            if (same(key, name)) return type;
+        return ColumnDataType.Text;
     }
 
     private static QueryDefinition Clone(QueryDefinition definition) =>
