@@ -28,31 +28,46 @@ public sealed record LoadedVisualizationData(
     List<string>? KeyColumns = null);
 
 /// <summary>
-/// What <see cref="VisualizationDataLoader.ResolveAsync"/> proved about a request: the caller may see this chart, and
-/// <see cref="Values"/> are the parameter values they are allowed to use (already constrained for a dashboard-granted
-/// Viewer). Only the loader can build one, and it has no setters, so a handler cannot swap in values or a definition.
+/// What the loader proved about a request on a saved query: the caller may see it, it is not disabled, and
+/// <see cref="Values"/> are the parameter values they are allowed to use. Only the loader can build one, and it has no
+/// setters, so a handler cannot swap in values or a definition. <see cref="VisualizationDataLoader.ExecuteAsync"/> is the
+/// one path from here to SQL, for charts and for the results grid alike.
 /// </summary>
-public sealed class VisualizationContext
+public class QueryContext
 {
-    internal VisualizationContext(
-        SavedQuery savedQuery, QueryVisualization visualization, QueryDefinition definition, VisualizationOptions options,
-        DataSource dataSource, Dictionary<string, string?> values, bool canView)
+    internal QueryContext(SavedQuery savedQuery, QueryDefinition definition, DataSource dataSource, IReadOnlyDictionary<string, string?> values)
     {
         SavedQuery = savedQuery;
-        Visualization = visualization;
         Definition = definition;
-        Options = options;
         DataSource = dataSource;
         Values = values;
-        CanView = canView;
     }
 
     public SavedQuery SavedQuery { get; }
-    public QueryVisualization Visualization { get; }
     public QueryDefinition Definition { get; }
-    public VisualizationOptions Options { get; }
     public DataSource DataSource { get; }
-    public Dictionary<string, string?> Values { get; }
+    public IReadOnlyDictionary<string, string?> Values { get; }
+}
+
+/// <summary>
+/// What <see cref="VisualizationDataLoader.ResolveAsync"/> proved about a request: the caller may see this chart, and
+/// <see cref="QueryContext.Values"/> are the parameter values they are allowed to use (already constrained for a
+/// dashboard-granted Viewer).
+/// </summary>
+public sealed class VisualizationContext : QueryContext
+{
+    internal VisualizationContext(
+        SavedQuery savedQuery, QueryVisualization visualization, QueryDefinition definition, VisualizationOptions options,
+        DataSource dataSource, IReadOnlyDictionary<string, string?> values, bool canView)
+        : base(savedQuery, definition, dataSource, values)
+    {
+        Visualization = visualization;
+        Options = options;
+        CanView = canView;
+    }
+
+    public QueryVisualization Visualization { get; }
+    public VisualizationOptions Options { get; }
     public bool CanView { get; }
 }
 
@@ -163,7 +178,7 @@ public sealed class VisualizationDataLoader(
         return new LoadedVisualizationData(savedQuery, visualization, definition, columns, rows, result.ExecutionTimeMs, cap, result.Truncated, keyColumns);
     }
 
-    public async Task<int?> EffectiveLimitAsync(VisualizationContext context, CancellationToken cancellationToken) =>
+    public async Task<int?> EffectiveLimitAsync(QueryContext context, CancellationToken cancellationToken) =>
         RecordLimits.Effective(context.DataSource.MaxRecords, await appSettings.MaxRecordsAsync(cancellationToken), recordLimitSettings);
 
     internal static RecordLimitExceededException ChartTooLarge(int? effectiveLimit, int cap) =>
@@ -198,7 +213,7 @@ public sealed class VisualizationDataLoader(
             throw new ForbiddenException("You do not have access to this query.");
         }
 
-        var values = canView ? parameterValues : grantResolver.ConstrainValues(parameterValues);
+        IReadOnlyDictionary<string, string?> values = canView ? new Dictionary<string, string?>(parameterValues, parameterValues.Comparer) : grantResolver.ConstrainValues(parameterValues);
 
         var visualization = await visualizations.GetByIdAsync(visualizationId, cancellationToken);
         if (visualization is null || visualization.SavedQueryId != savedQuery.Id)
@@ -224,12 +239,39 @@ public sealed class VisualizationDataLoader(
     }
 
     /// <summary>
+    /// For the results grid's drill, which has no chart: only the query's own share grants access (a hub Viewer has none, and
+    /// no dashboard context applies), and the saved definition is loaded from the database, never taken from the browser.
+    /// </summary>
+    public async Task<QueryContext> ResolveQueryAsync(
+        Guid savedQueryId, Dictionary<string, string?> parameterValues, CancellationToken cancellationToken)
+    {
+        var savedQuery = await savedQueries.GetByIdAsync(savedQueryId, cancellationToken)
+            ?? throw new NotFoundException(nameof(SavedQuery), savedQueryId);
+
+        if (!SavedQueryAccess.CanView(savedQuery, AccessActor.From(currentUser)))
+        {
+            throw new ForbiddenException("You do not have access to this query.");
+        }
+
+        if (savedQuery.IsDisabled)
+        {
+            throw new QueryDisabledException($"'{savedQuery.Name}' is disabled and cannot be run.");
+        }
+
+        var definition = QueryDefinitionSerializer.Deserialize(savedQuery.DefinitionJson);
+        var dataSource = await dataSources.GetByIdAsync(savedQuery.DataSourceId, cancellationToken)
+            ?? throw new NotFoundException(nameof(DataSource), savedQuery.DataSourceId);
+
+        return new QueryContext(savedQuery, definition, dataSource, new Dictionary<string, string?>(parameterValues, parameterValues.Comparer));
+    }
+
+    /// <summary>
     /// The only way chart and drill code reaches SQL. The definition passed in is validated against the catalog (a derived
     /// drill definition may name columns that have left the view since the chart was saved), then parameters are bound,
     /// the caller's row-level scope is applied, and only then is SQL built.
     /// </summary>
     public async Task<(QueryResultSet Result, int Cap, int? EffectiveLimit)> ExecuteAsync(
-        VisualizationContext context, QueryDefinition definition, int cap, CancellationToken cancellationToken)
+        QueryContext context, QueryDefinition definition, int cap, CancellationToken cancellationToken)
     {
         var dataSourceId = context.SavedQuery.DataSourceId;
         await catalogService.ValidateAsync(dataSourceId, definition, cancellationToken);

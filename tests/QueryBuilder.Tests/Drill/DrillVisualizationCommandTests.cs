@@ -154,7 +154,7 @@ public class DrillVisualizationCommandTests
     }
 
     [Fact]
-    public async Task Removed_tile_is_not_found()
+    public async Task Deleted_visualization_is_not_found()
     {
         var (f, viz) = Arrange();
         f.Visualizations.Items.Remove(viz);
@@ -162,6 +162,35 @@ public class DrillVisualizationCommandTests
         await Assert.ThrowsAsync<NotFoundException>(() => Drill(f, viz, Rows()));
 
         Assert.Equal(0, f.Executor.Calls);
+    }
+
+    [Fact]
+    public async Task Viewer_drilling_a_tile_removed_from_the_dashboard_is_forbidden()
+    {
+        var (f, viz) = Arrange(HubViewer);
+        f.User.Role = HubRole.Viewer;
+        var (dashboard, tile) = Publish(f, viz);
+        f.Dashboards.Items.Single().Tiles.Clear();
+
+        await Assert.ThrowsAsync<ForbiddenException>(() => Drill(f, viz, Rows(dashboardId: dashboard, tileId: tile)));
+
+        Assert.Equal(0, f.Executor.Calls);
+        Assert.Empty(f.Audit.Entries);
+    }
+
+    [Fact]
+    public async Task Context_values_are_a_copy_that_cannot_change_after_resolving()
+    {
+        var (f, viz) = Arrange();
+        var values = new Dictionary<string, string?> { ["region"] = "EU" };
+
+        var context = await f.Loader().ResolveAsync(f.Query.Id, viz.Id, values, null, null, VisualizationDataPurpose.Drill, default);
+        values["region"] = "US";
+        values["other"] = "x";
+
+        IReadOnlyDictionary<string, string?> seen = context.Values;
+        Assert.Equal("EU", seen["region"]);
+        Assert.False(seen.ContainsKey("other"));
     }
 
     [Fact]
@@ -233,6 +262,8 @@ public class DrillVisualizationCommandTests
 
         Assert.Equal(1, f.Guard.AuthorizeCalls);
         Assert.Equal(1, f.Catalog.ValidateCalls);
+        var validated = Assert.Single(f.Catalog.LastValidated!.Filters.Groups.Last().Conditions);
+        Assert.Equal(("RegionCode", "EU"), (validated.ColumnName, validated.Value));
         var seen = f.Guard.ReceivedDefinition!;
         var step = Assert.Single(seen.Filters.Groups.Last().Conditions);
         Assert.Equal(("RegionCode", "EU"), (step.ColumnName, step.Value));
@@ -286,6 +317,40 @@ public class DrillVisualizationCommandTests
         Assert.Contains("\"EU\"", json);
         Assert.Contains("Unrestricted", json);
         Assert.Contains("\"RowCount\":1", json);
+    }
+
+    [Fact]
+    public async Task Dashboard_ids_are_audited_only_when_the_grant_let_the_request_in()
+    {
+        var (f, viz) = Arrange(HubViewer);
+        f.User.Role = HubRole.Viewer;
+        var (dashboard, tile) = Publish(f, viz);
+        await Drill(f, viz, Rows(dashboardId: dashboard, tileId: tile));
+        var granted = JsonSerializer.Serialize(Assert.Single(f.Audit.Entries).Details);
+        Assert.Contains(dashboard.ToString(), granted);
+        Assert.Contains(tile.ToString(), granted);
+
+        var (owned, ownedViz) = Arrange();
+        var (d2, t2) = Publish(owned, ownedViz);
+        await Drill(owned, ownedViz, Rows(dashboardId: d2, tileId: t2));
+        var own = JsonSerializer.Serialize(Assert.Single(owned.Audit.Entries).Details);
+        Assert.DoesNotContain("DashboardId", own);
+        Assert.DoesNotContain("TileId", own);
+        Assert.DoesNotContain(d2.ToString(), own);
+    }
+
+    [Fact]
+    public async Task Audited_step_values_are_cut_to_200_characters_and_a_drill_has_no_format()
+    {
+        var (f, viz) = Arrange();
+
+        await Drill(f, viz, Rows([new DrillStep("Region", new string('x', 300))]));
+
+        var entry = Assert.Single(f.Audit.Entries);
+        var json = JsonSerializer.Serialize(entry.Details);
+        Assert.Contains(new string('x', 200), json);
+        Assert.DoesNotContain(new string('x', 201), json);
+        Assert.DoesNotContain("Format", json);
     }
 
     [Fact]

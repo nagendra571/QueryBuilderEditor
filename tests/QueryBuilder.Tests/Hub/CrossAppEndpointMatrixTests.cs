@@ -94,7 +94,11 @@ public partial class CrossAppEndpointMatrixTests
     private static bool AuthorRefused(string key) => key.Contains(" /api/admin/", StringComparison.Ordinal);
 
     // Controls whose B-on-B call can't be 2xx for any role in this test, with the reason.
-    private static readonly Dictionary<string, string> ControlNotOk = new();
+    private static readonly Dictionary<string, string> ControlNotOk = new()
+    {
+        ["POST /api/queries/{id}/drill"] = "the seeded saved query has no totals, so B's own drill is refused 400 after the access check",
+        ["POST /api/queries/{id}/drill/export"] = "the seeded saved query has no totals, so B's own drill is refused 400 after the access check"
+    };
 
     // Exact "METHOD pattern" keys, never a prefix, so a future app-scoped route under /api/hub is not silently skipped.
     private static readonly Dictionary<string, string> Excluded = new()
@@ -153,6 +157,8 @@ public partial class CrossAppEndpointMatrixTests
         ["DELETE /api/queries/{queryId}/visualizations/{visualizationId}"] = _ => null,
         ["POST /api/queries/{queryId}/visualizations/{visualizationId}/data"] = _ => new { parameterValues = new { } },
         ["POST /api/queries/{queryId}/visualizations/{visualizationId}/export"] = _ => new { format = "csv", parameterValues = new { } },
+        ["POST /api/queries/{id}/drill"] = _ => new { steps = Array.Empty<object>(), parameterValues = new { } },
+        ["POST /api/queries/{id}/drill/export"] = _ => new { steps = Array.Empty<object>(), parameterValues = new { }, format = "csv" },
         [DrillKey] = _ => new { action = "Rows", steps = Array.Empty<object>(), parameterValues = new { } },
         [DrillExportKey] = _ => new { action = "Rows", steps = Array.Empty<object>(), parameterValues = new { }, format = "csv" }
     };

@@ -24,18 +24,42 @@ internal sealed record DrillRun(
     int Cap,
     bool Truncated)
 {
-    public object AuditDetails(object scope, string? format = null) => new
+    public object AuditDetails(object scope, string? format = null) =>
+        DrillAudit.Details(
+            Steps, Request.Action, Request.BreakdownColumn, Rows.Count, scope, format,
+            Context.Visualization.Id,
+            // Only when the grant is what let the request in: otherwise the ids say nothing about why it was allowed.
+            Context.CanView ? null : Request.DashboardId, Context.CanView ? null : Request.TileId);
+}
+
+internal static class DrillAudit
+{
+    public const int MaxAuditedValueLength = 200;
+
+    public static Dictionary<string, object?> Details(
+        IReadOnlyList<DrillStep> steps, DrillAction action, string? breakdownColumn, int rowCount, object scope, string? format,
+        Guid? visualizationId, Guid? dashboardId, Guid? tileId)
     {
-        VisualizationId = Context.Visualization.Id,
-        Request.DashboardId,
-        Request.TileId,
-        Action = Request.Action.ToString(),
-        Steps = Steps.Select(s => new { s.Column, s.Value }).ToList(),
-        Request.BreakdownColumn,
-        RowCount = Rows.Count,
-        Format = format,
-        Scope = scope
-    };
+        var details = new Dictionary<string, object?>();
+        if (visualizationId is not null) details["VisualizationId"] = visualizationId;
+        if (dashboardId is not null) details["DashboardId"] = dashboardId;
+        if (tileId is not null) details["TileId"] = tileId;
+        details["Action"] = action.ToString();
+        // A step value can be up to 4,000 characters; the log keeps enough to recognise it, not to hold a pasted document.
+        details["Steps"] = steps.Select(s => new { s.Column, Value = Truncate(s.Value) }).ToList();
+        details["BreakdownColumn"] = breakdownColumn;
+        details["RowCount"] = rowCount;
+        if (format is not null) details["Format"] = format;
+        details["Scope"] = scope;
+        return details;
+    }
+
+    private static string? Truncate(string? value)
+    {
+        if (value is null || value.Length <= MaxAuditedValueLength) return value;
+        var end = char.IsHighSurrogate(value[MaxAuditedValueLength - 1]) ? MaxAuditedValueLength - 1 : MaxAuditedValueLength;
+        return value[..end];
+    }
 }
 
 /// <summary>
@@ -67,7 +91,7 @@ internal static class DrillExecution
             : await RunBreakdownAsync(loader, context, request, steps, drillColumns, types, Same, limit, cancellationToken);
     }
 
-    private static List<DrillStep> Validate(DrillRequest request, bool forExport)
+    internal static List<DrillStep> Validate(DrillRequest request, bool forExport)
     {
         if (!Enum.IsDefined(request.Action))
             throw new CatalogValidationException("Unknown drill action.");
@@ -77,8 +101,6 @@ internal static class DrillExecution
             throw new CatalogValidationException("Only drilled rows can be downloaded.");
 
         var steps = request.Steps ?? [];
-        if (steps.Count > DrillLimits.MaxSteps)
-            throw new CatalogValidationException($"A drill trail can have at most {DrillLimits.MaxSteps} steps.");
         foreach (var step in steps)
         {
             if (step is null || string.IsNullOrWhiteSpace(step.Column))
@@ -90,8 +112,8 @@ internal static class DrillExecution
         return steps;
     }
 
-    private static async Task<Dictionary<string, ColumnDataType>> DrillColumnTypesAsync(
-        IDataCatalogService catalog, VisualizationContext context, IReadOnlyList<string> drillColumns, StringComparer comparer,
+    internal static async Task<Dictionary<string, ColumnDataType>> DrillColumnTypesAsync(
+        IDataCatalogService catalog, QueryContext context, IReadOnlyList<string> drillColumns, StringComparer comparer,
         CancellationToken cancellationToken)
     {
         var types = new Dictionary<string, ColumnDataType>(comparer);
@@ -113,6 +135,21 @@ internal static class DrillExecution
         IReadOnlyList<string> drillColumns, Dictionary<string, ColumnDataType> types, Func<string, string, bool> same,
         int? limit, bool forExport, CancellationToken cancellationToken)
     {
+        var rows = await RunRowsCoreAsync(loader, context, steps, drillColumns, types, same, limit, forExport, "chart", cancellationToken);
+        return new DrillRun(context, request, steps, rows.Definition, null, rows.Columns, rows.Rows, rows.ExecutionTimeMs, rows.Cap, rows.Truncated);
+    }
+
+    internal sealed record DrillRows(
+        QueryDefinition Definition, List<QueryResultColumnDto> Columns, List<Dictionary<string, object?>> Rows,
+        long ExecutionTimeMs, int Cap, bool Truncated);
+
+    /// <summary>The rows behind a click trail, for a chart and for the results grid alike: derive the drill definition, then
+    /// the loader's single validate, bind, scope and build path. Nothing here knows whether a chart was involved.</summary>
+    internal static async Task<DrillRows> RunRowsCoreAsync(
+        VisualizationDataLoader loader, QueryContext context, IReadOnlyList<DrillStep> steps,
+        IReadOnlyList<string> drillColumns, Dictionary<string, ColumnDataType> types, Func<string, string, bool> same,
+        int? limit, bool forExport, string subject, CancellationToken cancellationToken)
+    {
         var definition = DrillDefinitions.ForRows(context.Definition, steps, drillColumns, same, types);
         var requestedCap = forExport ? limit ?? RecordLimits.LegacyExportRows : RecordLimits.GridRows(limit, null);
 
@@ -131,12 +168,11 @@ internal static class DrillExecution
         foreach (var name in names)
         {
             var column = result.Columns.FirstOrDefault(c => c.Name == name)
-                ?? throw new CatalogValidationException($"This chart needs updating: column(s) {name} no longer exist.");
+                ?? throw new CatalogValidationException($"This {subject} needs updating: column(s) {name} no longer exist.");
             columns.Add(new QueryResultColumnDto(column.Name, column.DataType));
         }
-        var rows = Project(result, names);
 
-        return new DrillRun(context, request, steps, definition, null, columns, rows, result.ExecutionTimeMs, cap, result.Truncated);
+        return new DrillRows(definition, columns, Project(result, names), result.ExecutionTimeMs, cap, result.Truncated);
     }
 
     private static async Task<DrillRun> RunBreakdownAsync(
@@ -163,7 +199,7 @@ internal static class DrillExecution
     }
 
     // Rows are cut to the named columns here, so nothing the SQL happened to return beyond them can reach the browser.
-    private static List<Dictionary<string, object?>> Project(QueryResultSet result, IReadOnlyList<string> names) =>
+    internal static List<Dictionary<string, object?>> Project(QueryResultSet result, IReadOnlyList<string> names) =>
         result.Rows
             .Select(row => names.ToDictionary(name => name, name => row.GetValueOrDefault(name), StringComparer.Ordinal))
             .ToList();

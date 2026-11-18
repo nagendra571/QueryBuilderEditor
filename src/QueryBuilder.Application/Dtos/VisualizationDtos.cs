@@ -52,6 +52,10 @@ public sealed record DrillExportRequest(
     Guid? TileId,
     string? Format);
 
+public sealed record DrillQueryRequest(List<DrillStep>? Steps, Dictionary<string, string?>? ParameterValues);
+
+public sealed record DrillQueryExportRequest(List<DrillStep>? Steps, Dictionary<string, string?>? ParameterValues, string? Format);
+
 /// <summary><see cref="Options"/> is the rewritten chart options for a breakdown, null for rows.</summary>
 public sealed record DrillResultDto(
     DrillAction Action,
