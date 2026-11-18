@@ -92,9 +92,9 @@ public sealed class SqlServerQueryExecutionService(IConnectionStringResolver con
         }
     }
 
-    /// <summary>A bare <see cref="DateTime"/> is sent as <c>datetime</c>, which rounds to 1/300 s: right for a datetime column
-    /// (its own values are on that grid, so ".123" matches), wrong for datetime2 and datetimeoffset, whose ".1234567" would match
-    /// no row. So the column's native type decides, and an unknown type keeps the old datetime binding.</summary>
+    /// <summary>The binding follows the column's native type: datetime2 and datetimeoffset bind as datetime2, everything else keeps
+    /// the datetime binding. A datetime2 parameter matches nothing on a legacy datetime column holding milliseconds, while a
+    /// datetime parameter rounds to 1/300 s and would miss a datetime2 value such as ".1234567".</summary>
     internal static SqlParameter CreateParameter(string name, object value, string? nativeType = null) =>
         value is DateTime date && date.Ticks % TimeSpan.TicksPerSecond != 0
         && nativeType is not null && (nativeType.Equals("datetime2", StringComparison.OrdinalIgnoreCase)

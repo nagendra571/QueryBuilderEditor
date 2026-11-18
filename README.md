@@ -362,10 +362,12 @@ query whose scope rule is stale or undecided is refused, as when running it.
 | "Columns to show when drilling" per chart | 20 |
 
 The record limits apply: with a limit set, the rows page shows the first rows with the "narrow it down" banner, and a drill export is
-refused (HTTP 409) instead of being cut off; without one, the legacy 1,000-row page and 100,000-row export caps apply.
+refused (HTTP 409) instead of being cut off; without one, the rows page shows the first 1,000 rows and an export over 100,000 rows is refused.
 
-**Audit.** Each drill is recorded as `QueryDrilled` (query, chart, dashboard and tile, action, trail, row count, the viewer's scope).
-A drill export is recorded as a `QueryExported` with the trail added.
+**Audit.** Each drill is recorded as `QueryDrilled` (query, chart, action, trail, row count, the viewer's scope). The dashboard and
+tile are recorded only when the dashboard grant is what let the request in. Trail values are cut to 200 characters in the log.
+A drill export is recorded as a `QueryExported` with the trail added. A chart drawn or downloaded with click-filters applied records
+them (`CrossFilters`) in its `QueryRun` or `QueryExported` details.
 
 **Upgrading.** Drill adds one column, `Dashboards.ClickToFilterEnabled` (default on, so existing dashboards respond to
 click-filters). Auto-migration adds it; for DDL-restricted hosts the next release's DBA script includes it (see `Scripts/README.md`).
