@@ -4,7 +4,7 @@ import { ChartContainer, type ChartConfig } from '@/components/ui/chart'
 import { formatValue } from '@/features/visualizations/format'
 import { fitFontSize, trendChangeText } from '@/features/visualizations/single-number'
 import { fireMark, type MarkDrill } from '@/features/drill/mark-click'
-import { pickRow, rowsOf } from '@/features/visualizations/mark-sources'
+import { pickRow, pointIndexOf, rowsOf } from '@/features/visualizations/mark-sources'
 import type { TrendModel } from '@/features/visualizations/story-models'
 import type { ValueFormat } from '@/types'
 
@@ -35,7 +35,20 @@ export function TrendView({
       {change && <span className="text-sm text-foreground">{change}</span>}
       <div aria-hidden="true" className="mt-1 h-16 min-h-10 w-full flex-1">
         <ChartContainer config={CONFIG} className="aspect-auto h-full w-full">
-          <LineChart data={model.points} margin={{ top: 4, right: 4, bottom: 4, left: 4 }}>
+          <LineChart
+            data={model.points}
+            margin={{ top: 4, right: 4, bottom: 4, left: 4 }}
+            {...(drill
+              ? {
+                  style: { cursor: 'pointer' },
+                  onClick: (state: { activeTooltipIndex?: unknown }, e: React.MouseEvent) => {
+                    const index = pointIndexOf(state)
+                    const row = index === undefined ? undefined : pickRow(rowsOf(model.points[index]), drill.keyColumns)
+                    fireMark(drill, row ? { row } : null, e)
+                  },
+                }
+              : {})}
+          >
             <YAxis hide domain={['auto', 'auto']} />
             {drill && <Tooltip content={() => null} cursor={false} />}
             <Line
@@ -58,6 +71,7 @@ export function TrendView({
                         strokeWidth={2}
                         style={{ cursor: 'pointer' }}
                         onClick={(e) => {
+                          e.stopPropagation()
                           const row = pickRow(rowsOf(model.points[dot.index]), drill.keyColumns)
                           fireMark(drill, row ? { row } : null, e)
                         }}

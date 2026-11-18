@@ -123,3 +123,26 @@ test('exploreItems offers nothing where the renderer shows a message instead of 
 
   none('bar', { x: 'P', measures: ['T'] }, [])
 })
+
+import { pointIndexOf, rowAtX, tagSeriesRows } from '../src/features/visualizations/mark-sources.ts'
+
+test('rowAtX resolves a single series and refuses an ambiguous X', () => {
+  const a = { id: 1 }
+  const b = { id: 2 }
+  const one = tagSeriesRows({}, { s1: [a] })
+  assert.equal(rowAtX(one, ['s1']), a)
+  const two = tagSeriesRows({}, { s1: [a], s2: [b] })
+  assert.equal(rowAtX(two, ['s1', 's2']), undefined)
+  const same = tagSeriesRows({}, { s1: [a], s2: [a] })
+  assert.equal(rowAtX(same, ['s1', 's2']), a)
+  assert.equal(rowAtX({}, ['s1']), undefined)
+  assert.equal(rowAtX(one, []), undefined)
+})
+
+test('pointIndexOf reads numeric and string indexes only', () => {
+  assert.equal(pointIndexOf({ activeTooltipIndex: 3 }), 3)
+  assert.equal(pointIndexOf({ activeTooltipIndex: '2' }), 2)
+  assert.equal(pointIndexOf({ activeTooltipIndex: undefined }), undefined)
+  assert.equal(pointIndexOf({ activeTooltipIndex: 'x' }), undefined)
+  assert.equal(pointIndexOf(undefined), undefined)
+})

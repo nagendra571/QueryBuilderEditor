@@ -26,3 +26,20 @@ export function pickRow(rows: Row[], keyColumns?: string[] | null): Row | undefi
   if (rows.length > 1 && !(keyColumns && keyColumns.length > 0)) return rows[0]
   return undefined
 }
+
+/** A click on empty plot space at one X can't say which line it meant. With several series it only resolves when
+ * every series carries the same row there; otherwise the dot under the pointer decides instead. */
+export function rowAtX(
+  point: object | undefined,
+  seriesKeys: string[],
+  keyColumns?: string[] | null,
+): Row | undefined {
+  const picked = seriesKeys.map((k) => pickRow(seriesRowsOf(point, k), keyColumns))
+  if (picked.length === 0 || picked[0] === undefined) return undefined
+  return picked.every((r) => r === picked[0]) ? picked[0] : undefined
+}
+
+export const pointIndexOf = (state: { activeTooltipIndex?: unknown } | undefined): number | undefined => {
+  const n = typeof state?.activeTooltipIndex === 'string' ? Number(state.activeTooltipIndex) : state?.activeTooltipIndex
+  return typeof n === 'number' && Number.isInteger(n) && n >= 0 ? n : undefined
+}
