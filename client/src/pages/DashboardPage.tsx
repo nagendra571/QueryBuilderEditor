@@ -1,6 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query'
 import { AlertTriangle, ArrowLeft, BarChart3, Globe, Loader2, MoreHorizontal, Pencil, Plus, Rows3, Share2, StickyNote, Trash2 } from 'lucide-react'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
@@ -10,6 +10,11 @@ import { useMe } from '@/hooks/useMe'
 import { AccessLevelBadge } from '@/features/builder/ShareDialog'
 import { PublishedChip } from '@/features/hub/PublishedChip'
 import { AddChartDialog } from '@/features/dashboards/AddChartDialog'
+import { toast } from 'sonner'
+import { CrossFilterBar } from '@/features/dashboards/CrossFilterBar'
+import { addFilter, clearFilters, liveFilters, removeFilter } from '@/features/dashboards/cross-filters'
+import { DashboardFiltersContext } from '@/features/dashboards/filter-context'
+import { decodeFilters, encodeFilters, type CrossFilterValue } from '@/features/drill/drill-url'
 import { ConfirmDeleteDialog } from '@/features/dashboards/ConfirmDeleteDialog'
 import { DashboardParameterBar } from '@/features/dashboards/DashboardParameterBar'
 import { DashboardParameterDialog } from '@/features/dashboards/DashboardParameterDialog'
@@ -99,6 +104,44 @@ export function DashboardPage() {
   const [draftParams, setDraftParams] = useState<DashboardParameterDto[] | null>(null)
   const [mapTileKey, setMapTileKey] = useState<string | null>(null)
   const [manageName, setManageName] = useState<string | null>(null)
+
+  // Click-to-filter lives in the URL (`f`), so a filtered dashboard can be shared. A link that does not decode filters nothing.
+  const rawFilters = useMemo<CrossFilterValue[]>(() => {
+    const f = searchParams.get('f')
+    const decoded = (f ? decodeFilters(f) : null) ?? []
+    // Tiles of the saved dashboard, not the draft: the server checks the saved one.
+    return dashboard ? liveFilters(decoded, new Set(dashboard.tiles.filter((t) => t.kind === 'chart').map((t) => t.id))) : decoded
+  }, [searchParams, dashboard])
+  const clickToFilter = !!dashboard?.clickToFilterEnabled
+  const effectiveFilters = useMemo(() => (clickToFilter ? rawFilters : []), [clickToFilter, rawFilters])
+  const writeFilters = useCallback(
+    (next: CrossFilterValue[]) =>
+      setSearchParams(
+        (prev) => {
+          const out = new URLSearchParams(prev)
+          if (next.length === 0) out.delete('f')
+          else out.set('f', encodeFilters(next))
+          return out
+        },
+        { replace: true },
+      ),
+    [setSearchParams],
+  )
+  const addCrossFilter = useCallback(
+    (filter: CrossFilterValue) => {
+      const next = addFilter(rawFilters, filter)
+      if (!next) {
+        toast.error('A dashboard can be filtered by at most 5 values. Remove one first.')
+        return
+      }
+      writeFilters(next)
+    },
+    [rawFilters, writeFilters],
+  )
+  const filtersValue = useMemo(
+    () => ({ filters: effectiveFilters, enabled: clickToFilter, add: addCrossFilter }),
+    [effectiveFilters, clickToFilter, addCrossFilter],
+  )
 
   const savedParams = useMemo(() => dashboard?.parameters ?? [], [dashboard])
   const params = draftParams ?? savedParams
@@ -312,6 +355,7 @@ export function DashboardPage() {
     for (const tile of dashboard.tiles) {
       if (!tile.chart) continue
       queryClient.invalidateQueries({ queryKey: [...visualizationDataPrefix(tile.chart.savedQueryId), tile.chart.visualizationId] })
+      queryClient.invalidateQueries({ queryKey: ['drill'] })
       queryClient.invalidateQueries({ queryKey: ['saved-query', tile.chart.savedQueryId] })
     }
     // Access can change between refreshes, so a tile may turn restricted (or stop being so).
@@ -357,6 +401,7 @@ export function DashboardPage() {
     <RenderLimiterContext.Provider value={limiter}>
       <DashboardIdContext.Provider value={id ?? null}>
       <DashboardValuesContext.Provider value={appliedValues}>
+      <DashboardFiltersContext.Provider value={filtersValue}>
       <div className="mx-auto flex max-w-7xl flex-col gap-(--space-section) p-(--space-section)">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
@@ -416,7 +461,7 @@ export function DashboardPage() {
                 <DropdownMenuContent align="end">
                   <DropdownMenuItem onSelect={() => setRenameOpen(true)}>
                     <Pencil className="size-3.5" />
-                    Rename
+                    Rename and settings
                   </DropdownMenuItem>
                   {canManage && (
                     <DropdownMenuItem variant="destructive" onSelect={() => setDeleteOpen(true)}>
@@ -481,6 +526,13 @@ export function DashboardPage() {
           editing={editing}
           onManage={setManageName}
           dashboardId={id}
+        />
+
+        <CrossFilterBar
+          filters={rawFilters}
+          enabled={clickToFilter}
+          onRemove={(column) => writeFilters(removeFilter(rawFilters, column))}
+          onClear={() => writeFilters(clearFilters())}
         />
 
         {tiles.length === 0 ? (
@@ -567,13 +619,14 @@ export function DashboardPage() {
       <DashboardNameDialog
         open={renameOpen}
         onOpenChange={setRenameOpen}
-        title="Rename dashboard"
-        confirmLabel="Rename"
+        title="Dashboard settings"
+        confirmLabel="Save"
         initialName={dashboard.name}
+        initialClickToFilter={clickToFilter}
         pending={rename.isPending}
-        onConfirm={(name) =>
+        onConfirm={(name, allow) =>
           rename.mutate(
-            { name, description: dashboard.description ?? null, version: dashboard.version },
+            { name, description: dashboard.description ?? null, version: dashboard.version, clickToFilterEnabled: allow },
             {
               onSuccess: () => setRenameOpen(false),
               onError: (e) => {
@@ -593,6 +646,7 @@ export function DashboardPage() {
         pending={remove.isPending}
         onConfirm={() => remove.mutate(dashboard.id, { onSuccess: () => navigate('/dashboards') })}
       />
+      </DashboardFiltersContext.Provider>
       </DashboardValuesContext.Provider>
       </DashboardIdContext.Provider>
     </RenderLimiterContext.Provider>

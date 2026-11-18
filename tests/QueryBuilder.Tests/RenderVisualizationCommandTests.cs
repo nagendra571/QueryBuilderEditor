@@ -13,7 +13,7 @@ public class RenderVisualizationCommandTests
     private static Dictionary<string, object?> Row(string? region, decimal? total, string channel = "Web", decimal orders = 1) =>
         new() { ["Region"] = region, ["Channel"] = channel, ["Total"] = total, ["Orders"] = orders, ["HiddenNote"] = "secret" };
 
-    private static RenderVisualizationCommandHandler Handler(VizFixture f) => new(f.Loader(), new VizFixture.FakeScope(), f.Audit);
+    private static RenderVisualizationCommandHandler Handler(VizFixture f) => new(f.Loader(), new QueryBuilder.Application.Drill.CrossFilterResolver(f.Dashboards, f.DataSources, f.Catalog), new VizFixture.FakeScope(), f.Audit);
 
     private static Task<QueryBuilder.Application.Dtos.VisualizationDataDto> Render(VizFixture f, QueryVisualization viz, Dictionary<string, string?>? parameters = null) =>
         Handler(f).Handle(new RenderVisualizationCommand(f.Query.Id, viz.Id, parameters ?? []), default);
@@ -190,8 +190,49 @@ public class RenderVisualizationCommandTests
         var data = await Render(f, viz);
 
         Assert.Equal(["Region", "Total"], data.Columns.Select(c => c.Name));
-        Assert.All(data.Rows, r => Assert.Equal(["Region", "Total"], r.Keys.OrderBy(k => k == "Region" ? 0 : 1)));
-        Assert.DoesNotContain(data.Rows, r => r.ContainsKey("HiddenNote") || r.ContainsKey("Channel"));
+        Assert.All(data.Rows, r => Assert.Equal(["Region", "Total", "Channel"], r.Keys.OrderBy(k => k == "Region" ? 0 : k == "Total" ? 1 : 2)));
+        Assert.DoesNotContain(data.Rows, r => r.ContainsKey("HiddenNote"));
+    }
+
+    [Fact]
+    public async Task Chart_rows_carry_key_columns_for_drilling()
+    {
+        var (f, viz) = Arrange();
+
+        var data = await Render(f, viz);
+
+        Assert.Equal(["Channel"], data.KeyColumns);
+        Assert.All(data.Rows, r => Assert.Equal("Web", r["Channel"]));
+    }
+
+    [Fact]
+    public async Task Key_columns_never_include_hidden_columns()
+    {
+        var (f, viz) = Arrange();
+
+        var data = await Render(f, viz);
+
+        Assert.DoesNotContain("HiddenNote", data.KeyColumns!);
+        Assert.DoesNotContain(data.Rows, r => r.ContainsKey("HiddenNote"));
+    }
+
+    [Fact]
+    public async Task Counter_and_unaggregated_charts_have_no_key_columns()
+    {
+        var (f, viz) = Arrange(type: VisualizationType.Counter, options: new VisualizationOptions { Counter = new CounterOptions { Value = "Total" } });
+        var counter = await Render(f, viz);
+        Assert.Null(counter.KeyColumns);
+        Assert.All(counter.Rows, r => Assert.DoesNotContain("Channel", r.Keys));
+
+        var g = new VizFixture();
+        var plain = QueryDefinitionSerializer.Deserialize(g.Query.DefinitionJson);
+        foreach (var c in plain.Columns) c.Aggregate = AggregateFunction.None;
+        g.Query.DefinitionJson = QueryDefinitionSerializer.Serialize(plain);
+        var v2 = g.AddVisualization(VisualizationType.Bar, VizFixture.BarOptions());
+        g.Executor.Result = VizFixture.Result([Row("EU", 10)]);
+        var data = await Render(g, v2);
+        Assert.Null(data.KeyColumns);
+        Assert.DoesNotContain("Channel", data.Rows[0].Keys);
     }
 
     [Fact]
@@ -575,9 +616,13 @@ public class RenderVisualizationCommandTests
         var data = await Render(f, viz);
 
         Assert.Equal(expected.Order(), data.Columns.Select(c => c.Name).Order());
+        // The visible plain columns (Region, Channel) not already in the chart are its row keys; a counter has none.
+        var plainKeys = new[] { "Region", "Channel" }.Except(expected).ToArray();
+        string[]? expectedKeys = type == VisualizationType.Counter || plainKeys.Length == 0 ? null : plainKeys;
+        Assert.Equal(expectedKeys, data.KeyColumns);
         Assert.All(data.Rows, r =>
         {
-            Assert.Equal(expected.Order(), r.Keys.Order());
+            Assert.Equal(expected.Concat(expectedKeys ?? []).Order(), r.Keys.Order());
             Assert.DoesNotContain("HiddenNote", r.Keys);
             Assert.DoesNotContain("Min1", r.Keys);
         });
@@ -712,7 +757,12 @@ public class RenderVisualizationCommandTests
         var data = await Render(f, viz);
 
         Assert.Equal(expected, data.Columns.Select(c => c.Name));
-        Assert.All(data.Rows, r => Assert.Equal(expected.Order(), r.Keys.Order()));
+        Assert.Equal(["Channel"], data.KeyColumns);
+        Assert.All(data.Rows, r =>
+        {
+            Assert.Equal(expected.Append("Channel").Order(), r.Keys.Order());
+            Assert.DoesNotContain("HiddenNote", r.Keys);
+        });
     }
 
     [Fact]

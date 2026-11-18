@@ -32,7 +32,16 @@ import { DataTypeIcon } from '@/lib/data-type-icons'
 import { cn } from '@/lib/utils'
 import type { QueryResultColumnDto, QueryResultDto } from '@/types'
 
-export function ResultsTable({ result }: { result: QueryResultDto }) {
+export function ResultsTable({
+  result,
+  onRowClick,
+  rowActionLabel,
+}: {
+  result: QueryResultDto
+  /** Makes each row a button that opens the rows behind it (saved, aggregated queries only). */
+  onRowClick?: (row: Record<string, unknown>) => void
+  rowActionLabel?: string
+}) {
   const view = useResultsView(result)
 
   const sensors = useSensors(
@@ -105,7 +114,23 @@ export function ResultsTable({ result }: { result: QueryResultDto }) {
               </TableHeader>
               <TableBody>
                 {view.pagedRows.map((row, i) => (
-                  <TableRow key={view.rowNumberOffset + i}>
+                  <TableRow
+                    key={view.rowNumberOffset + i}
+                    {...(onRowClick
+                      ? {
+                          tabIndex: 0,
+                          title: rowActionLabel,
+                          className: 'cursor-pointer focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring',
+                          onClick: () => onRowClick(row),
+                          onKeyDown: (e: React.KeyboardEvent) => {
+                            if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) {
+                              e.preventDefault()
+                              onRowClick(row)
+                            }
+                          },
+                        }
+                      : {})}
+                  >
                     <TableCell className="h-(--row-h) text-right text-(length:--text-body) text-muted-foreground/60 tabular-nums">
                       {view.rowNumberOffset + i + 1}
                     </TableCell>

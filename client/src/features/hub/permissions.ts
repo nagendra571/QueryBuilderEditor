@@ -1,4 +1,5 @@
 import type { MeDto } from '@/lib/api'
+import { isChartDrillPath } from '../drill/drill-nav.ts'
 
 /** The app embedded mode used; it is never launched from another app. Matches App.DefaultId on the server. */
 export const DEFAULT_APP_ID = '00000000-0000-0000-0000-00000000000d'
@@ -67,6 +68,8 @@ export function canSee(route: string, me: MeDto | undefined | null): boolean {
       return p.canAdmin && !needsAppChoice(me)
     case '':
     case 'queries':
+      // A Viewer reaches a chart's rows from a dashboard tile; the server allows it only with that dashboard's grant.
+      if (isChartDrillPath(route.split(/[?#]/)[0])) return !needsAppChoice(me)
       return p.canBuildQueries && !needsAppChoice(me)
     case 'dashboards':
       return !needsAppChoice(me)

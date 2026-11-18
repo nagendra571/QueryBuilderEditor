@@ -35,7 +35,7 @@ public sealed class SqlServerQueryExecutionService(IConnectionStringResolver con
             await using var command = new SqlCommand(sql, connection) { CommandTimeout = 60 };
             foreach (var parameter in generatedQuery.Parameters)
             {
-                command.Parameters.Add(new SqlParameter(parameter.Name, QueryParameterValues.Resolve(parameter, runtimeParameterValues)));
+                command.Parameters.Add(CreateParameter(parameter.Name, QueryParameterValues.Resolve(parameter, runtimeParameterValues), parameter.NativeSqlType));
             }
 
             await using var reader = await command.ExecuteReaderAsync(cancellationToken);
@@ -91,6 +91,16 @@ public sealed class SqlServerQueryExecutionService(IConnectionStringResolver con
                 $"The database rejected the query: {ex.Message.Split('\n')[0]}", ex);
         }
     }
+
+    /// <summary>The binding follows the column's native type: datetime2 and datetimeoffset bind as datetime2, everything else keeps
+    /// the datetime binding. A datetime2 parameter matches nothing on a legacy datetime column holding milliseconds, while a
+    /// datetime parameter rounds to 1/300 s and would miss a datetime2 value such as ".1234567".</summary>
+    internal static SqlParameter CreateParameter(string name, object value, string? nativeType = null) =>
+        value is DateTime date && date.Ticks % TimeSpan.TicksPerSecond != 0
+        && nativeType is not null && (nativeType.Equals("datetime2", StringComparison.OrdinalIgnoreCase)
+                                      || nativeType.Equals("datetimeoffset", StringComparison.OrdinalIgnoreCase))
+            ? new SqlParameter(name, System.Data.SqlDbType.DateTime2) { Value = date }
+            : new SqlParameter(name, value);
 
     private static ColumnDataType InferDataType(Type clrType) => Type.GetTypeCode(clrType) switch
     {

@@ -1,4 +1,5 @@
 import type { VisualizationOptions } from '@/types'
+import { tagRows } from './mark-sources.ts'
 import { cellValue, compareBlankLast, compareCategories, formatCategory, parseDateX, toNumber } from './chart-data.ts'
 
 // Same limits and wording as VisualizationDataChecks on the server, so the preview refuses what a render would.
@@ -69,6 +70,7 @@ interface Entry {
   name: string
   amount: number | null
   bad: boolean
+  row: Rows[number]
 }
 
 function entries(options: VisualizationOptions, rows: Rows): Entry[] {
@@ -79,6 +81,7 @@ function entries(options: VisualizationOptions, rows: Rows): Entry[] {
       name: formatCategory(options.x ? cellValue(row, options.x) : null),
       amount: raw === 'bad' ? null : raw,
       bad: raw === 'bad',
+      row,
     }
   })
   if (options.sortX === 'none') return list
@@ -92,12 +95,17 @@ const percent = (part: number | null, whole: number | null) =>
 export function buildFunnel(options: VisualizationOptions, rows: Rows): FunnelModel {
   const list = entries(options, rows)
   const first = list.length > 0 ? list[0].amount : null
-  const steps = list.map((e, i) => ({
-    name: e.name,
-    value: e.amount,
-    pctOfFirst: percent(e.amount, first),
-    pctOfPrevious: i === 0 ? null : percent(e.amount, list[i - 1].amount),
-  }))
+  const steps = list.map((e, i) =>
+    tagRows(
+      {
+        name: e.name,
+        value: e.amount,
+        pctOfFirst: percent(e.amount, first),
+        pctOfPrevious: i === 0 ? null : percent(e.amount, list[i - 1].amount),
+      },
+      [e.row],
+    ),
+  )
   const problem =
     rows.length > MAX_FUNNEL_STEPS
       ? FUNNEL_TOO_MANY
@@ -126,7 +134,7 @@ export function buildTrend(options: VisualizationOptions, rows: Rows): TrendMode
     }
     const raw = measure ? toNumber(cellValue(row, measure)) : null
     if (raw === 'bad') skipped += 1
-    keyed.push({ point: { x: formatCategory(rawX), y: raw === 'bad' ? null : raw }, key: sortKey(rawX) })
+    keyed.push({ point: tagRows({ x: formatCategory(rawX), y: raw === 'bad' ? null : raw }, [row]), key: sortKey(rawX) })
   }
   keyed.sort((p, q) =>
     p.key !== null && q.key !== null && p.key !== q.key ? p.key - q.key : compareCategories(p.point.x, q.point.x),
@@ -161,13 +169,18 @@ export function buildWaterfall(options: VisualizationOptions, rows: Rows): Water
       continue
     }
     const end = running + e.amount
-    bars.push({
-      name: e.name,
-      base: Math.min(running, end),
-      size: Math.abs(e.amount),
-      kind: e.amount < 0 ? 'down' : 'up',
-      value: e.amount,
-    })
+    bars.push(
+      tagRows(
+        {
+          name: e.name,
+          base: Math.min(running, end),
+          size: Math.abs(e.amount),
+          kind: e.amount < 0 ? ('down' as const) : ('up' as const),
+          value: e.amount,
+        },
+        [e.row],
+      ),
+    )
     running = end
   }
   if (bars.length > 0) {

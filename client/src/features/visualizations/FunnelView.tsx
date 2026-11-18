@@ -1,6 +1,8 @@
 import { AlertTriangle } from 'lucide-react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { formatValue } from '@/features/visualizations/format'
+import { fireMark, type MarkDrill } from '@/features/drill/mark-click'
+import { pickRow, rowsOf } from '@/features/visualizations/mark-sources'
 import type { FunnelModel } from '@/features/visualizations/story-models'
 import type { ValueFormat } from '@/types'
 
@@ -16,6 +18,7 @@ export function FunnelView({
   truncated,
   rowLimit,
   fill,
+  drill,
 }: {
   model: FunnelModel
   name: string
@@ -23,6 +26,7 @@ export function FunnelView({
   truncated?: boolean
   rowLimit?: number
   fill: boolean
+  drill?: MarkDrill
 }) {
   if (model.steps.length === 0) {
     return <p className="py-10 text-center text-sm text-muted-foreground">No data to show for these filters.</p>
@@ -68,8 +72,15 @@ export function FunnelView({
             {model.steps.map((s, i) => {
               const width = s.value !== null && max > 0 ? Math.max(0, (s.value / max) * 100) : 0
               const text = s.value === null ? '' : formatValue(s.value, format)
+              const row = drill ? pickRow(rowsOf(s), drill.keyColumns) : undefined
+              const mark = row ? { row } : null
+              const clickable = !!drill && !!mark && drill.canDrill(mark)
               return (
-                <tr key={i} className="border-b border-border last:border-b-0">
+                <tr
+                  key={i}
+                  className={`border-b border-border last:border-b-0 ${clickable ? 'cursor-pointer hover:bg-muted/50' : ''}`}
+                  onClick={clickable ? (e) => fireMark(drill, mark, e) : undefined}
+                >
                   <td title={s.name} className="max-w-[12rem] truncate px-3 py-1.5 text-left">
                     {s.name}
                   </td>

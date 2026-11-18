@@ -27,6 +27,7 @@ export function useToggleDisabled() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: savedQueriesKey })
       queryClient.invalidateQueries({ queryKey: ['tile-chart'] })
+      queryClient.invalidateQueries({ queryKey: ['drill'] })
     },
     onError: (error) => toast.error(error instanceof ApiError ? error.message : 'Could not update the query.'),
   })
@@ -39,6 +40,7 @@ export function useDeleteSavedQuery() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: savedQueriesKey })
       queryClient.invalidateQueries({ queryKey: ['tile-chart'] })
+      queryClient.invalidateQueries({ queryKey: ['drill'] })
       toast.success('Query deleted.')
     },
     onError: (error) => toast.error(error instanceof ApiError ? error.message : 'Could not delete query.'),

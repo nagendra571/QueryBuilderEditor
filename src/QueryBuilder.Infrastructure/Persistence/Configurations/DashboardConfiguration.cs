@@ -23,6 +23,7 @@ public sealed class DashboardConfiguration : IEntityTypeConfiguration<Dashboard>
         builder.Property(x => x.Version).IsConcurrencyToken();
         // Rows that predate the grid get 1 from the column default, so they are converted on read.
         builder.Property(x => x.GridVersion).HasDefaultValue(1);
+        builder.Property(x => x.ClickToFilterEnabled).HasDefaultValue(true).HasSentinel(true);
         builder.Property(x => x.ParametersJson);
         builder.Property(x => x.PublishedBy).HasMaxLength(450);
 

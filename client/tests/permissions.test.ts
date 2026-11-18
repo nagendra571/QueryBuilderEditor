@@ -102,3 +102,11 @@ test('every console page is open to a super admin and nobody else', () => {
     assert.equal(canSee(route, embedded), false, `embedded ${route}`)
   }
 })
+
+test('a Viewer may open a chart drill page but not the query page', () => {
+  const viewer = hubMe('Viewer')
+  assert.equal(canSee('/queries/a/charts/b/drill', viewer), true)
+  assert.equal(canSee('/queries/a/drill', viewer), false)
+  assert.equal(canSee('/queries/a', viewer), false)
+  assert.equal(canSee('/queries/a/charts/b/drill', hubMe('Super', false)), false)
+})

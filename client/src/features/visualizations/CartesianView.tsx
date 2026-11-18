@@ -1,4 +1,5 @@
-import { useMemo } from 'react'
+import { useMemo, useRef } from 'react'
+import type { ActiveDotProps } from 'recharts/types/util/types'
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, ComposedChart, Line, LineChart, XAxis, YAxis } from 'recharts'
 import {
   ChartContainer,
@@ -12,6 +13,9 @@ import {
 import { toPercentStack, type CartesianModel } from '@/features/visualizations/chart-data'
 import { paletteColor } from '@/features/visualizations/chart-types'
 import { formatAxis, formatValue, percentTick, truncateLabel } from '@/features/visualizations/format'
+import { fireMark, type MarkDrill } from '@/features/drill/mark-click'
+import { PlotGeometryReporter, pointIndexAtClick, type PlotGeometry } from '@/features/visualizations/PlotClick'
+import { pickRow, rowAtX, seriesRowsOf } from '@/features/visualizations/mark-sources'
 import type { ValueFormat, VisualizationOptions, VisualizationType } from '@/types'
 
 const DASHES = [undefined, '6 3', '2 3', '10 3 2 3']
@@ -24,6 +28,7 @@ export function CartesianView({
   animate,
   heightClass,
   format,
+  drill,
 }: {
   type: VisualizationType
   options: VisualizationOptions
@@ -31,6 +36,7 @@ export function CartesianView({
   animate: boolean
   heightClass: string
   format?: ValueFormat | null
+  drill?: MarkDrill
 }) {
   const stackable = type === 'bar' || type === 'horizontalBar' || type === 'area'
   const stacked = stackable && !!options.stacked
@@ -72,6 +78,13 @@ export function CartesianView({
     <YAxis tickLine={false} axisLine={false} width={52} tick={tick} domain={domain} tickFormatter={valueTick} />
   )
 
+  // A mark whose row can't be told apart (a split with two rows under one X) gets no click rather than a wrong one.
+  const markAt = (seriesKey: string, index: number) => {
+    const row = pickRow(seriesRowsOf(model.points[index], seriesKey), drill?.keyColumns)
+    return row ? { row } : null
+  }
+  const pointer = drill ? { cursor: 'pointer' } : undefined
+
   const bar = (s: CartesianModel['series'][number]) => (
     <Bar
       key={s.key}
@@ -83,8 +96,72 @@ export function CartesianView({
       maxBarSize={72}
       radius={stacked ? 0 : type === 'horizontalBar' ? [0, 1, 1, 0] : [1, 1, 0, 0]}
       isAnimationActive={animate}
+      {...(drill
+        ? {
+            style: pointer,
+            onClick: (_d: unknown, index: number, e: React.MouseEvent) => {
+              // In a combo the chart-level click would open a second menu for the line at the same X.
+              e.stopPropagation()
+              fireMark(drill, markAt(s.key, index), e)
+            },
+          }
+        : {})}
     />
   )
+
+  // Only the point under the pointer is drawn as a dot, so that is the one that takes the click.
+  const activeDot = (seriesKey: string) =>
+    drill
+      ? (dot: ActiveDotProps) => (
+          <circle
+            cx={dot.cx}
+            cy={dot.cy}
+            r={dot.r}
+            fill={dot.fill}
+            stroke={dot.stroke}
+            strokeWidth={dot.strokeWidth}
+            style={pointer}
+            onClick={(e) => fireMark(drill, markAt(seriesKey, dot.index), e)}
+          />
+        )
+      : undefined
+
+  // A drawn dot takes its own click so a chart with several lines opens the menu of the line that was hit.
+  const dotOf = (seriesKey: string) =>
+    drill
+      ? (dot: { cx?: number; cy?: number; r?: number | string; fill?: string; stroke?: string; strokeWidth?: number | string; index?: number }) => (
+          <circle
+            key={dot.index}
+            cx={dot.cx}
+            cy={dot.cy}
+            r={dot.r}
+            fill={dot.fill}
+            stroke={dot.stroke}
+            strokeWidth={dot.strokeWidth}
+            style={pointer}
+            onClick={(e) => {
+              e.stopPropagation()
+              fireMark(drill, markAt(seriesKey, dot.index ?? -1), e)
+            }}
+          />
+        )
+      : true
+
+  // A click or tap anywhere on a point's X (a touch never hovers first). With several lines it only resolves when
+  // every line has the same row there; the dot under the pointer covers the rest.
+  const lineKeys = (type === 'combo' ? model.series.filter((s) => (options.lineMeasures ?? []).includes(s.label)) : model.series).map((s) => s.key)
+  const geometry = useRef<PlotGeometry | null>(null)
+  const reporter = <PlotGeometryReporter labels={model.points.map((p) => p.x)} into={geometry} banded={type === 'combo' && lineKeys.length < model.series.length} />
+  const chartClick = drill && (type === 'line' || type === 'area' || type === 'combo')
+    ? {
+        style: pointer,
+        onClick: (_state: unknown, e: React.MouseEvent) => {
+          const index = pointIndexAtClick(e, geometry.current)
+          const row = index === undefined ? undefined : rowAtX(model.points[index], lineKeys, drill.keyColumns)
+          fireMark(drill, row ? { row } : null, e)
+        },
+      }
+    : {}
 
   const line = (s: CartesianModel['series'][number], dashIndex: number) => (
     <Line
@@ -95,16 +172,18 @@ export function CartesianView({
       strokeWidth={2}
       // A line style per series as well as a hue, so series never differ by colour alone.
       strokeDasharray={DASHES[dashIndex % DASHES.length]}
-      dot={model.points.length <= 40}
+      dot={model.points.length <= 40 ? dotOf(s.key) : false}
       connectNulls={false}
       isAnimationActive={animate}
+      activeDot={activeDot(s.key)}
     />
   )
 
   let chart: React.ReactElement
   if (type === 'line') {
     chart = (
-      <LineChart data={data} accessibilityLayer>
+      <LineChart data={data} accessibilityLayer {...chartClick}>
+        {drill && reporter}
         <CartesianGrid vertical={false} />
         {category}
         {values}
@@ -115,7 +194,8 @@ export function CartesianView({
     )
   } else if (type === 'area') {
     chart = (
-      <AreaChart data={data} accessibilityLayer>
+      <AreaChart data={data} accessibilityLayer {...chartClick}>
+        {drill && reporter}
         <CartesianGrid vertical={false} />
         {category}
         {values}
@@ -134,6 +214,7 @@ export function CartesianView({
             strokeDasharray={DASHES[i % DASHES.length]}
             connectNulls={false}
             isAnimationActive={animate}
+            activeDot={activeDot(s.key)}
           />
         ))}
       </AreaChart>
@@ -163,7 +244,8 @@ export function CartesianView({
     const isLine = (s: CartesianModel['series'][number]) => lines.has(s.label)
     let lineIndex = 0
     chart = (
-      <ComposedChart data={data} accessibilityLayer>
+      <ComposedChart data={data} accessibilityLayer {...chartClick}>
+        {drill && reporter}
         <CartesianGrid vertical={false} />
         {category}
         {values}

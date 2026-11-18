@@ -11,6 +11,7 @@ import {
   type TableModel,
 } from '@/features/visualizations/chart-data'
 import { formatValue } from '@/features/visualizations/format'
+import { fireMark, type MarkDrill } from '@/features/drill/mark-click'
 import type { ColumnDataType, ValueFormat } from '@/types'
 
 function cellText(value: unknown, numeric: boolean, dataType: ColumnDataType | undefined, format?: ValueFormat | null): string {
@@ -29,6 +30,7 @@ export function TableView({
   truncated,
   rowLimit,
   fill,
+  drill,
 }: {
   model: TableModel
   name: string
@@ -37,6 +39,8 @@ export function TableView({
   truncated?: boolean
   rowLimit?: number
   fill: boolean
+  /** Only passed for an aggregated query: a row of plain detail has nothing behind it. */
+  drill?: MarkDrill
 }) {
   const [page, setPage] = useState(0)
   const paged = pageRows(model.rows, page, TABLE_PAGE_SIZE)
@@ -84,7 +88,11 @@ export function TableView({
           </thead>
           <tbody>
             {paged.rows.map((row, i) => (
-              <tr key={paged.page * TABLE_PAGE_SIZE + i} className="border-b border-border last:border-b-0">
+              <tr
+                key={paged.page * TABLE_PAGE_SIZE + i}
+                className={`border-b border-border last:border-b-0 ${drill?.canDrill({ row }) ? 'cursor-pointer hover:bg-muted/50' : ''}`}
+                onClick={drill?.canDrill({ row }) ? (e) => fireMark(drill, { row }, e) : undefined}
+              >
                 {meta.map((c, ci) => {
                   const value = cellValue(row, c.name)
                   const text = cellText(value, c.numeric, c.dataType, format)

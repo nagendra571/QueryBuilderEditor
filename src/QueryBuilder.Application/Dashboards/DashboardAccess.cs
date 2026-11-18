@@ -60,7 +60,7 @@ public static class DashboardMapper
         d.Id, d.Name, d.Description, SuperAdminMask.Actor(d.OwnerId, actor), SuperAdminMask.Name(d.OwnerId, d.OwnerName, actor), DashboardAccess.IsOwner(d, actor),
         DashboardAccess.AccessLevelFor(d, actor), d.Version,
         ResolveBoxes(d).Select(r => ToTile(r.Item, r.Box, actor, viaDashboard: actor.InHub && DashboardAccess.CanView(d, actor))).ToList(),
-        DashboardParameterStore.ReadParameters(d.ParametersJson), d.PublishedToApp);
+        DashboardParameterStore.ReadParameters(d.ParametersJson), d.PublishedToApp, d.ClickToFilterEnabled);
 
     /// <summary>Stored boxes for a positioned dashboard; a converted flow for a legacy one. Never mutates.</summary>
     internal static List<(DashboardTile Item, LayoutBox Box)> ResolveBoxes(Dashboard d)

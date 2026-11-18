@@ -91,16 +91,14 @@ public sealed class DataCatalogService(
             RegisterAlias(join.Alias, join.SchemaName, join.ObjectName);
         }
 
-        void EnsureColumn(string alias, string columnName)
+        ColumnMetadata EnsureColumn(string alias, string columnName)
         {
             if (!aliasMap.TryGetValue(alias, out var metadata))
             {
                 throw new CatalogValidationException($"Unknown table alias '{alias}' referenced in the query.");
             }
-            if (!metadata.Columns.Any(c => string.Equals(c.Name, columnName, comparison)))
-            {
-                throw new CatalogValidationException($"Column '{columnName}' does not exist on '{alias}' ({metadata.SchemaName}.{metadata.Name}).");
-            }
+            return metadata.Columns.FirstOrDefault(c => string.Equals(c.Name, columnName, comparison))
+                ?? throw new CatalogValidationException($"Column '{columnName}' does not exist on '{alias}' ({metadata.SchemaName}.{metadata.Name}).");
         }
 
         foreach (var join in definition.Joins)
@@ -157,11 +155,12 @@ public sealed class DataCatalogService(
         }
     }
 
-    private static void ValidateFilterGroup(FilterGroup group, Action<string, string> ensureColumn)
+    private static void ValidateFilterGroup(FilterGroup group, Func<string, string, ColumnMetadata> ensureColumn)
     {
         foreach (var condition in group.Conditions)
         {
-            ensureColumn(condition.TableAlias, condition.ColumnName);
+            // Overwritten on every validation, so a value sent by the browser never reaches parameter binding.
+            condition.NativeType = ensureColumn(condition.TableAlias, condition.ColumnName).SqlType;
         }
         foreach (var nested in group.Groups)
         {

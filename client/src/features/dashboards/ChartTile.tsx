@@ -1,13 +1,17 @@
-import { AlertTriangle, Ban, Check, Loader2, Lock, SlidersHorizontal, Trash2 } from 'lucide-react'
+import { AlertTriangle, Ban, Check, Filter, Loader2, Lock, SlidersHorizontal, Trash2 } from 'lucide-react'
 import { useContext, useId, useMemo, useState, type ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Button } from '@/components/ui/button'
 import { ParameterPromptDialog } from '@/features/builder/ParameterPromptDialog'
 import { DashboardIdContext, DashboardValuesContext, mappedBy, resolveTileValues } from '@/features/dashboards/dashboard-params'
+import { filterStepFor, tileFilters } from '@/features/dashboards/cross-filters'
+import { DashboardFiltersContext } from '@/features/dashboards/filter-context'
+import { encodeFilters } from '@/features/drill/drill-url'
 import { useRenderLimiter } from '@/features/dashboards/render-limiter'
 import { Label } from '@/components/ui/label'
 import { ParameterControl } from '@/features/parameters/controls/ParameterControl'
 import { isBlank, parameterTitle, valuesEqual, type ParameterValues } from '@/features/parameters/param-values'
+import { useChartDrill } from '@/features/drill/useChartDrill'
 import { ChartDownloadMenu } from '@/features/visualizations/ChartDownloadMenu'
 import { ChartRenderer } from '@/features/visualizations/ChartRenderer'
 import { isHub } from '@/features/hub/permissions'
@@ -71,6 +75,7 @@ export function ChartTileBody({ tile, titleId, statusId }: { tile: DashboardTile
   const limit = useRenderLimiter()
   const dashboardValues = useContext(DashboardValuesContext)
   const dashboardId = useContext(DashboardIdContext)
+  const dashboardFilters = useContext(DashboardFiltersContext)
   const context = useMemo(() => (dashboardId ? { dashboardId, tileId: tile.id } : undefined), [dashboardId, tile.id])
   // Values typed into the "Set values" prompt, for parameters that have no mapping.
   const [promptValues, setPromptValues] = useState<ParameterValues | null>(null)
@@ -119,18 +124,43 @@ export function ChartTileBody({ tile, titleId, statusId }: { tile: DashboardTile
   const isDisabled = (hubTile ? tileChart.data?.isDisabled : queryDetail.data?.isDisabled) ?? false
   const ready = !!detail.data && !!visualization && !isDisabled && !needsValues
 
+  const crossFilters = tileFilters(dashboardFilters.enabled, dashboardFilters.filters)
+  // In the key so every tile refetches when a filter is added, changed or removed.
+  const filterKey = crossFilters ? encodeFilters(crossFilters) : ''
   const data = useQuery({
-    queryKey: [...visualizationDataPrefix(queryId), vizId, values, dashboardId, tile.id],
-    queryFn: () => limit(() => visualizationsApi.render(queryId, vizId, { parameterValues: values, ...context })),
+    queryKey: [...visualizationDataPrefix(queryId), vizId, values, dashboardId, tile.id, filterKey],
+    queryFn: () => limit(() => visualizationsApi.render(queryId, vizId, { parameterValues: values, ...context, crossFilters })),
     enabled: ready,
     // Errors here are meaningful tile states (no access, disabled, too many rows), not transient.
     retry: false,
     staleTime: 30_000,
   })
 
+  const filterable = (steps: { column: string; value: string | null }[]) =>
+    !!visualization && !!context && filterStepFor(visualization.type, visualization.options, steps) !== null
+  const drill = useChartDrill({
+    queryId,
+    visualization,
+    base: data.isError ? null : data.data,
+    baseUpdatedAt: data.dataUpdatedAt,
+    parameterValues: values,
+    context,
+    crossFilters,
+    onFilter:
+      dashboardFilters.enabled && visualization
+        ? (steps) => {
+            const step = filterStepFor(visualization.type, visualization.options, steps)
+            if (step) dashboardFilters.add({ sourceTileId: tile.id, column: step.column, value: step.value })
+          }
+        : undefined,
+    canFilter: filterable,
+  })
+  const view = drill.view
+
   const title = tile.title?.trim() || chart?.visualizationName || 'Chart'
   const zone = zoneLabel(me)
   const refreshing = data.isFetching && !!data.data
+  const notFilteredBy = crossFilters && !data.isError ? (data.data?.crossFilter?.notApplied ?? []) : []
 
   let body: ReactNode
   let status = ''
@@ -193,12 +223,29 @@ export function ChartTileBody({ tile, titleId, statusId }: { tile: DashboardTile
     body = <Notice icon={icon} title={heading} message={failure.message} fenced={failure.kind === 'noAccess'} />
   } else if (data.data) {
     status = data.isFetching ? 'Refreshing' : data.data.rows.length === 0 ? 'No data' : 'Loaded'
+    if (drill.error) status = drill.error
     // overflow-x-hidden: charts round up by under a pixel at fractional tile widths, which would
     // otherwise reserve a scrollbar. Wide tables have their own horizontal scroller.
-    body = (
-      <div className={natural ? undefined : 'h-full min-h-0 overflow-y-auto overflow-x-hidden'}>
-        <ChartRenderer type={visualization.type} options={visualization.options} rows={data.data.rows} name={title} fill={!natural} compact={natural} columns={data.data.columns} truncated={data.data.truncated} rowLimit={data.data.rowLimit} />
+    body = drill.error ? (
+      <Notice icon={<AlertTriangle className="size-4" />} title="The chart could not be broken down" message={drill.error} />
+    ) : view ? (
+      <div ref={drill.chartRef} tabIndex={-1} className={cn('outline-none', natural ? undefined : 'h-full min-h-0 overflow-y-auto overflow-x-hidden')}>
+        <ChartRenderer
+          type={view.type}
+          options={view.options}
+          rows={view.rows}
+          name={title}
+          fill={!natural}
+          compact={natural}
+          columns={view.columns}
+          truncated={view.truncated}
+          rowLimit={view.rowLimit}
+          keyColumns={view.keyColumns}
+          onMarkClick={drill.onMarkClick}
+        />
       </div>
+    ) : (
+      <Loading />
     )
   } else {
     status = 'Loading'
@@ -233,13 +280,23 @@ export function ChartTileBody({ tile, titleId, statusId }: { tile: DashboardTile
             <span className="sr-only sm:hidden">{me?.zone?.unrestricted ? 'All data' : `Your zone: ${zone}`}</span>
           </span>
         )}
+        {notFilteredBy.length > 0 && (
+          <span
+            className="flex shrink-0 items-center gap-1 rounded-sm border border-dashed border-border px-1.5 py-0.5 text-xs text-muted-foreground"
+            title={`This chart has no ${notFilteredBy.join(', ')} column, so that filter does not narrow it.`}
+          >
+            <Filter aria-hidden="true" className="size-3" />
+            <span className="max-w-32 truncate">Not filtered by {notFilteredBy.join(', ')}</span>
+          </span>
+        )}
         {hasUnmapped && parameters.length > 0 && !isDisabled && visualization && (
           <Button variant="ghost" size="icon" className="size-6 shrink-0" aria-label={`Set values for ${title}`} onClick={() => setPromptOpen(true)}>
             <SlidersHorizontal className="size-3.5" />
           </Button>
         )}
+        {ready && data.data && !data.isError && drill.explore}
         {ready && data.data && !data.isError && (
-          <ChartDownloadMenu compact queryId={queryId} visualizationId={vizId} name={title} parameterValues={values} context={context} />
+          <ChartDownloadMenu compact queryId={queryId} visualizationId={vizId} name={title} parameterValues={values} context={context} crossFilters={crossFilters} />
         )}
         <span className="flex size-4 shrink-0 items-center justify-center" aria-hidden="true">
           {refreshing && <Loader2 className="size-3.5 animate-spin text-accent-foreground" />}
@@ -256,7 +313,9 @@ export function ChartTileBody({ tile, titleId, statusId }: { tile: DashboardTile
           onApply={setTileValues}
         />
       )}
+      {drill.trail && <div className="shrink-0 border-b border-border py-1">{drill.trail}</div>}
       <div className={natural ? undefined : 'min-h-0 flex-1'}>{body}</div>
+      {drill.menu}
       <p id={statusId} role="status" aria-live="polite" className="sr-only">
         {status}
       </p>

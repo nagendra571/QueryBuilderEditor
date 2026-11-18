@@ -13,6 +13,7 @@ import { HubAppsPage } from '@/pages/HubAppsPage'
 import { HubAuditPage } from '@/pages/HubAuditPage'
 import { DashboardListPage } from '@/pages/DashboardListPage'
 import { DashboardPage } from '@/pages/DashboardPage'
+import { DrillPage } from '@/pages/DrillPage'
 import { QueryEditorPage } from '@/pages/QueryEditorPage'
 import { QueryListPage } from '@/pages/QueryListPage'
 
@@ -82,6 +83,8 @@ export default function App() {
         <Route path="/dashboards" element={<Gate><DashboardListPage /></Gate>} />
         <Route path="/dashboards/:id" element={<Gate><DashboardPage /></Gate>} />
         <Route path="/queries/new" element={<Gate><QueryEditorPage /></Gate>} />
+        <Route path="/queries/:queryId/charts/:vizId/drill" element={<Gate><DrillPage /></Gate>} />
+        <Route path="/queries/:queryId/drill" element={<Gate><DrillPage /></Gate>} />
         <Route path="/queries/:id" element={<Gate><QueryEditorPage /></Gate>} />
       </Routes>
       </SessionGuard>

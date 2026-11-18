@@ -11,6 +11,7 @@ import { ChartRenderer } from '@/features/visualizations/ChartRenderer'
 import {
   MAX_MEASURES,
   MAX_TABLE_COLUMNS,
+  MAX_DRILL_COLUMNS,
   MAX_PIVOT_ROWS,
   MAX_PIVOT_VALUES,
   buildOptions,
@@ -50,6 +51,7 @@ export function ChartEditorDialog({
   open,
   onOpenChange,
   columns,
+  drillColumnChoices,
   editing,
   previewResult,
   isSaving,
@@ -59,6 +61,8 @@ export function ChartEditorDialog({
   onOpenChange: (open: boolean) => void
   /** Output columns of the *saved* query — what the server validates charts against. */
   columns: OutputColumn[]
+  /** Names of the source object's catalog columns, offered for "Columns to show when drilling". */
+  drillColumnChoices: string[]
   editing?: VisualizationDto | null
   /** The latest results grid, used for the live preview. */
   previewResult?: QueryResultDto
@@ -77,6 +81,7 @@ export function ChartEditorDialog({
         {/* Mounted only while open, so the form state resets on every open. */}
         <ChartEditorForm
           columns={columns}
+          drillColumnChoices={drillColumnChoices}
           editing={editing ?? null}
           previewResult={previewResult}
           isSaving={isSaving}
@@ -90,6 +95,7 @@ export function ChartEditorDialog({
 
 function ChartEditorForm({
   columns,
+  drillColumnChoices,
   editing,
   previewResult,
   isSaving,
@@ -97,6 +103,7 @@ function ChartEditorForm({
   onSave,
 }: {
   columns: OutputColumn[]
+  drillColumnChoices: string[]
   editing: VisualizationDto | null
   previewResult?: QueryResultDto
   isSaving: boolean
@@ -129,6 +136,7 @@ function ChartEditorForm({
   const [pivotShade, setPivotShade] = useState(editing?.options.pivot?.shade ?? false)
   const [size, setSize] = useState<string>(editing?.options.size ?? '')
   const [label, setLabel] = useState<string>(editing?.options.label ?? '')
+  const [drillColumns, setDrillColumns] = useState<string[]>(editing?.options.drill?.columns ?? [])
   const [name, setName] = useState(editing?.name ?? '')
 
   const isCounter = type === 'counter'
@@ -146,8 +154,8 @@ function ChartEditorForm({
   const scatterXColumns = useMemo(() => columns.filter((c) => ['number', 'date', 'dateTime'].includes(c.dataType)), [columns])
 
   const options: VisualizationOptions = useMemo(
-    () =>
-      buildOptions(type, {
+    () => ({
+      ...buildOptions(type, {
         x,
         measures,
         series,
@@ -162,7 +170,9 @@ function ChartEditorForm({
         label,
         format: formatStyle === NONE ? null : { style: formatStyle, decimals: formatDecimals, currency },
       }),
-    [type, x, measures, series, stacked, percent, lineMeasures, sortX, counterValue, counterLabel, decimals, counterTarget, tableColumns, pivotRows, pivotColumn, pivotValues, pivotTotals, pivotShade, size, label, formatStyle, formatDecimals, currency],
+      drill: drillColumns.length > 0 ? { columns: drillColumns } : null,
+    }),
+    [drillColumns, type, x, measures, series, stacked, percent, lineMeasures, sortX, counterValue, counterLabel, decimals, counterTarget, tableColumns, pivotRows, pivotColumn, pivotValues, pivotTotals, pivotShade, size, label, formatStyle, formatDecimals, currency],
   )
 
   // Until the user types their own name, the suggestion follows the chosen type and measure.
@@ -190,6 +200,7 @@ function ChartEditorForm({
   const staleMeasures = options.measures.filter((m) => !numeric.some((c) => c.name === m))
   const staleSize = isScatter && !!size && !numeric.some((c) => c.name === size)
   const staleLabel = isScatter && !!label && !columns.some((c) => c.name === label)
+  const staleDrill = drillColumnChoices.length > 0 ? drillColumns.filter((n) => !drillColumnChoices.includes(n)) : []
   const staleValues = pivotValues.filter((n) => !numeric.some((c) => c.name === n))
   const averagedPercent =
     !!options.percent &&
@@ -250,6 +261,14 @@ function ChartEditorForm({
       const next = [...prev]
       ;[next[i], next[j]] = [next[j], next[i]]
       return next
+    })
+  }
+
+  function toggleDrillColumn(column: string, checked: boolean) {
+    setDrillColumns((prev) => {
+      if (!checked) return prev.filter((c) => c !== column)
+      if (prev.includes(column) || prev.length >= MAX_DRILL_COLUMNS) return prev
+      return [...prev, column]
     })
   }
 
@@ -641,6 +660,28 @@ function ChartEditorForm({
             </>
           )}
 
+          <fieldset className="flex flex-col gap-1.5">
+            <legend className="mb-1 text-xs font-medium">{`Columns to show when drilling (up to ${MAX_DRILL_COLUMNS})`}</legend>
+            <p className="text-xs text-muted-foreground">
+              Added to the query's own columns when someone drills into a mark on this chart.
+            </p>
+            {staleDrill.map((n) => (
+              <StaleRole key={`stale-drill-${n}`} name={n} hint="not a column of the source" onRemove={() => toggleDrillColumn(n, false)} />
+            ))}
+            <div className="flex max-h-40 flex-col gap-1.5 overflow-y-auto">
+              {drillColumnChoices.map((n) => (
+                <label key={n} className="flex min-w-0 items-center gap-2 text-sm">
+                  <Checkbox
+                    checked={drillColumns.includes(n)}
+                    disabled={!drillColumns.includes(n) && drillColumns.length >= MAX_DRILL_COLUMNS}
+                    onCheckedChange={(v) => toggleDrillColumn(n, v === true)}
+                  />
+                  <span className="min-w-0 flex-1 truncate">{n}</span>
+                </label>
+              ))}
+            </div>
+          </fieldset>
+
           <fieldset className="flex flex-col gap-3">
             <legend className="mb-1.5 text-xs font-medium">Format</legend>
             <Field label="Number style">
@@ -712,7 +753,7 @@ function ChartEditorForm({
           Cancel
         </Button>
         <Button
-          disabled={!!problem || isSaving}
+          disabled={!!problem || isSaving || staleDrill.length > 0}
           onClick={() => onSave({ name: effectiveName, type, options })}
         >
           {isSaving ? 'Saving…' : editing ? 'Save changes' : 'Add chart'}

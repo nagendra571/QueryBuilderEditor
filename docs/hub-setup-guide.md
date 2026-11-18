@@ -163,8 +163,8 @@ Keep `db_ddladmin`: later versions that add tables or columns upgrade themselves
    sqlcmd -S <server> -d <database> -I -b -i QueryBuilder.schema.<version>.sql
    ```
 
-   (Use `QueryBuilder.schema.2.0.0.sql`, from `src/QueryBuilder.Editor/Scripts` or the `scripts/` folder of the
-   QueryBuilder.Editor 2.0.0 package.)
+   (Use `QueryBuilder.schema.2.2.0.sql`, from `src/QueryBuilder.Editor/Scripts` or the `scripts/` folder of the
+   QueryBuilder.Editor 2.2.0 package.)
 2. The DBA inserts the mode marker once, and turns the built-in Default app off, because the hub does that itself only
    when it claims a database and an existing marker skips that step:
 

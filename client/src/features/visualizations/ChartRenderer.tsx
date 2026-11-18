@@ -37,7 +37,17 @@ import { CartesianView } from '@/features/visualizations/CartesianView'
 import { paletteColor } from '@/features/visualizations/chart-types'
 import { formatValue } from '@/features/visualizations/format'
 import { counterText, fitFontSize, targetText, trendSummary } from '@/features/visualizations/single-number'
-import type { AggregateFunction, ColumnDataType, ValueFormat, VisualizationOptions, VisualizationType } from '@/types'
+import { isAggregated, stepsForMark, type ClickedMark } from '@/features/drill/drill-model'
+import { fireMark, type MarkDrill } from '@/features/drill/mark-click'
+import { pickRow, rowsOf } from '@/features/visualizations/mark-sources'
+import type {
+  AggregateFunction,
+  ColumnDataType,
+  QueryResultColumnDto,
+  ValueFormat,
+  VisualizationOptions,
+  VisualizationType,
+} from '@/types'
 
 const REDUCED_MOTION = '(prefers-reduced-motion: reduce)'
 
@@ -67,19 +77,42 @@ type RendererProps = {
   columns?: { name: string; dataType?: ColumnDataType; aggregate?: AggregateFunction | null }[]
   truncated?: boolean
   rowLimit?: number
+  /** Present = marks are clickable. Absent = the chart behaves exactly as it always did. */
+  onMarkClick?: (mark: ClickedMark) => void
+  /** Plain columns the chart does not draw but that identify the clicked result row (from the render response). */
+  keyColumns?: string[]
 }
 
-export function ChartRenderer(props: RendererProps) {
+type InnerProps = Omit<RendererProps, 'onMarkClick' | 'keyColumns'> & { drill?: MarkDrill }
+
+function toResultColumns(columns: NonNullable<RendererProps['columns']>): QueryResultColumnDto[] {
+  return columns.map((c) => ({ name: c.name, dataType: c.dataType ?? 'unknown', aggregate: c.aggregate }) as QueryResultColumnDto)
+}
+
+export function ChartRenderer({ onMarkClick, keyColumns, ...props }: RendererProps) {
+  const { type, options, columns } = props
+  const drill = useMemo<MarkDrill | undefined>(() => {
+    // Without the result columns the server's rules (which columns identify a mark) cannot be applied, so no click.
+    if (!onMarkClick || !columns) return undefined
+    const resultColumns = toResultColumns(columns)
+    return {
+      onMark: onMarkClick,
+      keyColumns,
+      canDrill: (mark) => stepsForMark(type, options, resultColumns, keyColumns ?? [], { ...mark, anchor: { x: 0, y: 0 } }) !== null,
+    }
+  }, [onMarkClick, columns, keyColumns, type, options])
+
+  const inner = { ...props, drill }
   if (props.type === 'pivot') {
-    return <PivotRenderer options={props.options} rows={props.rows} name={props.name} columns={props.columns} fill={props.fill ?? false} />
+    return <PivotRenderer options={props.options} rows={props.rows} name={props.name} columns={props.columns} fill={props.fill ?? false} drill={drill} />
   }
   if (props.type === 'funnel') {
-    return <FunnelRenderer {...props} fill={props.fill ?? false} />
+    return <FunnelRenderer {...inner} fill={props.fill ?? false} />
   }
-  if (props.type === 'waterfall') return <WaterfallRenderer {...props} />
-  if (props.type === 'scatter') return <ScatterRenderer {...props} />
-  if (props.type === 'trend') return <TrendRenderer {...props} />
-  return <DrawnRenderer {...props} />
+  if (props.type === 'waterfall') return <WaterfallRenderer {...inner} />
+  if (props.type === 'scatter') return <ScatterRenderer {...inner} />
+  if (props.type === 'trend') return <TrendRenderer {...inner} />
+  return <DrawnRenderer {...inner} />
 }
 
 function ProblemAlert({ message }: { message: string }) {
@@ -103,13 +136,13 @@ function ShowData({ children }: { children: React.ReactNode }) {
   )
 }
 
-function FunnelRenderer({ options, rows, name, truncated, rowLimit, fill }: RendererProps & { fill: boolean }) {
+function FunnelRenderer({ options, rows, name, truncated, rowLimit, fill, drill }: InnerProps & { fill: boolean }) {
   const model = useMemo(() => buildFunnel(options, rows), [options, rows])
   if (model.problem) return <ProblemAlert message={model.problem} />
-  return <FunnelView model={model} name={name} format={options.format} truncated={truncated} rowLimit={rowLimit} fill={fill} />
+  return <FunnelView model={model} name={name} format={options.format} truncated={truncated} rowLimit={rowLimit} fill={fill} drill={drill} />
 }
 
-function WaterfallRenderer({ options, rows, name, fill = false, compact = false, truncated = false, rowLimit }: RendererProps) {
+function WaterfallRenderer({ options, rows, name, fill = false, compact = false, truncated = false, rowLimit, drill }: InnerProps) {
   const model = useMemo(() => buildWaterfall(options, rows), [options, rows])
   const reducedMotion = usePrefersReducedMotion()
   const heightClass = compact ? 'h-[280px]' : 'h-[360px]'
@@ -133,7 +166,7 @@ function WaterfallRenderer({ options, rows, name, fill = false, compact = false,
         aria-label={`${name} — Waterfall chart: ${options.measures[0]} by ${options.x}, ${model.bars.length - 1} steps ending in ${formatValue(model.bars[model.bars.length - 1].value, format)}`}
         className={fill ? 'min-w-0 flex-1 shrink-0' : 'min-w-0'}
       >
-        <WaterfallView model={model} animate={!reducedMotion} heightClass={heightClass} format={format} fill={fill} />
+        <WaterfallView model={model} animate={!reducedMotion} heightClass={heightClass} format={format} fill={fill} drill={drill} />
       </div>
       {truncated && (
         <p className="text-xs text-muted-foreground">
@@ -170,7 +203,7 @@ function WaterfallRenderer({ options, rows, name, fill = false, compact = false,
   )
 }
 
-function TrendRenderer({ options, rows, name, fill = false, compact = false, truncated = false, rowLimit }: RendererProps) {
+function TrendRenderer({ options, rows, name, fill = false, compact = false, truncated = false, rowLimit, drill }: InnerProps) {
   const model = useMemo(() => buildTrend(options, rows), [options, rows])
   const reducedMotion = usePrefersReducedMotion()
   const format = options.format
@@ -192,7 +225,7 @@ function TrendRenderer({ options, rows, name, fill = false, compact = false, tru
         aria-label={`${name} — ${trendSummary(model, measure, format)}`}
         className={fill ? 'min-w-0 flex-1 shrink-0' : compact ? 'h-[200px] min-w-0' : 'h-[260px] min-w-0'}
       >
-        <TrendView model={model} animate={!reducedMotion} format={format} />
+        <TrendView model={model} animate={!reducedMotion} format={format} drill={drill} />
       </div>
       {truncated && (
         <p className="text-xs text-muted-foreground">
@@ -227,7 +260,7 @@ function TrendRenderer({ options, rows, name, fill = false, compact = false, tru
   )
 }
 
-function ScatterRenderer({ options, rows, name, fill = false, compact = false, truncated = false, rowLimit }: RendererProps) {
+function ScatterRenderer({ options, rows, name, fill = false, compact = false, truncated = false, rowLimit, drill }: InnerProps) {
   const model = useMemo(() => buildScatter(options, rows), [options, rows])
   const reducedMotion = usePrefersReducedMotion()
   const heightClass = compact ? 'h-[280px]' : 'h-[360px]'
@@ -265,6 +298,7 @@ function ScatterRenderer({ options, rows, name, fill = false, compact = false, t
           sizeName={options.size}
           seriesName={options.series}
           fill={fill}
+          drill={drill}
         />
       </div>
       {truncated && (
@@ -320,7 +354,8 @@ function PivotRenderer({
   name,
   columns,
   fill,
-}: Pick<RendererProps, 'options' | 'rows' | 'name' | 'columns'> & { fill: boolean }) {
+  drill,
+}: Pick<RendererProps, 'options' | 'rows' | 'name' | 'columns'> & { fill: boolean; drill?: MarkDrill }) {
   const model = useMemo(
     () =>
       buildPivot(options, rows, (n) => {
@@ -345,6 +380,7 @@ function PivotRenderer({
       format={options.format}
       shade={options.pivot?.shade ?? false}
       fill={fill}
+      drill={drill}
     />
   )
 }
@@ -359,7 +395,8 @@ function DrawnRenderer({
   compact = false,
   truncated = false,
   rowLimit,
-}: RendererProps) {
+  drill,
+}: InnerProps) {
   const model = useMemo(() => buildModel(type, options, rows), [type, options, rows])
   const reducedMotion = usePrefersReducedMotion()
   const summary = describeChart(type, options, model)
@@ -373,7 +410,16 @@ function DrawnRenderer({
 
   if (model.kind === 'table') {
     return (
-      <TableView model={model} name={name} columns={columns} format={options.format} truncated={truncated} rowLimit={rowLimit} fill={fill} />
+      <TableView
+        model={model}
+        name={name}
+        columns={columns}
+        format={options.format}
+        truncated={truncated}
+        rowLimit={rowLimit}
+        fill={fill}
+        drill={columns && isAggregated(toResultColumns(columns)) ? drill : undefined}
+      />
     )
   }
 
@@ -384,17 +430,34 @@ function DrawnRenderer({
   const percent = model.kind === 'cartesian' && isPercentStack(type, options)
   const negativeShares = model.kind === 'cartesian' && percent ? negativeCategoryCount(model.points, model.series) : 0
   const format = options.format
+  const counterClickable = model.kind === 'counter' && !!drill && drill.canDrill({})
 
   return (
     <div className={`flex min-w-0 flex-col gap-3 ${fill ? 'h-full' : ''}`}>
       {model.kind === 'pie' && model.problem ? (
         <ProblemAlert message={model.problem} />
       ) : (
-        <div role="img" aria-label={`${name} — ${summary}`} className={fill ? 'min-h-[96px] min-w-0 flex-1 shrink-0' : 'min-w-0'}>
-          {model.kind === 'counter' && <CounterView model={model} decimals={options.counter?.decimals ?? 0} format={format} />}
-          {model.kind === 'pie' && <PieView model={model} animate={!reducedMotion} heightClass={heightClass} format={format} />}
+        <div
+          // Children of role="img" are presentational, which would hide the counter's button from assistive tech.
+          {...(counterClickable ? {} : { role: 'img', 'aria-label': `${name} — ${summary}` })}
+          className={fill ? 'min-h-[96px] min-w-0 flex-1 shrink-0' : 'min-w-0'}
+        >
+          {model.kind === 'counter' && (
+            <CounterView model={model} decimals={options.counter?.decimals ?? 0} format={format} drill={drill} />
+          )}
+          {model.kind === 'pie' && (
+            <PieView model={model} animate={!reducedMotion} heightClass={heightClass} format={format} drill={drill} />
+          )}
           {model.kind === 'cartesian' && (
-            <CartesianView type={type} options={options} model={model} animate={!reducedMotion} heightClass={heightClass} format={format} />
+            <CartesianView
+              type={type}
+              options={options}
+              model={model}
+              animate={!reducedMotion}
+              heightClass={heightClass}
+              format={format}
+              drill={drill}
+            />
           )}
         </div>
       )}
@@ -434,15 +497,38 @@ function DrawnRenderer({
   )
 }
 
-function CounterView({ model, decimals, format }: { model: CounterModel; decimals: number; format?: ValueFormat | null }) {
+function CounterView({
+  model,
+  decimals,
+  format,
+  drill,
+}: {
+  model: CounterModel
+  decimals: number
+  format?: ValueFormat | null
+  drill?: MarkDrill
+}) {
   const text = counterText(model.value, decimals, format)
   const target = targetText(model.pctOfTarget)
   const fill = Math.min(Math.max(model.pctOfTarget ?? 0, 0), 100)
   return (
     <div className="@container flex h-full min-w-0 flex-col items-center justify-center gap-1 py-6">
-      <span className="font-numeric block max-w-full truncate leading-none font-semibold" style={{ fontSize: fitFontSize(text) }}>
-        {text}
-      </span>
+      {drill && drill.canDrill({}) ? (
+        // A real button, so the number can be reached and activated from the keyboard too.
+        <button
+          type="button"
+          className="font-numeric block max-w-full cursor-pointer truncate rounded-md leading-none font-semibold outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring"
+          style={{ fontSize: fitFontSize(text) }}
+          aria-label={`${text}, ${model.label}. Explore this value`}
+          onClick={(e) => fireMark(drill, {}, e)}
+        >
+          {text}
+        </button>
+      ) : (
+        <span className="font-numeric block max-w-full truncate leading-none font-semibold" style={{ fontSize: fitFontSize(text) }}>
+          {text}
+        </span>
+      )}
       <span className="map-label max-w-full truncate text-muted-foreground">{model.label}</span>
       {target && (
         <>
@@ -456,8 +542,24 @@ function CounterView({ model, decimals, format }: { model: CounterModel; decimal
   )
 }
 
-function PieView({ model, animate, heightClass, format }: { model: PieModel; animate: boolean; heightClass: string; format?: ValueFormat | null }) {
+function PieView({
+  model,
+  animate,
+  heightClass,
+  format,
+  drill,
+}: {
+  model: PieModel
+  animate: boolean
+  heightClass: string
+  format?: ValueFormat | null
+  drill?: MarkDrill
+}) {
   const config: ChartConfig = {}
+  const markAt = (index: number) => {
+    const row = pickRow(rowsOf(model.slices[index]), drill?.keyColumns)
+    return row ? { row } : null
+  }
   return (
     <ChartContainer config={config} className={`aspect-auto w-full font-numeric text-[13px] ${heightClass}`}>
       <PieChart accessibilityLayer>
@@ -470,10 +572,12 @@ function PieView({ model, animate, heightClass, format }: { model: PieModel; ani
           outerRadius="80%"
           paddingAngle={0}
           isAnimationActive={animate}
+          {...(drill ? { onClick: (_d: unknown, index: number, e: React.MouseEvent) => fireMark(drill, markAt(index), e) } : {})}
         >
           {model.slices.map((slice, i) => (
             <Cell
               key={slice.name}
+              style={drill && markAt(i) && drill.canDrill(markAt(i)!) ? { cursor: 'pointer' } : undefined}
               fill={paletteColor(i)}
               stroke={model.slices.length > 1 ? 'var(--mark-outline)' : 'none'}
               strokeWidth={1}

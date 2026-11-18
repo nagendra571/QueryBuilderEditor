@@ -98,6 +98,16 @@ public sealed class FilterCondition
     /// <summary>When true, the value is not fixed — it is supplied at run time via a Parameter with this name.</summary>
     public bool IsParameterized { get; set; }
     public string? ParameterName { get; set; }
+
+    /// <summary>The column's native SQL type, stamped from the catalog every time the definition is validated (never trusted
+    /// from the browser). SQL Server needs it to bind a date-time as the type the column compares exactly against.</summary>
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public string? NativeType { get; set; }
+
+    /// <summary>Set only by drill and click-filter steps: an empty text value means the empty string, as a chart groups it, instead
+    /// of "no value". Ordinary filters keep treating an empty value as NULL.</summary>
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault)]
+    public bool EmptyTextIsValue { get; set; }
 }
 
 public sealed class QueryParameter

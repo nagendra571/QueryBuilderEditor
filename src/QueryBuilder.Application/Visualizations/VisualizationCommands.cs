@@ -59,6 +59,7 @@ public sealed class SaveVisualizationCommandValidator : AbstractValidator<SaveVi
 public sealed class SaveVisualizationCommandHandler(
     ISavedQueryRepository savedQueries,
     IVisualizationRepository visualizations,
+    IDataCatalogService catalog,
     ICurrentUserService currentUser,
     IAuditLogger auditLogger)
     : IRequestHandler<SaveVisualizationCommand, VisualizationDto>
@@ -80,6 +81,8 @@ public sealed class SaveVisualizationCommandHandler(
         {
             throw new CatalogValidationException(string.Join(" ", issues.Select(i => i.Message)));
         }
+
+        await ValidateDrillColumnsAsync(query, definition, request.Options, cancellationToken);
 
         var optionsJson = VisualizationOptionsSerializer.Serialize(request.Options);
         var name = request.Name.Trim();
@@ -135,6 +138,41 @@ public sealed class SaveVisualizationCommandHandler(
             cancellationToken);
 
         return VisualizationMapper.ToDto(created, AccessActor.From(currentUser));
+    }
+
+    // Only the source object's own columns are offered when drilling, so a crafted body can't name another object's.
+    private async Task ValidateDrillColumnsAsync(
+        SavedQuery query, QueryDefinition definition, VisualizationOptions options, CancellationToken cancellationToken)
+    {
+        if (options.Drill is not { Columns.Count: > 0 } drill)
+        {
+            return;
+        }
+
+        var cat = await catalog.GetCatalogAsync(query.DataSourceId, cancellationToken);
+        var comparer = IdentifierMatching.Comparer(cat.Provider);
+
+        var duplicate = drill.Columns.GroupBy(c => c, comparer).FirstOrDefault(g => g.Count() > 1);
+        if (duplicate is not null)
+        {
+            throw new CatalogValidationException($"'{duplicate.Key}' is chosen more than once to show when drilling.");
+        }
+
+        var comparison = IdentifierMatching.Comparison(cat.Provider);
+        var source = definition.Source;
+        var columns = cat.Schemas
+            .SelectMany(s => s.Objects)
+            .FirstOrDefault(o => string.Equals(o.SchemaName, source.SchemaName, comparison)
+                && string.Equals(o.Name, source.ObjectName, comparison))
+            ?.Columns ?? [];
+
+        foreach (var column in drill.Columns)
+        {
+            if (!columns.Any(c => string.Equals(c.Name, column, comparison)))
+            {
+                throw new CatalogValidationException($"'{column}' is not a column of {source.SchemaName}.{source.ObjectName}.");
+            }
+        }
     }
 }
 

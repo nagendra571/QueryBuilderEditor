@@ -1,5 +1,5 @@
-using System.Globalization;
 using QueryBuilder.Application.Abstractions;
+using QueryBuilder.Application.Common;
 using QueryBuilder.Application.Exceptions;
 using QueryBuilder.Domain.Enums;
 
@@ -26,12 +26,14 @@ public static class QueryParameterValues
             rawValue = supplied;
         }
 
-        return ConvertValue(parameter.DataType, rawValue, wholeNumbersAsLong);
+        return ConvertValue(parameter.DataType, rawValue, wholeNumbersAsLong, parameter.EmptyTextIsValue);
     }
 
-    private static object ConvertValue(ColumnDataType dataType, string? rawValue, bool wholeNumbersAsLong)
+    private static object ConvertValue(ColumnDataType dataType, string? rawValue, bool wholeNumbersAsLong, bool emptyTextIsValue)
     {
-        if (string.IsNullOrEmpty(rawValue))
+        // Empty means NULL everywhere except a drill step on text: a chart groups empty strings apart from NULL, and drilling
+        // into that group must find them. Saved filters keep their old meaning, so existing queries return the same rows.
+        if (rawValue is null || (rawValue.Length == 0 && !(emptyTextIsValue && dataType == ColumnDataType.Text)))
         {
             return DBNull.Value;
         }
@@ -42,8 +44,8 @@ public static class QueryParameterValues
             {
                 ColumnDataType.Number => ParseNumber(rawValue, wholeNumbersAsLong),
                 ColumnDataType.Boolean => ParseBool(rawValue),
-                ColumnDataType.Date => DateTime.Parse(rawValue, CultureInfo.InvariantCulture, DateTimeStyles.None).Date,
-                ColumnDataType.DateTime => DateTime.Parse(rawValue, CultureInfo.InvariantCulture, DateTimeStyles.None),
+                ColumnDataType.Date => ParseDateTime(rawValue).Date,
+                ColumnDataType.DateTime => ParseDateTime(rawValue),
                 ColumnDataType.Guid => Guid.Parse(rawValue),
                 _ => rawValue
             };
@@ -60,7 +62,7 @@ public static class QueryParameterValues
 
     private static object ParseNumber(string rawValue, bool wholeNumbersAsLong)
     {
-        var value = decimal.Parse(rawValue, CultureInfo.InvariantCulture);
+        if (!QueryLiteral.TryParseNumber(rawValue, out var value)) throw new FormatException();
         if (wholeNumbersAsLong && value == decimal.Truncate(value) && value >= long.MinValue && value <= long.MaxValue)
         {
             return (long)value;
@@ -68,6 +70,9 @@ public static class QueryParameterValues
 
         return value;
     }
+
+    private static DateTime ParseDateTime(string rawValue) =>
+        QueryLiteral.TryParseDateTime(rawValue, out var value) ? value : throw new FormatException();
 
     private static bool ParseBool(string value) => value is "1" or "true" or "True" or "TRUE";
 }

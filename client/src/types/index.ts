@@ -545,6 +545,10 @@ export interface ValueFormat {
   currency?: string | null
 }
 
+export interface DrillOptions {
+  columns: string[]
+}
+
 export interface TableOptions {
   columns: string[]
 }
@@ -582,6 +586,7 @@ export interface VisualizationOptions {
   table?: TableOptions | null
   pivot?: PivotOptions | null
   format?: ValueFormat | null
+  drill?: DrillOptions | null
 }
 
 export interface VisualizationDto {
@@ -608,6 +613,8 @@ export interface RenderVisualizationRequest {
   /** Set when the chart is drawn as a tile: the server then checks the caller may see that dashboard and tile. */
   dashboardId?: string
   tileId?: string
+  /** Dashboard click-to-filter values; the server refuses them while the dashboard's switch is off. */
+  crossFilters?: { sourceTileId: string; column: string; value: string | null }[]
 }
 
 export type DownloadFormat = 'csv' | 'xlsx'
@@ -649,6 +656,39 @@ export interface VisualizationDataDto {
   executionTimeMs: number
   rowLimit: number
   truncated?: boolean
+  /** Visible plain columns the chart does not reference; they identify the clicked result row. */
+  keyColumns?: string[] | null
+  crossFilter?: { applied: string[]; notApplied: string[] } | null
+}
+
+export type DrillAction = 'rows' | 'breakdown'
+
+export interface DrillRequest {
+  action: DrillAction
+  steps: { column: string; value: string | null }[]
+  breakdownColumn?: string | null
+  crossFilters?: { sourceTileId: string; column: string; value: string | null }[]
+  parameterValues?: Record<string, string | null>
+  dashboardId?: string | null
+  tileId?: string | null
+}
+
+export interface DrillResultDto {
+  action: DrillAction
+  columns: QueryResultColumnDto[]
+  rows: Record<string, unknown>[]
+  rowCount: number
+  executionTimeMs: number
+  rowLimit: number
+  truncated: boolean
+  type: VisualizationType
+  /** The chart options rewritten for a breakdown; null for rows. */
+  options?: VisualizationOptions | null
+}
+
+export interface DrillQueryRequest {
+  steps: { column: string; value: string | null }[]
+  parameterValues?: Record<string, string | null>
 }
 
 export type DashboardTileKind = 'chart' | 'text' | 'section'
@@ -728,6 +768,7 @@ export interface DashboardDetailDto {
   isOwner: boolean
   accessLevel: QueryAccessLevel
   published?: boolean
+  clickToFilterEnabled?: boolean
   version: number
   tiles: DashboardTileDto[]
   parameters?: DashboardParameterDto[] | null
@@ -737,6 +778,7 @@ export interface SaveDashboardRequest {
   name: string
   description?: string | null
   version?: number | null
+  clickToFilterEnabled?: boolean
 }
 
 export interface SaveDashboardTileRequest {

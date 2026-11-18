@@ -33,6 +33,10 @@ import type {
   SaveVisualizationRequest,
   ShareDashboardRequest,
   VisualizationDataDto,
+  DrillRequest,
+  DrillResultDto,
+  DrillQueryRequest,
+  DownloadFormat,
   VisualizationDto,
   RunQueryRequest,
   SaveQueryRequest,
@@ -78,6 +82,10 @@ export const savedQueriesApi = {
     (await apiClient.post('/queries/preview-sql', request)).data,
   run: async (request: RunQueryRequest): Promise<QueryResultDto> =>
     (await apiClient.post('/queries/run', request)).data,
+  drillQuery: async (id: string, request: DrillQueryRequest): Promise<DrillResultDto> =>
+    (await apiClient.post(`/queries/${id}/drill`, request)).data,
+  exportDrillQuery: async (id: string, request: DrillQueryRequest & { format: DownloadFormat }): Promise<Blob> =>
+    (await apiClient.post(`/queries/${id}/drill/export`, request, { responseType: 'blob' })).data,
   export: async (request: ExportQueryRequest): Promise<Blob> =>
     (await apiClient.post('/queries/export', request, { responseType: 'blob' })).data,
   parameterOptions: async (id: string, name: string, context?: DashboardContext): Promise<ParameterOption[]> =>
@@ -154,6 +162,10 @@ export const visualizationsApi = {
     (await apiClient.post(`/queries/${queryId}/visualizations/${id}/data`, request)).data,
   download: async (queryId: string, id: string, request: ExportVisualizationRequest): Promise<Blob> =>
     (await apiClient.post(`/queries/${queryId}/visualizations/${id}/export`, request, { responseType: 'blob' })).data,
+  drillVisualization: async (queryId: string, id: string, request: DrillRequest): Promise<DrillResultDto> =>
+    (await apiClient.post(`/queries/${queryId}/visualizations/${id}/drill`, request)).data,
+  exportDrill: async (queryId: string, id: string, request: DrillRequest & { format: DownloadFormat }): Promise<Blob> =>
+    (await apiClient.post(`/queries/${queryId}/visualizations/${id}/drill/export`, request, { responseType: 'blob' })).data,
 }
 
 export interface MeDto {

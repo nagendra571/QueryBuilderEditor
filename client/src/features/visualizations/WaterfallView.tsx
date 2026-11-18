@@ -3,6 +3,8 @@ import { Bar, BarChart, CartesianGrid, Cell, LabelList, ReferenceLine, XAxis, YA
 import { ChartContainer, ChartTooltip, type ChartConfig } from '@/components/ui/chart'
 import { formatAxis, formatValue, truncateLabel } from '@/features/visualizations/format'
 import { KIND_LABEL, type WaterfallBar, type WaterfallModel } from '@/features/visualizations/story-models'
+import { fireMark, type MarkDrill } from '@/features/drill/mark-click'
+import { pickRow, rowsOf } from '@/features/visualizations/mark-sources'
 import type { ValueFormat } from '@/types'
 
 const KIND_COLOR: Record<WaterfallBar['kind'], string> = {
@@ -48,12 +50,14 @@ export function WaterfallView({
   heightClass,
   format,
   fill,
+  drill,
 }: {
   model: WaterfallModel
   animate: boolean
   heightClass: string
   format?: ValueFormat | null
   fill: boolean
+  drill?: MarkDrill
 }) {
   const data: Datum[] = useMemo(
     () =>
@@ -66,6 +70,11 @@ export function WaterfallView({
       })),
     [model],
   )
+  // The total bar has no source row, so it never takes a click.
+  const markAt = (index: number) => {
+    const row = pickRow(rowsOf(model.bars[index]), drill?.keyColumns)
+    return row ? { row } : null
+  }
   const kinds = (['up', 'down', 'total'] as const).filter((k) => model.bars.some((b) => b.kind === k))
   const config: ChartConfig = {}
   const tick = { fill: 'var(--muted-foreground)' }
@@ -93,10 +102,19 @@ export function WaterfallView({
           <YAxis tickLine={false} axisLine={false} width={52} tick={tick} tickFormatter={(v: number) => formatAxis(v, format)} />
           <ReferenceLine y={0} stroke="var(--muted-foreground)" />
           <ChartTooltip content={<WaterfallTooltip format={format} />} />
-          <Bar dataKey="range" maxBarSize={72} stroke="var(--mark-outline)" strokeWidth={1} isAnimationActive={animate}>
-            {data.map((d) => (
-              <Cell key={d.key} fill={KIND_COLOR[d.kind]} />
-            ))}
+          <Bar dataKey="range" maxBarSize={72} stroke="var(--mark-outline)" strokeWidth={1} isAnimationActive={animate}
+            {...(drill ? { onClick: (_d: unknown, index: number, e: React.MouseEvent) => fireMark(drill, markAt(index), e) } : {})}
+          >
+            {data.map((d) => {
+              const mark = drill ? markAt(d.key) : null
+              return (
+                <Cell
+                  key={d.key}
+                  fill={KIND_COLOR[d.kind]}
+                  style={mark && drill?.canDrill(mark) ? { cursor: 'pointer' } : undefined}
+                />
+              )
+            })}
             <LabelList dataKey="range" content={renderMark} />
           </Bar>
         </BarChart>

@@ -50,7 +50,7 @@ public sealed class CreateDashboardCommandHandler(
     }
 }
 
-public sealed record RenameDashboardCommand(Guid DashboardId, string Name, string? Description, int? Version)
+public sealed record RenameDashboardCommand(Guid DashboardId, string Name, string? Description, int? Version, bool? ClickToFilterEnabled = null)
     : IRequest<DashboardDetailDto>;
 
 public sealed class RenameDashboardCommandValidator : AbstractValidator<RenameDashboardCommand>
@@ -90,13 +90,19 @@ public sealed class RenameDashboardCommandHandler(
 
         dashboard.Name = name;
         dashboard.Description = string.IsNullOrWhiteSpace(request.Description) ? null : request.Description.Trim();
+        var before = dashboard.ClickToFilterEnabled;
+        if (request.ClickToFilterEnabled is { } clickToFilter) dashboard.ClickToFilterEnabled = clickToFilter;
         Touch(dashboard, currentUser.UserId);
 
         await dashboards.SaveChangesAsync(cancellationToken);
 
         await auditLogger.LogAsync(
             new AuditEntry(AuditAction.DashboardUpdated, nameof(Dashboard), dashboard.Id, dashboard.Name, null,
-                $"Renamed dashboard '{dashboard.Name}'"),
+                $"Renamed dashboard '{dashboard.Name}'",
+                // Turning click-to-filter off or on changes what viewers can narrow, so it is recorded, not just the rename.
+                before == dashboard.ClickToFilterEnabled
+                    ? null
+                    : new { ClickToFilterEnabled = new { Before = before, After = dashboard.ClickToFilterEnabled } }),
             cancellationToken);
 
         return DashboardMapper.ToDetail(dashboard, AccessActor.From(currentUser));

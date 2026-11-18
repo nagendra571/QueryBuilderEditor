@@ -50,11 +50,13 @@ public sealed record DashboardDetailDto(
     int Version,
     List<DashboardTileDto> Tiles,
     List<DashboardParameterDto>? Parameters = null,
-    bool Published = false);
+    bool Published = false,
+    bool ClickToFilterEnabled = true);
 
 public sealed record PublishDashboardRequest(bool? Published);
 
-public sealed record SaveDashboardRequest(string Name, string? Description, int? Version);
+/// <summary><see cref="ClickToFilterEnabled"/> null leaves the author switch unchanged.</summary>
+public sealed record SaveDashboardRequest(string Name, string? Description, int? Version, bool? ClickToFilterEnabled = null);
 
 public sealed record SaveDashboardTileRequest(
     Guid? Id,

@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { AddToDashboardDialog } from '@/features/dashboards/AddToDashboardDialog'
+import { useChartDrill } from '@/features/drill/useChartDrill'
 import { ChartDownloadMenu } from '@/features/visualizations/ChartDownloadMenu'
 import { ChartRenderer } from '@/features/visualizations/ChartRenderer'
 import { typeNoun } from '@/features/visualizations/chart-data'
@@ -53,7 +54,15 @@ export function ChartPanel({
   // A disabled query is refused server-side; skip the doomed request and say why straight away.
   const enabled = !waitingForParameters && !isDisabled
 
-  const { data, error, isFetching } = useVisualizationData(queryId, visualization.id, parameterValues ?? {}, enabled)
+  const { data, error, isFetching, dataUpdatedAt } = useVisualizationData(queryId, visualization.id, parameterValues ?? {}, enabled)
+  const drill = useChartDrill({
+    queryId,
+    visualization,
+    base: error ? null : data,
+    baseUpdatedAt: dataUpdatedAt,
+    parameterValues: parameterValues ?? {},
+  })
+  const view = drill.view
 
   const failure = error ? classify(error) : null
 
@@ -65,6 +74,7 @@ export function ChartPanel({
           <span className="text-[11px] text-muted-foreground">{typeNoun(visualization.type)}</span>
         </div>
         <div className="ml-auto flex items-center gap-1.5">
+          {enabled && !failure && drill.explore}
           {enabled && !failure && data && (
             <ChartDownloadMenu
               queryId={queryId}
@@ -141,14 +151,33 @@ export function ChartPanel({
         <PanelNotice icon={<AlertTriangle className="size-4" />} title="The chart could not be drawn" message={failure.message} />
       )}
 
-      {enabled && !failure && data && (
-        <ChartRenderer type={visualization.type} options={visualization.options} rows={data.rows}
-          name={visualization.name}
-          columns={data.columns}
-          truncated={data.truncated}
-          rowLimit={data.rowLimit}
-        />
+      {enabled && !failure && drill.trail && <div className="px-0.5">{drill.trail}</div>}
+
+      {enabled && !failure && drill.loading && (
+        <div className="flex items-center justify-center py-10 text-sm text-muted-foreground">
+          <Loader2 className="mr-2 size-4 animate-spin" /> Drawing chart…
+        </div>
       )}
+      {enabled && !failure && drill.error && (
+        <PanelNotice icon={<AlertTriangle className="size-4" />} title="The chart could not be broken down" message={drill.error} />
+      )}
+
+      {enabled && !failure && view && (
+        <div ref={drill.chartRef} tabIndex={-1} className="outline-none">
+          <ChartRenderer
+            type={view.type}
+            options={view.options}
+            rows={view.rows}
+            name={visualization.name}
+            columns={view.columns}
+            truncated={view.truncated}
+            rowLimit={view.rowLimit}
+            keyColumns={view.keyColumns}
+            onMarkClick={drill.onMarkClick}
+          />
+        </div>
+      )}
+      {drill.menu}
 
       <AddToDashboardDialog
         open={addToDashboardOpen}

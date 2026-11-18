@@ -275,7 +275,8 @@ public abstract class SqlQueryBuilder(ISqlDialect dialect) : IQuerySqlBuilder
         var name = isRuntime ? $"@{condition.ParameterName}" : nextParamName();
 
         parameters.Add(new GeneratedQueryParameter(
-            name, condition.DataType, literal, isRuntime, isRuntime ? condition.ParameterName : null));
+            name, condition.DataType, literal, isRuntime, isRuntime ? condition.ParameterName : null,
+            condition.NativeType, condition.EmptyTextIsValue));
 
         return name;
     }

@@ -34,9 +34,74 @@ integration ergonomics (single-call registration, embedded SPA, DBA-friendly mig
 
 ## Where we left off (update this at the end of each session)
 
-**2026-11-15, end of session: START HERE.** State: `main` = `25b17e4` (PR #5 merged). NuGet: **Editor 2.1.0, Launch 1.0.2**
-(both published by the user). Next versions: Editor 2.1.1+, Launch 1.0.3+. The schema script is still `QueryBuilder.schema.2.0.0.sql`.
-This `CLAUDE.md` has uncommitted edits (release notes); `main` is PR-only, so commit them on the next branch.
+**2026-11-18: chart drill-down BUILT on local branch `feature/chart-drill-down` (27 commits on `main` f6281a8, NOT pushed,
+no version bump). START HERE.** Why: a client demo asked for Monday.com-style drill-down. Spec
+`docs/superpowers/specs/2026-11-17-chart-drill-down-design.md`, plan `docs/superpowers/plans/2026-11-17-chart-drill-down.md`.
+Built: See these rows (page `/queries/:q/charts/:v/drill?s=&f=&d=&t=&n=`), Break down by (in place, trail), Filter this
+dashboard (click-to-filter, per-dashboard switch `Dashboards.ClickToFilterEnabled`, migration `AddDashboardClickToFilter`),
+results-row drill (`/queries/:id/drill`), filtered chart downloads, "Columns to show when drilling" per chart
+(`options.drill.columns`, ≤20), audit `QueryDrilled = 37`, Viewer allowlist now 10 routes. Security core: browser sends only
+the click trail; `DrillDefinitions` + `VisualizationDataLoader.ExecuteAsync` is the ONLY path to SQL (scope wraps everything);
+zone proven against real SQL Server (LocalDB) and PostgreSQL 16 (`Drill/DrillScope*Tests`). Shared changes to EXISTING behaviour
+(release notes): `QueryLiteral` (exponent numbers accepted; `Z`/offset date-times → UTC), SQL Server binds fractional date-times
+as datetime2 only for native datetime2/datetimeoffset columns (`FilterCondition.NativeType` stamped by the catalog, persisted in
+saved JSON), chart data rows carry `keyColumns`. Break down by only offers drill columns (the click pins every plain column).
+Verified: net10 1489 + net8 1425 passed / 0 failed (PG group 352/352 each, separately); client 255; full browser acceptance
+(bars, pie, line/area taps, combo bands, keyboard, http copy link, tampered link → 0 rows, switch off, results-row drill,
+breakdown). Next: user decides merge/PR; release = Editor 2.2.0 + DBA script `QueryBuilder.schema.2.2.0.sql` (only when asked).
+Parked follow-ups: `EmptyTextIsValue` accepted from browser-sent definitions (no scope impact) → clear on Run/Export/Preview/Save;
+other stale `f` kinds 400 every tile; SQL Server `time` columns can't be filtered (pre-existing). Demo chart "Enrolments per
+program" in local `QueryBuilderAppDb` now has drill columns [Status, ProgramName]. The 2026-11-17 notes below are older.
+
+**2026-11-17, end of session: START HERE.** State: `main` = `f6281a8` (PRs #6–#9 merged). NuGet unchanged: **Editor 2.1.0,
+Launch 1.0.2** (nothing since touched either package). Next versions: Editor 2.1.1+, Launch 1.0.3+. Schema script still
+`QueryBuilder.schema.2.0.0.sql`. This `CLAUDE.md` has these notes UNCOMMITTED on `main` (PR-only): commit them on the next branch.
+- **Merged since 2026-11-15:** PR #6 Azure demo (simulator, setup script, Reset demo, App B cleanup, lock decision); PR #7
+  `fix/hub-cold-start` (`src/QueryBuilder.Hub/MetadataDatabaseWait.cs`: first hosted service, retries Azure SQL transient
+  errors incl. 40613 for `Hub:StartupDatabaseWaitSeconds` = 90 (0–110; 0 off) before migrations/mode guard; 10 tests in
+  `tests/.../HubHost/MetadataDatabaseWaitTests.cs`; `InternalsVisibleTo QueryBuilder.Tests` on the Hub csproj). **Proven on the
+  live demo 2026-11-16 17:54Z:** DB auto-paused + app asleep → log "not available yet (attempt 1 …)" → started successfully, first
+  request 52 s. Before the fix this crashed with 500.30 until a stop+start. PR #8 `marketing/carousel` (LinkedIn carousel + videos,
+  see below). PR #9 showcase dashboards (`demo/sql/programs-showcase.sql` + setup.mjs: "Program performance" and "Funnel and
+  outcomes", 11 more queries; applied to Azure, Reset baseline recaptured: 15 queries, 15 charts, 3 dashboards, 22 tiles).
+- **Unmerged:** `docs/after-azure-demo` — origin has only `e2289a4` (an older CLAUDE.md edit, superseded by these notes: close
+  that PR or resolve CLAUDE.md in favour of `main`). Local-only commit `1c2065c` on it adds `demo/VIDEO-BRIEF.md` (HyperFrames
+  hand-off for a 60 s LinkedIn 1:1 video, angle "one hub, every app") + a link in demo/README.md: cherry-pick it onto the next branch.
+- **Marketing (`marketing/carousel/`, README there):** 14-slide 1080×1350 carousel (`out/QueryBuilder-Hub-carousel.pdf` + `.pptx`
+  of full-bleed PNGs), design = "zoning plan + route of a request" in the Zoning Map world (Impeccable surface brief
+  `.impeccable/surfaces/marketing-carousel-carousel-html.md`, seed `0fb8a7ef`, record `.impeccable/mocks/decision/seed-0fb8a7ef.txt`;
+  three finish-review rounds, last item fixed after the last verdict). Rebuild: `node capture.cjs [code file]`, `node render.cjs`,
+  `node measure.cjs`, `node build-pptx.cjs <folder with pptxgenjs>`. Playwright via `%LOCALAPPDATA%\npm-cache\_npx\9833c18b2d85bc59`
+  with `executablePath` `%LOCALAPPDATA%\ms-playwright\chromium-1243\chrome-win64\chrome.exe` (the library's own browser isn't
+  installed). `.gitattributes` there marks pdf/pptx/mp4/png binary (git saw the PDF as text). User's videos:
+  `out/QueryBuilder-Hub-Teaser-15s-NoMusic.mp4`, `out/QueryBuilder-Hub-Final-NoMusic.mp4` (captions burned in; checked: no secrets).
+  A LinkedIn post text + first comment was drafted in chat (not saved); a post takes one attachment (PDF/PPTX or video).
+- **Open questions / offers (unanswered):**
+  1. Ship the ready-made Hub as a product: GitHub Release zip and/or container image (`QueryBuilder.Hub` is IsPackable=false;
+     customers must clone and `dotnet publish` today). Explained: Editor = embedded mode and the engine of every hub (incl.
+     custom hosts, Part B); apps that only launch users need only `QueryBuilder.Launch`.
+  2. Move `Microsoft.Data.SqlClient` (Editor, Infrastructure, demo) and `.Extensions.Azure` (Hub) from 7.1.0 to 7.1.1 together
+     (= Editor 2.1.1 + full net8/net10 test run). The Pkcs pin stays (SqlClient ≤ 7.1.1 still brings vulnerable versions).
+  3. Add `returnUrl` to the .NET 4.8 sample in `src/QueryBuilder.Launch/README.md` (line ~263 omits it). The user's App A shows
+     no "Back to …" link: cause = token without `returnUrl` (link needs `me.returnUrl` and a non-super-admin session,
+     `client/src/features/hub/HubBanner.tsx:29`); the URL must also be registered exactly (https, lowercase host, trailing `/`)
+     or the launch is refused `ReturnUrlNotRegistered`.
+  4. CSV formula injection (cells starting `= + - @`) still unanswered (see 2026-11-15 notes below).
+  5. Delete merged local branches: `feature/azure-demo`, `fix/hub-cold-start`, `marketing/linkedin-carousel`,
+     `feature/demo-showcase-dashboards`, `feature/chart-download`, `docs/launch-key-file`, `fix/launch-audience-check`.
+  6. Azure Free Trial ends 30 days after sign-up (date unknown): upgrade to pay-as-you-go or the demo goes offline.
+- **Demo operations cheatsheet:** secrets lived in the old job tmp folder (gone after /clear): app settings hold the hub/reader/
+  reset connection strings and the launch private key (`az webapp config appsettings list -g qb-demo -n <app>`); the `qbadmin`
+  password is in no setting — reset with `az sql server update -g qb-demo -n qb-demo-sql -p <new>`. Add this PC's IP to the
+  SQL firewall before sqlcmd (the refusal message prints it). Azure CLI must be signed in as nagendrachinnam2027@gmail.com
+  (`az login --tenant 3e45d4b8-52ab-4396-b236-ebdff0a9b64f`). Redeploy: `dotnet publish <proj> -c Release -o <dir>`, zip,
+  `az webapp deploy -g qb-demo -n qb-demo-hub|qb-demo-northwind --src-path <zip> --type zip`. A failed in-process start needs
+  `az webapp stop` + `start` (restart alone kept serving 500.30). Hub event log: `az rest --method get --url
+  https://qb-demo-hub.scm.azurewebsites.net/api/vfs/LogFiles/eventlog.xml --resource https://management.core.windows.net/`.
+  F1 has no Always On; first visit after idle ≈ 50 s (app wake + DB resume) — open the demo before posting/demoing.
+- **Windows gotcha (2026-11-17):** a PDF open in a viewer blocks `git switch`/`pull` ("unable to unlink … Invalid argument",
+  then "untracked working tree files would be overwritten"); compare `git hash-object` with `origin/main:<path>`, ask the user to
+  close the viewer, delete, pull. Never force-close programs you didn't start.
 - **2026-11-15: free public Azure demo LIVE (phase 1), branch `feature/azure-demo`.** Design
   `docs/superpowers/specs/2026-11-15-free-azure-demo-design.md`, guide `demo/README.md`. Northwind Programs simulator
   (`demo/NorthwindPrograms`, .NET 10, NuGet QueryBuilder.Launch 1.0.2, 4 people Alex/Mary/Raj/Lee) at
@@ -52,7 +117,7 @@ This `CLAUDE.md` has uncommitted edits (release notes); `main` is PR-only, so co
   `az webapp config appsettings list` if needed; never commit. The SQL admin (`qbadmin`) password is in no setting: reset it with
 `az sql server update -g qb-demo -n qb-demo-sql -p <new>` when needed. **Reset demo DONE** (`demo/sql/reset-setup.sql`: `demo` schema baseline + `demo.ResetNorthwind` EXECUTE AS OWNER, user `demo_reset` EXECUTE-only; app setting `ConnectionStrings__HubReset`; re-capture with `EXEC demo.CaptureNorthwindBaseline`). **App B cleanup DONE**
   (`demo/sql/remove-app.sql`, sqlcmd vars AppKey + Confirm; refuses northwind/Default/apps with SeenUsers). **Lock decided (user, 2026-11-15): the demo data source stays locked**
-  (prospects never try the scope-mapping screen; reset restores content only). Unverified: real cold start after an idle hour.
+  (prospects never try the scope-mapping screen; reset restores content only). Cold start now handled (PR #7, see top).
 - **The user's hub works end to end:** App A (.NET Framework 4.8, XML private key in `App_Data`, `QueryBuilderLaunchKey.Key`
   static class) launches into the Azure hub. The first refusals were `AppDisabled` (app not turned on in the console), then
   `WrongAudience` (`QueryBuilder:HubUrl` had a trailing `/`; fixed in App A, and Launch 1.0.2 now refuses it before signing).
@@ -72,7 +137,7 @@ This `CLAUDE.md` has uncommitted edits (release notes); `main` is PR-only, so co
   3. Older items still listed below: `TemplateBuilderClient` still on 1.3.0; whether to drop net8.0; PostgreSQL test group,
      real Entra/OIDC tenant and Azure SQL unverified; embedding charts in host pages; `LaunchSigningKey.FromPem` for 4.8;
      `docs/superpowers/plans/2026-11-12-hub-part4-questions.md`.
-- Untracked at the root, never commit: `.impeccable/`, `.playwright-mcp/`, `DESIGN.md`, `PRODUCT.md`, `MANAGING-KEYS.local.md`,
+- Untracked at the root, never commit: `.impeccable/`, `.playwright-mcp/`, `.superpowers/`, `DESIGN.md`, `PRODUCT.md`, `MANAGING-KEYS.local.md`,
   `Notes.txt`, `Sample-AppUsers.sql`, `Sample-DataScope.sql`, `reports/`, `research_notes/`. Local `nupkg/` holds the released
   packages (the local `QueryBuilder.Launch.1.0.1.nupkg` was repacked after release and differs from NuGet's; never push it).
 

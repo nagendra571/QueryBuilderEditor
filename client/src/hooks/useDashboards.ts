@@ -48,11 +48,12 @@ export function useRenameDashboard(id: string) {
     mutationFn: (request: SaveDashboardRequest) => dashboardsApi.rename(id, request),
     onSuccess: (saved) => {
       queryClient.setQueryData(dashboardKey(id), saved)
+      queryClient.invalidateQueries({ queryKey: dashboardKey(id) })
       queryClient.invalidateQueries({ queryKey: dashboardsKey })
-      toast.success('Dashboard renamed.')
+      toast.success('Dashboard updated.')
     },
     onError: (error) => {
-      if (!isVersionConflict(error)) toast.error(message(error, 'Could not rename the dashboard.'))
+      if (!isVersionConflict(error)) toast.error(message(error, 'Could not update the dashboard.'))
     },
   })
 }

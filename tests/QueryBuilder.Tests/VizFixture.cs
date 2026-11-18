@@ -46,6 +46,7 @@ internal sealed class VizFixture
     public FakeDataSources DataSources { get; }
     public RecordLimitSettings Limits { get; set; } = new(null);
     public int? AppCeiling { get; set; }
+    public FakeDashboardRepository Dashboards { get; } = new();
 
     public VizFixture()
     {
@@ -89,7 +90,7 @@ internal sealed class VizFixture
         return new(
             Queries, Visualizations, DataSources, Catalog, Builders, Executor, Guard, Limits, new FakeAppSettings(AppCeiling), User,
             new QueryBuilder.Application.Parameters.ParameterBinder(null!, TimeProvider.System),
-            grant, new QueryBuilder.Application.Dashboards.DashboardGrantResolver(null!, grant));
+            grant, new QueryBuilder.Application.Dashboards.DashboardGrantResolver(Dashboards, grant));
     }
 
     public static VisualizationOptions BarOptions() => new() { X = "Region", Measures = ["Total"] };
@@ -107,12 +108,26 @@ internal sealed class VizFixture
         return new QueryResultSet { Columns = cols, Rows = list, Truncated = truncated, ExecutionTimeMs = 3 };
     }
 
+    public sealed class FakeDashboardRepository : IDashboardRepository
+    {
+        public List<Dashboard> Items { get; } = [];
+        public Task<Dashboard?> GetByIdAsync(Guid id, CancellationToken cancellationToken) => Task.FromResult(Items.FirstOrDefault(d => d.Id == id));
+        public Task<List<Dashboard>> ListForUserAsync(QueryBuilder.Application.Common.AccessActor actor, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task AddAsync(Dashboard dashboard, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public void Remove(Dashboard dashboard) => throw new NotSupportedException();
+        public Task AddTileAsync(DashboardTile tile, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public void RemoveTile(DashboardTile tile) => throw new NotSupportedException();
+        public Task AddShareAsync(DashboardShare share, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public void RemoveShare(DashboardShare share) => throw new NotSupportedException();
+        public Task<int> SaveChangesAsync(CancellationToken cancellationToken) => throw new NotSupportedException();
+    }
+
     public sealed class FakeUser : ICurrentUserService
     {
         public string UserId { get; set; } = string.Empty;
         public string DisplayName => UserId;
         public string? Email => null;
-        public QueryBuilder.Domain.Enums.HubRole? Role => null;
+        public QueryBuilder.Domain.Enums.HubRole? Role { get; set; }
         public bool IsSuperAdmin => false;
     }
 
@@ -180,10 +195,14 @@ internal sealed class VizFixture
     public sealed class FakeCatalog : IDataCatalogService
     {
         public int ValidateCalls { get; private set; }
-        public Task<DataSourceCatalog> GetCatalogAsync(Guid dataSourceId, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public QueryDefinition? LastValidated { get; private set; }
+        public DataSourceCatalog? Catalog { get; set; }
+        public Task<DataSourceCatalog> GetCatalogAsync(Guid dataSourceId, CancellationToken cancellationToken) =>
+            Catalog is null ? throw new NotSupportedException() : Task.FromResult(Catalog);
         public Task ValidateAsync(Guid dataSourceId, QueryDefinition definition, CancellationToken cancellationToken)
         {
             ValidateCalls++;
+            LastValidated = definition;
             return Task.CompletedTask;
         }
         public Task<List<SchemaObjectMetadata>> GetRawObjectsAsync(Guid dataSourceId, CancellationToken cancellationToken) => throw new NotSupportedException();
@@ -195,10 +214,12 @@ internal sealed class VizFixture
     {
         public IReadOnlyList<ScopePredicate> Predicates { get; set; } = [];
         public int AuthorizeCalls { get; private set; }
+        public QueryDefinition? ReceivedDefinition { get; private set; }
         public Task<DataSourceCatalog> FilterCatalogAsync(DataSourceCatalog catalog, CancellationToken cancellationToken) => Task.FromResult(catalog);
         public Task<IReadOnlyList<ScopePredicate>> AuthorizeAsync(Guid dataSourceId, QueryDefinition definition, CancellationToken cancellationToken)
         {
             AuthorizeCalls++;
+            ReceivedDefinition = definition;
             return Task.FromResult(Predicates);
         }
     }

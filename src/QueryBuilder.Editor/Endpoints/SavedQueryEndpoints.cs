@@ -4,6 +4,7 @@ using QueryBuilder.Application.Abstractions;
 using QueryBuilder.Application.Commands.SavedQueries;
 using QueryBuilder.Application.DataSources;
 using QueryBuilder.Application.Dtos;
+using QueryBuilder.Application.Drill;
 using QueryBuilder.Application.Parameters;
 using QueryBuilder.Application.Queries.SavedQueries;
 
@@ -50,6 +51,27 @@ public static class SavedQueryEndpoints
         group.MapGet("/{id:guid}/parameters/{name}/options", async (Guid id, string name, Guid? dashboardId, Guid? tileId, ISender sender, CancellationToken ct) =>
             Results.Json(await sender.Send(new GetParameterOptionsQuery(id, name, dashboardId, tileId), ct), QueryBuilderJson.Options))
             .AllowViewers();
+
+        // No AllowViewers: a hub Viewer has no query page, and the saved query's own share is the only grant here.
+        group.MapPost("/{id:guid}/drill", async (Guid id, HttpContext http, ISender sender, CancellationToken ct) =>
+        {
+            var request = await http.Request.ReadFromJsonAsync<DrillQueryRequest>(QueryBuilderJson.Options, ct)
+                ?? throw new BadHttpRequestException("Request body is required.");
+            var data = await sender.Send(new DrillQueryCommand(id, request.Steps ?? [], request.ParameterValues ?? []), ct);
+            return Results.Json(data, QueryBuilderJson.Options);
+        });
+
+        group.MapPost("/{id:guid}/drill/export", async (Guid id, HttpContext http, ISender sender, CancellationToken ct) =>
+        {
+            var request = await http.Request.ReadFromJsonAsync<DrillQueryExportRequest>(QueryBuilderJson.Options, ct)
+                ?? throw new BadHttpRequestException("Request body is required.");
+            if (!ExportFormats.TryParse(request.Format, out var format))
+            {
+                throw new BadHttpRequestException("'format' must be 'csv' or 'xlsx'.");
+            }
+            var result = await sender.Send(new ExportDrillQueryCommand(id, request.Steps ?? [], request.ParameterValues ?? [], format), ct);
+            return Results.File(result.Content, result.ContentType, result.FileName);
+        });
 
         group.MapGet("/{id:guid}/shares", async (Guid id, ISender sender, CancellationToken ct) =>
             Results.Json(await sender.Send(new GetQuerySharesQuery(id), ct), QueryBuilderJson.Options));

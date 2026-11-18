@@ -26,6 +26,7 @@ public sealed class VisualizationOptions
     public TableOptions? Table { get; set; }
     public PivotOptions? Pivot { get; set; }
     public ValueFormat? Format { get; set; }
+    public DrillOptions? Drill { get; set; }
 
     /// <summary>A crafted body can send <c>null</c> for any list; everything downstream assumes a list.</summary>
     public void Normalize()
@@ -33,12 +34,19 @@ public sealed class VisualizationOptions
         Measures ??= [];
         LineMeasures ??= [];
         if (Table is not null) Table.Columns ??= [];
+        if (Drill is not null) Drill.Columns ??= [];
         if (Pivot is not null)
         {
             Pivot.Rows ??= [];
             Pivot.Values ??= [];
         }
     }
+}
+
+/// <summary>Source-object columns a viewer sees when drilling into this chart, on top of the query's own columns.</summary>
+public sealed class DrillOptions
+{
+    public List<string> Columns { get; set; } = [];
 }
 
 public sealed class TableOptions
