@@ -40,7 +40,7 @@ public sealed class EnrolmentSqlServerDatabase : IAsyncLifetime
                 CREATE TABLE dbo.Enrolments(
                     Id int NOT NULL PRIMARY KEY, ProgramId int NOT NULL, Status nvarchar(20) NULL, Site nvarchar(20) NOT NULL,
                     Amount decimal(10,2) NOT NULL, Score float NOT NULL, EnrolledOn datetime2 NOT NULL,
-                    SeenAt datetimeoffset NOT NULL, Note nvarchar(50) NOT NULL)
+                    SeenAt datetimeoffset NOT NULL, Note nvarchar(50) NOT NULL, LegacyOn datetime NOT NULL)
                 """;
             await table.ExecuteNonQueryAsync();
         }
@@ -48,7 +48,7 @@ public sealed class EnrolmentSqlServerDatabase : IAsyncLifetime
         foreach (var row in Seed)
         {
             await using var insert = connection.CreateCommand();
-            insert.CommandText = "INSERT dbo.Enrolments VALUES (@id, @program, @status, @site, @amount, @score, @enrolled, @seen, @note)";
+            insert.CommandText = "INSERT dbo.Enrolments VALUES (@id, @program, @status, @site, @amount, @score, @enrolled, @seen, @note, @legacy)";
             insert.Parameters.Add(new SqlParameter("@id", row.Id));
             insert.Parameters.Add(new SqlParameter("@program", row.ProgramId));
             insert.Parameters.Add(new SqlParameter("@status", (object?)row.Status ?? DBNull.Value));
@@ -58,6 +58,7 @@ public sealed class EnrolmentSqlServerDatabase : IAsyncLifetime
             insert.Parameters.Add(new SqlParameter("@enrolled", SqlDbType.DateTime2) { Value = row.EnrolledOn });
             insert.Parameters.Add(new SqlParameter("@seen", SqlDbType.DateTimeOffset) { Value = row.SeenAt });
             insert.Parameters.Add(new SqlParameter("@note", row.Note));
+            insert.Parameters.Add(new SqlParameter("@legacy", SqlDbType.DateTime) { Value = row.LegacyOn });
             await insert.ExecuteNonQueryAsync();
         }
     }
@@ -88,7 +89,8 @@ public class DrillScopeSqlServerTests(EnrolmentSqlServerDatabase db) : IClassFix
     }
 
     private DrillHarness Harness(Persona persona) =>
-        new(DataSourceProvider.SqlServer, "dbo", "Enrolments", new SqlServerQueryExecutionService(new FixedConnection(db.ConnectionString)), persona);
+        new(DataSourceProvider.SqlServer, "dbo", "Enrolments", new SqlServerQueryExecutionService(new FixedConnection(db.ConnectionString)), persona,
+            new QueryBuilder.Infrastructure.Catalog.SqlServerCatalogReader(), new FixedConnection(db.ConnectionString));
 
     [MetadataSqlFact]
     public async Task Unrestricted_user_matrix() => Assert.True(await DrillScopeChecks.RunMatrixAsync(Harness(Persona.Unrestricted), db.Seed) > 0);
@@ -125,6 +127,37 @@ public class DrillScopeSqlServerTests(EnrolmentSqlServerDatabase db) : IClassFix
     [MetadataSqlFact]
     public Task Datetimeoffset_value_from_chart_data_round_trips_to_the_same_rows() =>
         DrillScopeChecks.ChartValueRoundTripsAsync(Harness(Persona.Unrestricted), "SeenAt", ColumnDataType.DateTime, minimumGroups: 4);
+
+    [MetadataSqlFact]
+    public Task Legacy_datetime_value_with_milliseconds_round_trips_to_the_same_rows() =>
+        DrillScopeChecks.ChartValueRoundTripsAsync(Harness(Persona.Unrestricted), "LegacyOn", ColumnDataType.DateTime, minimumGroups: 10);
+
+    [MetadataSqlFact]
+    public async Task An_ordinary_filter_on_a_legacy_datetime_column_matches_milliseconds()
+    {
+        var h = Harness(Persona.Unrestricted);
+        foreach (var ms in new[] { 123, 500, 997 })
+        {
+            var wanted = new DateTime(2024, 3, 1, 10, 30, 0).AddMilliseconds(ms);
+            var expected = db.Seed.Count(r => r.LegacyOn == wanted);
+            var value = wanted.ToString("yyyy-MM-ddTHH:mm:ss.fff", System.Globalization.CultureInfo.InvariantCulture);
+
+            Assert.True(expected > 0);
+            Assert.Equal(expected, await DrillScopeChecks.FilteredCountAsync(h, "LegacyOn", ColumnDataType.DateTime, value));
+        }
+    }
+
+    [MetadataSqlFact]
+    public async Task An_ordinary_blank_text_filter_still_means_no_value_while_a_drill_on_empty_finds_the_empty_string()
+    {
+        var h = Harness(Persona.Unrestricted);
+
+        Assert.Equal(0, await DrillScopeChecks.FilteredCountAsync(h, "Status", ColumnDataType.Text, ""));
+        Assert.Equal(0, await DrillScopeChecks.FilteredCountAsync(h, "Status", ColumnDataType.Text, "", FilterOperator.NotEquals));
+        var drilled = await h.DrillAsync(h.WithDrillColumns, DrillAction.Rows, [new DrillStep("Status", "")]);
+        Assert.Equal(db.Seed.Count(r => r.Status == ""), drilled.RowCount);
+        Assert.NotEqual(0, drilled.RowCount);
+    }
 
     [MetadataSqlFact]
     public Task Float_step_matches_its_row() =>

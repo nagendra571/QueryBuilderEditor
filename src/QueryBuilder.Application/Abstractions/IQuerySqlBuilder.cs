@@ -25,4 +25,6 @@ public sealed record GeneratedQueryParameter(
     ColumnDataType DataType,
     string? LiteralValue,
     bool IsRuntimeParameter,
-    string? RuntimeParameterName);
+    string? RuntimeParameterName,
+    string? NativeSqlType = null,
+    bool EmptyTextIsValue = false);

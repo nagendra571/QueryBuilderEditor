@@ -35,7 +35,7 @@ public sealed class SqlServerQueryExecutionService(IConnectionStringResolver con
             await using var command = new SqlCommand(sql, connection) { CommandTimeout = 60 };
             foreach (var parameter in generatedQuery.Parameters)
             {
-                command.Parameters.Add(CreateParameter(parameter.Name, QueryParameterValues.Resolve(parameter, runtimeParameterValues)));
+                command.Parameters.Add(CreateParameter(parameter.Name, QueryParameterValues.Resolve(parameter, runtimeParameterValues), parameter.NativeSqlType));
             }
 
             await using var reader = await command.ExecuteReaderAsync(cancellationToken);
@@ -92,11 +92,13 @@ public sealed class SqlServerQueryExecutionService(IConnectionStringResolver con
         }
     }
 
-    /// <summary>A bare <see cref="DateTime"/> is sent as <c>datetime</c>, which rounds to 1/300 s: a value copied from a datetime2
-    /// column's chart (".1234567") would then match no row. Fractions of a second go as datetime2; whole seconds stay as before
-    /// so an index on a legacy datetime column is still used.</summary>
-    internal static SqlParameter CreateParameter(string name, object value) =>
+    /// <summary>A bare <see cref="DateTime"/> is sent as <c>datetime</c>, which rounds to 1/300 s: right for a datetime column
+    /// (its own values are on that grid, so ".123" matches), wrong for datetime2 and datetimeoffset, whose ".1234567" would match
+    /// no row. So the column's native type decides, and an unknown type keeps the old datetime binding.</summary>
+    internal static SqlParameter CreateParameter(string name, object value, string? nativeType = null) =>
         value is DateTime date && date.Ticks % TimeSpan.TicksPerSecond != 0
+        && nativeType is not null && (nativeType.Equals("datetime2", StringComparison.OrdinalIgnoreCase)
+                                      || nativeType.Equals("datetimeoffset", StringComparison.OrdinalIgnoreCase))
             ? new SqlParameter(name, System.Data.SqlDbType.DateTime2) { Value = date }
             : new SqlParameter(name, value);
 

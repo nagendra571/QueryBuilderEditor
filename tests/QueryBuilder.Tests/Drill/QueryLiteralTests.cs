@@ -85,9 +85,13 @@ public class QueryLiteralTests
         Assert.Equal(new DateTime(2024, 3, 1), Bind(ColumnDataType.Date, "2024-02-29T22:00:00-08:00"));
 
     [Fact]
-    public void An_empty_text_value_binds_as_an_empty_string_but_other_types_stay_null()
+    public void An_empty_value_is_null_unless_a_drill_step_says_it_is_the_empty_string()
     {
-        Assert.Equal("", Bind(ColumnDataType.Text, ""));
+        Assert.Equal(DBNull.Value, Bind(ColumnDataType.Text, ""));
+        Assert.Equal("", QueryParameterValues.Resolve(
+            new GeneratedQueryParameter("@p", ColumnDataType.Text, "", false, null, null, EmptyTextIsValue: true), NoRuntime));
+        Assert.Equal(DBNull.Value, QueryParameterValues.Resolve(
+            new GeneratedQueryParameter("@p", ColumnDataType.Number, "", false, null, null, EmptyTextIsValue: true), NoRuntime));
         Assert.Equal(DBNull.Value, Bind(ColumnDataType.Number, ""));
         Assert.Equal(DBNull.Value, Bind(ColumnDataType.DateTime, ""));
         Assert.Equal(DBNull.Value, Bind(ColumnDataType.Text, null));
@@ -126,13 +130,16 @@ public class QueryLiteralTests
         Assert.All(Enum.GetValues<ColumnDataType>(), t => Assert.True(DrillDefinitions.IsValidValue(t, null)));
 
     [Fact]
-    public void A_fraction_of_a_second_is_sent_as_datetime2_and_a_whole_second_as_before()
+    public void The_columns_native_type_decides_how_a_fractional_date_time_is_bound()
     {
-        var fraction = SqlServerQueryExecutionService.CreateParameter("@p", new DateTime(2024, 3, 1, 10, 30, 0).AddTicks(1234567));
-        var whole = SqlServerQueryExecutionService.CreateParameter("@p", new DateTime(2024, 3, 1, 10, 30, 0));
-        var number = SqlServerQueryExecutionService.CreateParameter("@p", 5m);
+        var fraction = new DateTime(2024, 3, 1, 10, 30, 0).AddTicks(1234567);
+        var whole = SqlServerQueryExecutionService.CreateParameter("@p", new DateTime(2024, 3, 1, 10, 30, 0), "datetime2");
+        var number = SqlServerQueryExecutionService.CreateParameter("@p", 5m, null);
 
-        Assert.Equal(SqlDbType.DateTime2, fraction.SqlDbType);
+        Assert.Equal(SqlDbType.DateTime2, SqlServerQueryExecutionService.CreateParameter("@p", fraction, "datetime2").SqlDbType);
+        Assert.Equal(SqlDbType.DateTime2, SqlServerQueryExecutionService.CreateParameter("@p", fraction, "datetimeoffset").SqlDbType);
+        Assert.Equal(SqlDbType.DateTime, SqlServerQueryExecutionService.CreateParameter("@p", fraction, "datetime").SqlDbType);
+        Assert.Equal(SqlDbType.DateTime, SqlServerQueryExecutionService.CreateParameter("@p", fraction, null).SqlDbType);
         Assert.Equal(SqlDbType.DateTime, whole.SqlDbType);
         Assert.Equal(SqlDbType.Decimal, number.SqlDbType);
     }

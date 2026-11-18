@@ -159,6 +159,15 @@ internal static class DrillScopeChecks
         Assert.All(drilled.Rows, r => Assert.Null(r["Status"]));
     }
 
+    /// <summary>An ordinary saved filter (not a drill) on a column, run through the same chart path: the number of rows it keeps.</summary>
+    public static async Task<long> FilteredCountAsync(DrillHarness h, string column, ColumnDataType type, string? value, FilterOperator op = FilterOperator.Equals)
+    {
+        var filter = new FilterCondition { TableAlias = DrillHarness.Alias, ColumnName = column, DataType = type, Operator = op, Value = value };
+        var (query, viz) = h.AddGroupedChart(column, type, filter);
+        var chart = await h.RenderAsync(query, viz);
+        return chart.Rows.Sum(r => Convert.ToInt64(r["N"], CultureInfo.InvariantCulture));
+    }
+
     /// <summary>The cell of every chart row, copied from the JSON the endpoint would send, narrows the rows to exactly the number
     /// the chart said it had.</summary>
     public static async Task ChartValueRoundTripsAsync(DrillHarness h, string column, ColumnDataType type, int minimumGroups)

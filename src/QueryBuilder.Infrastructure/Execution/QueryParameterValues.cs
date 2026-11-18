@@ -26,14 +26,14 @@ public static class QueryParameterValues
             rawValue = supplied;
         }
 
-        return ConvertValue(parameter.DataType, rawValue, wholeNumbersAsLong);
+        return ConvertValue(parameter.DataType, rawValue, wholeNumbersAsLong, parameter.EmptyTextIsValue);
     }
 
-    private static object ConvertValue(ColumnDataType dataType, string? rawValue, bool wholeNumbersAsLong)
+    private static object ConvertValue(ColumnDataType dataType, string? rawValue, bool wholeNumbersAsLong, bool emptyTextIsValue)
     {
-        // An empty text value is a value, not "no value": a chart groups empty strings apart from NULL, and drilling into that
-        // group must find them (= NULL would match nothing). Every other type has no empty literal.
-        if (rawValue is null || (rawValue.Length == 0 && dataType != ColumnDataType.Text))
+        // Empty means NULL everywhere except a drill step on text: a chart groups empty strings apart from NULL, and drilling
+        // into that group must find them. Saved filters keep their old meaning, so existing queries return the same rows.
+        if (rawValue is null || (rawValue.Length == 0 && !(emptyTextIsValue && dataType == ColumnDataType.Text)))
         {
             return DBNull.Value;
         }

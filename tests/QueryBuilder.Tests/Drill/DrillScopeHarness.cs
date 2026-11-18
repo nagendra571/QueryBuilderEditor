@@ -16,7 +16,7 @@ using QueryBuilder.Infrastructure.Sql;
 namespace QueryBuilder.Tests.Drill;
 
 internal sealed record EnrolmentRow(
-    int Id, int ProgramId, string? Status, string Site, decimal Amount, double Score, DateTime EnrolledOn, DateTimeOffset SeenAt, string Note);
+    int Id, int ProgramId, string? Status, string Site, decimal Amount, double Score, DateTime EnrolledOn, DateTimeOffset SeenAt, string Note, DateTime LegacyOn);
 
 /// <summary>60 enrolments over programs 10, 20 and 30, shared by the SQL Server and PostgreSQL zone tests so both prove the same
 /// guarantee against the same expected answers. Fractions of a second and extreme floats are there on purpose: they are what a
@@ -38,8 +38,11 @@ internal static class EnrolmentSeed
                 .AddTicks(id % 2 == 0 ? fractionTicks : id % 3 == 0 ? 5_000_000 : 0);
             var instant = new DateTimeOffset(2024, 3, 1, 5, 0, 0, TimeSpan.Zero).AddHours(id % 4).AddTicks(fractionTicks);
             var seen = instant.ToOffset(id % 2 == 0 ? TimeSpan.FromMinutes(330) : TimeSpan.FromHours(-8));
+            // Milliseconds as GETDATE() stores them in a classic datetime column (its 1/300 s grid includes .123, .500 and .997).
+            var legacy = new DateTime(2024, 3, 1, 10, 30, 0, DateTimeKind.Unspecified).AddDays(id % 3)
+                .AddMilliseconds(new[] { 0, 123, 500, 997, 7 }[id % 5]);
             rows.Add(new EnrolmentRow(
-                id, 10 * ((id % 3) + 1), status, Sites[id % 4], ((id % 7) + 1) * 1.10m, score, enrolled, seen, $"note {id}"));
+                id, 10 * ((id % 3) + 1), status, Sites[id % 4], ((id % 7) + 1) * 1.10m, score, enrolled, seen, $"note {id}", legacy));
         }
         return rows;
     }
@@ -81,13 +84,19 @@ internal sealed class DrillHarness
 
     public static readonly string[] DrillColumns = ["ProgramId", "Amount", "Score", "EnrolledOn", "SeenAt"];
 
-    public DrillHarness(DataSourceProvider provider, string schema, string table, IQueryExecutionService executor, Persona persona)
+    public DrillHarness(
+        DataSourceProvider provider, string schema, string table, IQueryExecutionService executor, Persona persona,
+        QueryBuilder.Infrastructure.Catalog.ICatalogReader catalogReader, QueryBuilder.Infrastructure.Persistence.IConnectionStringResolver connection)
     {
         Schema = schema;
         Table = table;
         Persona = persona;
-        DataSource = new DataSource { Name = "Enrolments", Provider = provider };
-        Catalog.Catalog = BuildCatalog(provider);
+        DataSource = new DataSource { Name = "Enrolments", Provider = provider, CatalogScope = CatalogScope.TablesAndViews };
+        DataSources = new VizFixture.FakeDataSources(DataSource);
+        // The real catalog service and reader: column types (and the native SQL type) come from the database itself.
+        Catalog = new QueryBuilder.Infrastructure.Catalog.DataCatalogService(
+            DataSources, connection, [catalogReader], new Microsoft.Extensions.Caching.Memory.MemoryCache(new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions()),
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<QueryBuilder.Infrastructure.Catalog.DataCatalogService>.Instance);
 
         IQuerySqlBuilder builder = provider == DataSourceProvider.PostgreSql ? new PostgresQuerySqlBuilder() : new SqlServerQuerySqlBuilder();
         Builders = new VizFixture.FakeBuilderFactory(builder);
@@ -96,7 +105,6 @@ internal sealed class DrillHarness
 
         Query = NewQuery("Enrolments by site", Aggregated());
         Queries = new VizFixture.FakeSavedQueries(Query);
-        DataSources = new VizFixture.FakeDataSources(DataSource);
         Query.DataSourceId = DataSource.Id;
         Query.DataSource = DataSource;
 
@@ -132,7 +140,7 @@ internal sealed class DrillHarness
     public string Table { get; }
     public Persona Persona { get; }
     public DataSource DataSource { get; }
-    public VizFixture.FakeCatalog Catalog { get; } = new();
+    public IDataCatalogService Catalog { get; }
     public VizFixture.FakeGuard Guard { get; } = new();
     public VizFixture.FakeUser User { get; } = new();
     public VizFixture.FakeAudit Audit { get; } = new();
@@ -150,36 +158,6 @@ internal sealed class DrillHarness
     public Dashboard Dashboard { get; }
     public DashboardTile TargetTile { get; }
     public DashboardTile SourceTile { get; }
-
-    private DataSourceCatalog BuildCatalog(DataSourceProvider provider)
-    {
-        ColumnMetadata Col(string name, ColumnDataType type) => new() { Name = name, DataType = type };
-        return new DataSourceCatalog
-        {
-            DataSourceId = DataSource.Id,
-            Provider = provider,
-            Schemas =
-            [
-                new SchemaMetadata
-                {
-                    Name = Schema,
-                    Objects =
-                    [
-                        new SchemaObjectMetadata
-                        {
-                            SchemaName = Schema, Name = Table, Kind = SchemaObjectKind.Table,
-                            Columns =
-                            [
-                                Col("Id", ColumnDataType.Number), Col("ProgramId", ColumnDataType.Number), Col("Status", ColumnDataType.Text),
-                                Col("Site", ColumnDataType.Text), Col("Amount", ColumnDataType.Number), Col("Score", ColumnDataType.Number),
-                                Col("EnrolledOn", ColumnDataType.DateTime), Col("SeenAt", ColumnDataType.DateTime), Col("Note", ColumnDataType.Text)
-                            ]
-                        }
-                    ]
-                }
-            ]
-        };
-    }
 
     private SavedQuery NewQuery(string name, QueryDefinition definition) => new()
     {
@@ -234,9 +212,11 @@ internal sealed class DrillHarness
     }
 
     /// <summary>Adds a saved query and bar chart grouped by <paramref name="column"/>, returned as a standalone harness slice.</summary>
-    public (SavedQuery Query, QueryVisualization Viz) AddGroupedChart(string column, ColumnDataType type)
+    public (SavedQuery Query, QueryVisualization Viz) AddGroupedChart(string column, ColumnDataType type, FilterCondition? filter = null)
     {
-        var query = NewQuery($"By {column}", Grouped(column, type));
+        var definition = Grouped(column, type);
+        if (filter is not null) definition.Filters.Conditions.Add(filter);
+        var query = NewQuery($"By {column}", definition);
         var viz = AddViz(query, new VisualizationOptions { X = column, Measures = ["N"] });
         return (query, viz);
     }

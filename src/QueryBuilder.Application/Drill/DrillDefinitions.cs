@@ -234,6 +234,7 @@ public static class DrillDefinitions
                 throw new CatalogValidationException($"'{step.Value}' is not a valid {dataType} value for '{step.Column}'.");
             condition.Operator = FilterOperator.Equals;
             condition.Value = step.Value;
+            condition.EmptyTextIsValue = step.Value.Length == 0;
         }
         return condition;
     }

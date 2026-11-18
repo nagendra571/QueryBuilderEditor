@@ -40,7 +40,7 @@ public sealed class EnrolmentPostgresDatabase : IAsyncLifetime
             CREATE TABLE public."Enrolments"(
                 "Id" int NOT NULL PRIMARY KEY, "ProgramId" int NOT NULL, "Status" varchar(20) NULL, "Site" varchar(20) NOT NULL,
                 "Amount" numeric(10,2) NOT NULL, "Score" double precision NOT NULL, "EnrolledOn" timestamp NOT NULL,
-                "SeenAt" timestamptz NOT NULL, "Note" varchar(50) NOT NULL)
+                "SeenAt" timestamptz NOT NULL, "Note" varchar(50) NOT NULL, "LegacyOn" timestamp NOT NULL)
             """, db))
         {
             await table.ExecuteNonQueryAsync();
@@ -49,7 +49,7 @@ public sealed class EnrolmentPostgresDatabase : IAsyncLifetime
         foreach (var row in Seed)
         {
             await using var insert = new NpgsqlCommand(
-                "INSERT INTO public.\"Enrolments\" VALUES (@id, @program, @status, @site, @amount, @score, @enrolled, @seen, @note)", db);
+                "INSERT INTO public.\"Enrolments\" VALUES (@id, @program, @status, @site, @amount, @score, @enrolled, @seen, @note, @legacy)", db);
             insert.Parameters.AddWithValue("id", row.Id);
             insert.Parameters.AddWithValue("program", row.ProgramId);
             insert.Parameters.Add(new NpgsqlParameter("status", NpgsqlDbType.Varchar) { Value = (object?)row.Status ?? DBNull.Value });
@@ -59,6 +59,7 @@ public sealed class EnrolmentPostgresDatabase : IAsyncLifetime
             insert.Parameters.Add(new NpgsqlParameter("enrolled", NpgsqlDbType.Timestamp) { Value = DateTime.SpecifyKind(row.EnrolledOn, DateTimeKind.Unspecified) });
             insert.Parameters.Add(new NpgsqlParameter("seen", NpgsqlDbType.TimestampTz) { Value = row.SeenAt.UtcDateTime });
             insert.Parameters.AddWithValue("note", row.Note);
+            insert.Parameters.Add(new NpgsqlParameter("legacy", NpgsqlDbType.Timestamp) { Value = DateTime.SpecifyKind(row.LegacyOn, DateTimeKind.Unspecified) });
             await insert.ExecuteNonQueryAsync();
         }
     }
@@ -86,7 +87,9 @@ public class DrillScopePostgresTests(EnrolmentPostgresDatabase db) : IClassFixtu
 
     private DrillHarness Harness(Persona persona) =>
         new(DataSourceProvider.PostgreSql, "public", "Enrolments",
-            new PostgresQueryExecutionService(new FixedConnection(db.ConnectionString), NullLogger<PostgresQueryExecutionService>.Instance), persona);
+            new PostgresQueryExecutionService(new FixedConnection(db.ConnectionString), NullLogger<PostgresQueryExecutionService>.Instance), persona,
+            new QueryBuilder.Infrastructure.Catalog.PostgresCatalogReader(NullLogger<QueryBuilder.Infrastructure.Catalog.PostgresCatalogReader>.Instance),
+            new FixedConnection(db.ConnectionString));
 
     [PostgresFact]
     public async Task Unrestricted_user_matrix() => Assert.True(await DrillScopeChecks.RunMatrixAsync(Harness(Persona.Unrestricted), db.Seed) > 0);
