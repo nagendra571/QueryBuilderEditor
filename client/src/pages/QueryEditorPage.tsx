@@ -56,6 +56,7 @@ export function QueryEditorPage() {
 
   const store = useBuilderStore()
   const { definition, dataSourceId, name, description, queryId } = store
+  const isDirty = useBuilderStore((state) => state.isDirty)
 
   const [sqlDialogOpen, setSqlDialogOpen] = useState(false)
   const [saveDialogOpen, setSaveDialogOpen] = useState(false)
@@ -188,6 +189,7 @@ export function QueryEditorPage() {
       queryClient.invalidateQueries({ queryKey: visualizationDataPrefix(queryId ?? result.id) })
       // Dashboard tiles under the hub read the chart and its parameters through the dashboard.
       queryClient.invalidateQueries({ queryKey: ['tile-chart'] })
+      queryClient.invalidateQueries({ queryKey: ['drill'] })
       if (!queryId) navigate(`/queries/${result.id}`, { replace: true })
     },
     onError: (error) => toast.error(error instanceof ApiError ? error.message : 'Could not save the query.'),
@@ -205,6 +207,7 @@ export function QueryEditorPage() {
       queryClient.invalidateQueries({ queryKey: visualizationDataPrefix(queryId!) })
       // Dashboard tiles under the hub read the chart and its parameters through the dashboard.
       queryClient.invalidateQueries({ queryKey: ['tile-chart'] })
+      queryClient.invalidateQueries({ queryKey: ['drill'] })
     },
     onError: (error) => toast.error(error instanceof ApiError ? error.message : 'Could not update the query.'),
   })
@@ -244,10 +247,9 @@ export function QueryEditorPage() {
     exportMutation.mutate({ format, exportValues: parameterValues })
   }
 
-  // The server rebuilds the drill from the saved query, so the grid may only drill while it shows exactly that query.
-  const unchangedFromSaved = !!savedDefinition && JSON.stringify(definition) === JSON.stringify(savedDefinition)
+  // The server rebuilds the drill from the saved query, so the grid may only drill while the editor has no unsaved changes.
   const gridDrill =
-    queryId && unchangedFromSaved && !isDisabled && runMutation.data && isAggregated(runMutation.data.columns)
+    queryId && !!savedDefinition && !isDirty && !isDisabled && runMutation.data && isAggregated(runMutation.data.columns)
       ? (row: Record<string, unknown>) => {
           const steps = rowSteps(runMutation.data!.columns, row)
           if (!steps) {

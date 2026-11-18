@@ -312,6 +312,7 @@ export function DashboardPage() {
     for (const tile of dashboard.tiles) {
       if (!tile.chart) continue
       queryClient.invalidateQueries({ queryKey: [...visualizationDataPrefix(tile.chart.savedQueryId), tile.chart.visualizationId] })
+      queryClient.invalidateQueries({ queryKey: ['drill'] })
       queryClient.invalidateQueries({ queryKey: ['saved-query', tile.chart.savedQueryId] })
     }
     // Access can change between refreshes, so a tile may turn restricted (or stop being so).
