@@ -151,7 +151,7 @@ export function CartesianView({
   // every line has the same row there; the dot under the pointer covers the rest.
   const lineKeys = (type === 'combo' ? model.series.filter((s) => (options.lineMeasures ?? []).includes(s.label)) : model.series).map((s) => s.key)
   const geometry = useRef<PlotGeometry | null>(null)
-  const reporter = <PlotGeometryReporter labels={model.points.map((p) => p.x)} into={geometry} />
+  const reporter = <PlotGeometryReporter labels={model.points.map((p) => p.x)} into={geometry} banded={type === 'combo' && lineKeys.length < model.series.length} />
   const chartClick = drill && (type === 'line' || type === 'area' || type === 'combo')
     ? {
         style: pointer,

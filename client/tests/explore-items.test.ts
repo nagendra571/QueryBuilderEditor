@@ -124,7 +124,7 @@ test('exploreItems offers nothing where the renderer shows a message instead of 
   none('bar', { x: 'P', measures: ['T'] }, [])
 })
 
-import { pointCenters, nearestPointIndex, rowAtX, tagSeriesRows } from '../src/features/visualizations/mark-sources.ts'
+import { bandIndexAt, nearestPointIndex, rowAtX, tagSeriesRows } from '../src/features/visualizations/mark-sources.ts'
 
 test('rowAtX resolves a single series and refuses an ambiguous X', () => {
   const a = { id: 1 }
@@ -149,13 +149,15 @@ test('nearestPointIndex maps a click x to the nearest point with no prior hover'
   assert.equal(nearestPointIndex([], 10, 0, 200), undefined)
 })
 
-test('pointCenters uses band centres so a click right of the centre still maps to its band', () => {
-  const lefts: Record<string, number> = { a: 0, b: 100, c: 200 }
-  const band = Object.assign((v: string) => lefts[v], { bandwidth: () => 100 })
-  const xs = pointCenters(band as never, ['a', 'b', 'c'])
-  assert.deepEqual(xs, [50, 150, 250])
-  assert.equal(nearestPointIndex(xs, 140, 0, 300), 1)
-  assert.equal(nearestPointIndex(xs, 195, 0, 300), 1)
-  const point = (v: string) => ({ a: 10, b: 60 })[v as 'a' | 'b']
-  assert.deepEqual(pointCenters(point as never, ['a', 'b', 'z']), [10, 60, undefined])
+test('bandIndexAt picks the band under the pointer on a combo plot', () => {
+  const left = 672 - (62 - 54) / 2
+  const right = left + 62 * 5
+  const lefts = [672, 734, 797, 859, 921]
+  lefts.forEach((l, k) => {
+    assert.equal(bandIndexAt(l + 27 + 22, left, right, 5), k)
+    assert.equal(bandIndexAt(l + 27, left, right, 5), k)
+  })
+  assert.equal(bandIndexAt(right, left, right, 5), 4)
+  assert.equal(bandIndexAt(left - 1, left, right, 5), undefined)
+  assert.equal(bandIndexAt(10, 0, 100, 0), undefined)
 })
