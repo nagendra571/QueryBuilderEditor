@@ -654,6 +654,21 @@ export interface VisualizationDataDto {
   executionTimeMs: number
   rowLimit: number
   truncated?: boolean
+  /** Visible plain columns the chart does not reference; they identify the clicked result row. */
+  keyColumns?: string[] | null
+  crossFilter?: { applied: string[]; notApplied: string[] } | null
+}
+
+export type DrillAction = 'rows' | 'breakdown'
+
+export interface DrillRequest {
+  action: DrillAction
+  steps: { column: string; value: string | null }[]
+  breakdownColumn?: string | null
+  crossFilters?: { sourceTileId: string; column: string; value: string | null }[]
+  parameterValues?: Record<string, string | null>
+  dashboardId?: string | null
+  tileId?: string | null
 }
 
 export type DashboardTileKind = 'chart' | 'text' | 'section'
