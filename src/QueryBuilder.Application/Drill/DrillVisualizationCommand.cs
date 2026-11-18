@@ -14,6 +14,7 @@ public sealed record DrillVisualizationCommand(Guid SavedQueryId, Guid Visualiza
 public sealed class DrillVisualizationCommandHandler(
     VisualizationDataLoader loader,
     IDataCatalogService catalog,
+    CrossFilterResolver crossFilterResolver,
     ICurrentDataScope currentScope,
     IAuditLogger auditLogger)
     : IRequestHandler<DrillVisualizationCommand, DrillResultDto>
@@ -21,7 +22,7 @@ public sealed class DrillVisualizationCommandHandler(
     public async Task<DrillResultDto> Handle(DrillVisualizationCommand command, CancellationToken cancellationToken)
     {
         var run = await DrillExecution.RunAsync(
-            loader, catalog, command.SavedQueryId, command.VisualizationId, command.Request, forExport: false, cancellationToken);
+            loader, catalog, crossFilterResolver, command.SavedQueryId, command.VisualizationId, command.Request, forExport: false, cancellationToken);
 
         var source = run.Context.Definition.Source;
         await auditLogger.LogAsync(

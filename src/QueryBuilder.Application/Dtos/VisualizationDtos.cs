@@ -17,7 +17,8 @@ public sealed record VisualizationDto(
 
 public sealed record SaveVisualizationRequest(string Name, VisualizationType Type, VisualizationOptions Options);
 
-public sealed record RenderVisualizationRequest(Dictionary<string, string?>? ParameterValues, Guid? DashboardId = null, Guid? TileId = null);
+public sealed record RenderVisualizationRequest(
+    Dictionary<string, string?>? ParameterValues, Guid? DashboardId = null, Guid? TileId = null, List<Drill.CrossFilterDto>? CrossFilters = null);
 
 public sealed record ExportVisualizationRequest(string? Format, Dictionary<string, string?>? ParameterValues, Guid? DashboardId = null, Guid? TileId = null);
 
@@ -29,7 +30,13 @@ public sealed record VisualizationDataDto(
     long ExecutionTimeMs,
     int RowLimit,
     bool Truncated = false,
-    List<string>? KeyColumns = null);
+    List<string>? KeyColumns = null,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    CrossFilterResultDto? CrossFilter = null);
+
+/// <summary>Which of a dashboard's click-filters a tile took (<see cref="Applied"/>) and which it could not, because its query
+/// has no such column or is on another data source (<see cref="NotApplied"/>); both hold the source column labels.</summary>
+public sealed record CrossFilterResultDto(List<string> Applied, List<string> NotApplied);
 
 /// <summary>The browser sends only the click trail and which kind of drill; the definition is always rebuilt from the saved
 /// query, and drill columns come from the saved chart, never from here.</summary>

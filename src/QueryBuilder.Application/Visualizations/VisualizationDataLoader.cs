@@ -1,5 +1,6 @@
 using QueryBuilder.Application.Abstractions;
 using QueryBuilder.Application.Common;
+using QueryBuilder.Application.Drill;
 using QueryBuilder.Application.Dtos;
 using QueryBuilder.Application.Exceptions;
 using QueryBuilder.Application.Parameters;
@@ -25,7 +26,8 @@ public sealed record LoadedVisualizationData(
     long ExecutionTimeMs,
     int RowLimit,
     bool Truncated,
-    List<string>? KeyColumns = null);
+    List<string>? KeyColumns = null,
+    CrossFilterResultDto? CrossFilter = null);
 
 /// <summary>
 /// What the loader proved about a request on a saved query: the caller may see it, it is not disabled, and
@@ -100,14 +102,20 @@ public sealed class VisualizationDataLoader(
         Guid? dashboardId,
         Guid? tileId,
         VisualizationDataPurpose purpose,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        IReadOnlyList<Drill.CrossFilterDto>? crossFilters = null,
+        Drill.CrossFilterResolver? crossFilterResolver = null)
     {
         var context = await ResolveAsync(
             savedQueryId, visualizationId, parameterValues, dashboardId, tileId, purpose, cancellationToken);
         var savedQuery = context.SavedQuery;
         var visualization = context.Visualization;
-        var definition = context.Definition;
         var options = context.Options;
+
+        // Filters become extra AND conditions on the saved definition; the result still goes through ExecuteAsync below, so
+        // validation, parameter binding and the caller's row scope apply to the narrowed query exactly as to the plain one.
+        var (definition, _, crossFilterResult) = await ApplyCrossFiltersAsync(
+            context, dashboardId, tileId, crossFilters, crossFilterResolver, cancellationToken);
 
         var effectiveLimit = RecordLimits.Effective(context.DataSource.MaxRecords, await appSettings.MaxRecordsAsync(cancellationToken), recordLimitSettings);
 
@@ -175,7 +183,23 @@ public sealed class VisualizationDataLoader(
             }
         }
 
-        return new LoadedVisualizationData(savedQuery, visualization, definition, columns, rows, result.ExecutionTimeMs, cap, result.Truncated, keyColumns);
+        return new LoadedVisualizationData(savedQuery, visualization, definition, columns, rows, result.ExecutionTimeMs, cap, result.Truncated, keyColumns, crossFilterResult);
+    }
+
+    /// <summary>The saved definition with a dashboard's click-filters added as extra AND conditions (HAVING and everything else
+    /// untouched), plus the steps for the audit log. With no filters it returns the saved definition itself.</summary>
+    internal async Task<(QueryDefinition Definition, IReadOnlyList<DrillStep> Steps, CrossFilterResultDto? Result)> ApplyCrossFiltersAsync(
+        VisualizationContext context, Guid? dashboardId, Guid? tileId, IReadOnlyList<Drill.CrossFilterDto>? filters,
+        Drill.CrossFilterResolver? resolver, CancellationToken cancellationToken)
+    {
+        if (filters is not { Count: > 0 }) return (context.Definition, [], null);
+
+        var (steps, result) = await (resolver ?? throw new InvalidOperationException("Cross-filters need a resolver."))
+            .ResolveForRequestAsync(
+                dashboardId, tileId, context.Visualization.Id, filters, context.SavedQuery, AccessActor.From(currentUser), cancellationToken);
+        var definition = await Drill.CrossFilterResolver.ApplyAsync(
+            catalogService, context, context.Options.Drill?.Columns ?? [], steps, cancellationToken);
+        return (definition, steps, result);
     }
 
     public async Task<int?> EffectiveLimitAsync(QueryContext context, CancellationToken cancellationToken) =>

@@ -70,8 +70,8 @@ internal static class DrillAudit
 internal static class DrillExecution
 {
     public static async Task<DrillRun> RunAsync(
-        VisualizationDataLoader loader, IDataCatalogService catalog, Guid savedQueryId, Guid visualizationId,
-        DrillRequest request, bool forExport, CancellationToken cancellationToken)
+        VisualizationDataLoader loader, IDataCatalogService catalog, CrossFilterResolver crossFilterResolver, Guid savedQueryId,
+        Guid visualizationId, DrillRequest request, bool forExport, CancellationToken cancellationToken)
     {
         var context = await loader.ResolveAsync(
             savedQueryId, visualizationId, request.ParameterValues ?? [], request.DashboardId, request.TileId,
@@ -81,22 +81,26 @@ internal static class DrillExecution
 
         // Only the saved chart may name extra columns; a request that did could reach any column of the view.
         var drillColumns = (IReadOnlyList<string>)(context.Options.Drill?.Columns ?? []);
+
+        // Dashboard click-filters are resolved on the server and applied first, as extra conditions on the saved definition;
+        // the user's own steps then narrow that. HAVING is dropped later by the drill itself, as for any drill.
+        var (baseDefinition, crossSteps, _) = await loader.ApplyCrossFiltersAsync(
+            context, request.DashboardId, request.TileId, request.CrossFilters, crossFilterResolver, cancellationToken);
+
         var comparer = IdentifierMatching.Comparer(context.DataSource.Provider);
         bool Same(string a, string b) => comparer.Equals(a, b);
         var types = await DrillColumnTypesAsync(catalog, context, drillColumns, comparer, cancellationToken);
         var limit = await loader.EffectiveLimitAsync(context, cancellationToken);
 
         return request.Action == DrillAction.Rows
-            ? await RunRowsAsync(loader, context, request, steps, drillColumns, types, Same, limit, forExport, cancellationToken)
-            : await RunBreakdownAsync(loader, context, request, steps, drillColumns, types, Same, limit, cancellationToken);
+            ? await RunRowsAsync(loader, context, request, steps, crossSteps, baseDefinition, drillColumns, types, Same, limit, forExport, cancellationToken)
+            : await RunBreakdownAsync(loader, context, request, steps, crossSteps, baseDefinition, drillColumns, types, Same, limit, cancellationToken);
     }
 
     internal static List<DrillStep> Validate(DrillRequest request, bool forExport)
     {
         if (!Enum.IsDefined(request.Action))
             throw new CatalogValidationException("Unknown drill action.");
-        if (request.CrossFilters is { Count: > 0 })
-            throw new CatalogValidationException("Click-to-filter is not available for this request.");
         if (forExport && request.Action != DrillAction.Rows)
             throw new CatalogValidationException("Only drilled rows can be downloaded.");
 
@@ -132,11 +136,13 @@ internal static class DrillExecution
 
     private static async Task<DrillRun> RunRowsAsync(
         VisualizationDataLoader loader, VisualizationContext context, DrillRequest request, List<DrillStep> steps,
-        IReadOnlyList<string> drillColumns, Dictionary<string, ColumnDataType> types, Func<string, string, bool> same,
-        int? limit, bool forExport, CancellationToken cancellationToken)
+        IReadOnlyList<DrillStep> crossSteps, QueryDefinition baseDefinition, IReadOnlyList<string> drillColumns,
+        Dictionary<string, ColumnDataType> types, Func<string, string, bool> same, int? limit, bool forExport,
+        CancellationToken cancellationToken)
     {
-        var rows = await RunRowsCoreAsync(loader, context, steps, drillColumns, types, same, limit, forExport, "chart", cancellationToken);
-        return new DrillRun(context, request, steps, rows.Definition, null, rows.Columns, rows.Rows, rows.ExecutionTimeMs, rows.Cap, rows.Truncated);
+        var rows = await RunRowsCoreAsync(
+            loader, context, steps, drillColumns, types, same, limit, forExport, "chart", cancellationToken, baseDefinition);
+        return new DrillRun(context, request, [.. crossSteps, .. steps], rows.Definition, null, rows.Columns, rows.Rows, rows.ExecutionTimeMs, rows.Cap, rows.Truncated);
     }
 
     internal sealed record DrillRows(
@@ -148,9 +154,9 @@ internal static class DrillExecution
     internal static async Task<DrillRows> RunRowsCoreAsync(
         VisualizationDataLoader loader, QueryContext context, IReadOnlyList<DrillStep> steps,
         IReadOnlyList<string> drillColumns, Dictionary<string, ColumnDataType> types, Func<string, string, bool> same,
-        int? limit, bool forExport, string subject, CancellationToken cancellationToken)
+        int? limit, bool forExport, string subject, CancellationToken cancellationToken, QueryDefinition? baseDefinition = null)
     {
-        var definition = DrillDefinitions.ForRows(context.Definition, steps, drillColumns, same, types);
+        var definition = DrillDefinitions.ForRows(baseDefinition ?? context.Definition, steps, drillColumns, same, types);
         var requestedCap = forExport ? limit ?? RecordLimits.LegacyExportRows : RecordLimits.GridRows(limit, null);
 
         var (result, cap, _) = await loader.ExecuteAsync(context, definition, requestedCap, cancellationToken);
@@ -177,12 +183,12 @@ internal static class DrillExecution
 
     private static async Task<DrillRun> RunBreakdownAsync(
         VisualizationDataLoader loader, VisualizationContext context, DrillRequest request, List<DrillStep> steps,
-        IReadOnlyList<string> drillColumns, Dictionary<string, ColumnDataType> types, Func<string, string, bool> same,
-        int? limit, CancellationToken cancellationToken)
+        IReadOnlyList<DrillStep> crossSteps, QueryDefinition baseDefinition, IReadOnlyList<string> drillColumns,
+        Dictionary<string, ColumnDataType> types, Func<string, string, bool> same, int? limit, CancellationToken cancellationToken)
     {
         var type = context.Visualization.Type;
         var (definition, options) = DrillDefinitions.ForBreakdown(
-            context.Definition, type, context.Options, steps, request.BreakdownColumn!, drillColumns, types, same);
+            baseDefinition, type, context.Options, steps, request.BreakdownColumn!, drillColumns, types, same);
 
         var (result, cap, _) = await loader.ExecuteAsync(context, definition, RecordLimits.ChartRows(limit), cancellationToken);
         if (result.Truncated)
@@ -195,7 +201,7 @@ internal static class DrillExecution
         var rows = Project(result, referenced);
         VisualizationDataChecks.Check(type, options, rows);
 
-        return new DrillRun(context, request, steps, definition, options, columns, rows, result.ExecutionTimeMs, cap, false);
+        return new DrillRun(context, request, [.. crossSteps, .. steps], definition, options, columns, rows, result.ExecutionTimeMs, cap, false);
     }
 
     // Rows are cut to the named columns here, so nothing the SQL happened to return beyond them can reach the browser.

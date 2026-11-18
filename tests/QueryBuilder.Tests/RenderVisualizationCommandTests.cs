@@ -13,7 +13,7 @@ public class RenderVisualizationCommandTests
     private static Dictionary<string, object?> Row(string? region, decimal? total, string channel = "Web", decimal orders = 1) =>
         new() { ["Region"] = region, ["Channel"] = channel, ["Total"] = total, ["Orders"] = orders, ["HiddenNote"] = "secret" };
 
-    private static RenderVisualizationCommandHandler Handler(VizFixture f) => new(f.Loader(), new VizFixture.FakeScope(), f.Audit);
+    private static RenderVisualizationCommandHandler Handler(VizFixture f) => new(f.Loader(), new QueryBuilder.Application.Drill.CrossFilterResolver(f.Dashboards, f.DataSources, f.Catalog), new VizFixture.FakeScope(), f.Audit);
 
     private static Task<QueryBuilder.Application.Dtos.VisualizationDataDto> Render(VizFixture f, QueryVisualization viz, Dictionary<string, string?>? parameters = null) =>
         Handler(f).Handle(new RenderVisualizationCommand(f.Query.Id, viz.Id, parameters ?? []), default);

@@ -29,6 +29,10 @@ public sealed class Dashboard : AuditableEntity, IAppOwned
     /// <summary>Serialized dashboard-wide parameters (name, title, type, options, current value). Null = none.</summary>
     public string? ParametersJson { get; set; }
 
+    /// <summary>Author switch: whether a click on one chart may filter the other tiles. On by default, so existing
+    /// dashboards gain it; the server refuses cross-filters while it is off, not only the browser.</summary>
+    public bool ClickToFilterEnabled { get; set; } = true;
+
     public List<DashboardTile> Tiles { get; set; } = [];
     public List<DashboardShare> Shares { get; set; } = [];
 }

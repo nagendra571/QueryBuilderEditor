@@ -40,13 +40,13 @@ public class DrillVisualizationCommandTests
     private static DrillRequest Breakdown(string column, params DrillStep[] steps) =>
         new(DrillAction.Breakdown, steps.ToList(), column, null, null, null, null);
 
-    private static DrillVisualizationCommandHandler Handler(VizFixture f) => new(f.Loader(), f.Catalog, new VizFixture.FakeScope(), f.Audit);
+    private static DrillVisualizationCommandHandler Handler(VizFixture f) => new(f.Loader(), f.Catalog, new CrossFilterResolver(f.Dashboards, f.DataSources, f.Catalog), new VizFixture.FakeScope(), f.Audit);
 
     private static Task<DrillResultDto> Drill(VizFixture f, QueryVisualization viz, DrillRequest request) =>
         Handler(f).Handle(new DrillVisualizationCommand(f.Query.Id, viz.Id, request), default);
 
     private static Task<ExportResult> Export(VizFixture f, QueryVisualization viz, DrillRequest request, ExportFormat format = ExportFormat.Csv) =>
-        new ExportDrillCommandHandler(f.Loader(), f.Catalog, new ExportService(), new VizFixture.FakeScope(), f.Audit)
+        new ExportDrillCommandHandler(f.Loader(), f.Catalog, new CrossFilterResolver(f.Dashboards, f.DataSources, f.Catalog), new ExportService(), new VizFixture.FakeScope(), f.Audit)
             .Handle(new ExportDrillCommand(f.Query.Id, viz.Id, request, format), default);
 
     private static (VizFixture Fixture, QueryVisualization Viz) Arrange(

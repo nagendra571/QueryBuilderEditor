@@ -11,7 +11,8 @@ public sealed record RenderVisualizationCommand(
     Guid VisualizationId,
     Dictionary<string, string?> ParameterValues,
     Guid? DashboardId = null,
-    Guid? TileId = null) : IRequest<VisualizationDataDto>;
+    Guid? TileId = null,
+    List<Drill.CrossFilterDto>? CrossFilters = null) : IRequest<VisualizationDataDto>;
 
 /// <summary>
 /// Draws a saved chart from the viewer's own authorized results (see <see cref="VisualizationDataLoader"/>). A chart over
@@ -20,6 +21,7 @@ public sealed record RenderVisualizationCommand(
 /// </summary>
 public sealed class RenderVisualizationCommandHandler(
     VisualizationDataLoader loader,
+    Drill.CrossFilterResolver crossFilterResolver,
     ICurrentDataScope currentScope,
     IAuditLogger auditLogger)
     : IRequestHandler<RenderVisualizationCommand, VisualizationDataDto>
@@ -28,7 +30,7 @@ public sealed class RenderVisualizationCommandHandler(
     {
         var data = await loader.LoadAsync(
             request.SavedQueryId, request.VisualizationId, request.ParameterValues, request.DashboardId, request.TileId,
-            VisualizationDataPurpose.Draw, cancellationToken);
+            VisualizationDataPurpose.Draw, cancellationToken, request.CrossFilters, crossFilterResolver);
 
         var source = data.Definition.Source;
         var entityName = $"{source.SchemaName}.{source.ObjectName}";
@@ -49,6 +51,6 @@ public sealed class RenderVisualizationCommandHandler(
                 }),
             cancellationToken);
 
-        return new VisualizationDataDto(data.Columns, data.Rows, data.Rows.Count, data.ExecutionTimeMs, data.RowLimit, data.Truncated, data.KeyColumns);
+        return new VisualizationDataDto(data.Columns, data.Rows, data.Rows.Count, data.ExecutionTimeMs, data.RowLimit, data.Truncated, data.KeyColumns, data.CrossFilter);
     }
 }

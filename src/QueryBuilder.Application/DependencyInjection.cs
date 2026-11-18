@@ -24,6 +24,7 @@ public static class DependencyInjection
         services.AddScoped<Dashboards.IDashboardGrant, Dashboards.DashboardGrant>();
         services.AddScoped<Dashboards.DashboardGrantResolver>();
         services.AddScoped<Visualizations.VisualizationDataLoader>();
+        services.AddScoped<Drill.CrossFilterResolver>();
         RegisterHandlers(services, assembly);
 
         services.AddValidatorsFromAssembly(assembly);

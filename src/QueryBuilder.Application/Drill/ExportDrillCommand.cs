@@ -15,6 +15,7 @@ public sealed record ExportDrillCommand(Guid SavedQueryId, Guid VisualizationId,
 public sealed class ExportDrillCommandHandler(
     VisualizationDataLoader loader,
     IDataCatalogService catalog,
+    CrossFilterResolver crossFilterResolver,
     IExportService exportService,
     ICurrentDataScope currentScope,
     IAuditLogger auditLogger)
@@ -23,7 +24,7 @@ public sealed class ExportDrillCommandHandler(
     public async Task<ExportResult> Handle(ExportDrillCommand command, CancellationToken cancellationToken)
     {
         var run = await DrillExecution.RunAsync(
-            loader, catalog, command.SavedQueryId, command.VisualizationId, command.Request, forExport: true, cancellationToken);
+            loader, catalog, crossFilterResolver, command.SavedQueryId, command.VisualizationId, command.Request, forExport: true, cancellationToken);
 
         var resultSet = new QueryResultSet
         {

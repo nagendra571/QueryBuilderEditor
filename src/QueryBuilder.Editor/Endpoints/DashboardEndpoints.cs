@@ -52,7 +52,7 @@ public static class DashboardEndpoints
             var request = await http.Request.ReadFromJsonAsync<SaveDashboardRequest>(QueryBuilderJson.Options, ct)
                 ?? throw new BadHttpRequestException("Request body is required.");
             return Results.Json(
-                await sender.Send(new RenameDashboardCommand(id, request.Name, request.Description, request.Version), ct),
+                await sender.Send(new RenameDashboardCommand(id, request.Name, request.Description, request.Version, request.ClickToFilterEnabled), ct),
                 QueryBuilderJson.Options);
         });
 
