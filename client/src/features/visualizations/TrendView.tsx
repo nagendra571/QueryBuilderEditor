@@ -1,13 +1,26 @@
-import { Line, LineChart, YAxis } from 'recharts'
+import type { ActiveDotProps } from 'recharts/types/util/types'
+import { Line, LineChart, Tooltip, YAxis } from 'recharts'
 import { ChartContainer, type ChartConfig } from '@/components/ui/chart'
 import { formatValue } from '@/features/visualizations/format'
 import { fitFontSize, trendChangeText } from '@/features/visualizations/single-number'
+import { fireMark, type MarkDrill } from '@/features/drill/mark-click'
+import { pickRow, rowsOf } from '@/features/visualizations/mark-sources'
 import type { TrendModel } from '@/features/visualizations/story-models'
 import type { ValueFormat } from '@/types'
 
 const CONFIG: ChartConfig = { y: { label: 'Value', color: 'var(--chart-1)' } }
 
-export function TrendView({ model, animate, format }: { model: TrendModel; animate: boolean; format?: ValueFormat | null }) {
+export function TrendView({
+  model,
+  animate,
+  format,
+  drill,
+}: {
+  model: TrendModel
+  animate: boolean
+  format?: ValueFormat | null
+  drill?: MarkDrill
+}) {
   const text = formatValue(model.latest, format)
   const change = trendChangeText(model, format)
   return (
@@ -24,6 +37,7 @@ export function TrendView({ model, animate, format }: { model: TrendModel; anima
         <ChartContainer config={CONFIG} className="aspect-auto h-full w-full">
           <LineChart data={model.points} margin={{ top: 4, right: 4, bottom: 4, left: 4 }}>
             <YAxis hide domain={['auto', 'auto']} />
+            {drill && <Tooltip content={() => null} cursor={false} />}
             <Line
               dataKey="y"
               type="linear"
@@ -32,6 +46,25 @@ export function TrendView({ model, animate, format }: { model: TrendModel; anima
               dot={false}
               connectNulls={false}
               isAnimationActive={animate}
+              activeDot={
+                drill
+                  ? (dot: ActiveDotProps) => (
+                      <circle
+                        cx={dot.cx}
+                        cy={dot.cy}
+                        r={5}
+                        fill="var(--chart-1)"
+                        stroke="var(--background)"
+                        strokeWidth={2}
+                        style={{ cursor: 'pointer' }}
+                        onClick={(e) => {
+                          const row = pickRow(rowsOf(model.points[dot.index]), drill.keyColumns)
+                          fireMark(drill, row ? { row } : null, e)
+                        }}
+                      />
+                    )
+                  : undefined
+              }
             />
           </LineChart>
         </ChartContainer>

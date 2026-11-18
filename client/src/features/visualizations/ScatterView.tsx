@@ -4,6 +4,8 @@ import { ChartContainer, type ChartConfig } from '@/components/ui/chart'
 import { formatScatterX, scatterHasTime, type ScatterModel } from '@/features/visualizations/chart-data'
 import { paletteColor } from '@/features/visualizations/chart-types'
 import { formatAxis, formatValue } from '@/features/visualizations/format'
+import { fireMark, type MarkDrill } from '@/features/drill/mark-click'
+import { pickRow, rowsOf } from '@/features/visualizations/mark-sources'
 import type { ValueFormat } from '@/types'
 
 const MARKER_SHAPES = ['circle', 'square', 'triangle', 'diamond'] as const
@@ -84,6 +86,7 @@ export function ScatterView({
   sizeName,
   seriesName,
   fill,
+  drill,
 }: {
   model: ScatterModel
   animate: boolean
@@ -94,6 +97,7 @@ export function ScatterView({
   sizeName?: string | null
   seriesName?: string | null
   fill: boolean
+  drill?: MarkDrill
 }) {
   // Null-size points draw at the smallest bubble; their z must stay inside the domain built from real sizes.
   const sizes = model.groups.flatMap((g) => g.points.flatMap((p) => (p.size === null ? [] : [p.size])))
@@ -168,6 +172,15 @@ export function ScatterView({
               stroke="var(--mark-outline)"
               shape={MARKER_SHAPES[i % MARKER_SHAPES.length]}
               isAnimationActive={animate && total <= MAX_ANIMATED_POINTS}
+              {...(drill
+                ? {
+                    style: { cursor: 'pointer' },
+                    onClick: (_d: unknown, index: number, e: React.MouseEvent) => {
+                      const row = pickRow(rowsOf(model.groups[i].points[index]), drill.keyColumns)
+                      fireMark(drill, row ? { row } : null, e)
+                    },
+                  }
+                : {})}
             />
           ))}
         </ScatterChart>

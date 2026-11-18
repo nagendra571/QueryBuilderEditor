@@ -1,4 +1,5 @@
 import { useMemo } from 'react'
+import type { ActiveDotProps } from 'recharts/types/util/types'
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, ComposedChart, Line, LineChart, XAxis, YAxis } from 'recharts'
 import {
   ChartContainer,
@@ -12,6 +13,8 @@ import {
 import { toPercentStack, type CartesianModel } from '@/features/visualizations/chart-data'
 import { paletteColor } from '@/features/visualizations/chart-types'
 import { formatAxis, formatValue, percentTick, truncateLabel } from '@/features/visualizations/format'
+import { fireMark, type MarkDrill } from '@/features/drill/mark-click'
+import { pickRow, seriesRowsOf } from '@/features/visualizations/mark-sources'
 import type { ValueFormat, VisualizationOptions, VisualizationType } from '@/types'
 
 const DASHES = [undefined, '6 3', '2 3', '10 3 2 3']
@@ -24,6 +27,7 @@ export function CartesianView({
   animate,
   heightClass,
   format,
+  drill,
 }: {
   type: VisualizationType
   options: VisualizationOptions
@@ -31,6 +35,7 @@ export function CartesianView({
   animate: boolean
   heightClass: string
   format?: ValueFormat | null
+  drill?: MarkDrill
 }) {
   const stackable = type === 'bar' || type === 'horizontalBar' || type === 'area'
   const stacked = stackable && !!options.stacked
@@ -72,6 +77,13 @@ export function CartesianView({
     <YAxis tickLine={false} axisLine={false} width={52} tick={tick} domain={domain} tickFormatter={valueTick} />
   )
 
+  // A mark whose row can't be told apart (a split with two rows under one X) gets no click rather than a wrong one.
+  const markAt = (seriesKey: string, index: number) => {
+    const row = pickRow(seriesRowsOf(model.points[index], seriesKey), drill?.keyColumns)
+    return row ? { row } : null
+  }
+  const pointer = drill ? { cursor: 'pointer' } : undefined
+
   const bar = (s: CartesianModel['series'][number]) => (
     <Bar
       key={s.key}
@@ -83,8 +95,26 @@ export function CartesianView({
       maxBarSize={72}
       radius={stacked ? 0 : type === 'horizontalBar' ? [0, 1, 1, 0] : [1, 1, 0, 0]}
       isAnimationActive={animate}
+      {...(drill ? { style: pointer, onClick: (_d: unknown, index: number, e: React.MouseEvent) => fireMark(drill, markAt(s.key, index), e) } : {})}
     />
   )
+
+  // Only the point under the pointer is drawn as a dot, so that is the one that takes the click.
+  const activeDot = (seriesKey: string) =>
+    drill
+      ? (dot: ActiveDotProps) => (
+          <circle
+            cx={dot.cx}
+            cy={dot.cy}
+            r={dot.r}
+            fill={dot.fill}
+            stroke={dot.stroke}
+            strokeWidth={dot.strokeWidth}
+            style={pointer}
+            onClick={(e) => fireMark(drill, markAt(seriesKey, dot.index), e)}
+          />
+        )
+      : undefined
 
   const line = (s: CartesianModel['series'][number], dashIndex: number) => (
     <Line
@@ -98,6 +128,7 @@ export function CartesianView({
       dot={model.points.length <= 40}
       connectNulls={false}
       isAnimationActive={animate}
+      activeDot={activeDot(s.key)}
     />
   )
 
@@ -134,6 +165,7 @@ export function CartesianView({
             strokeDasharray={DASHES[i % DASHES.length]}
             connectNulls={false}
             isAnimationActive={animate}
+            activeDot={activeDot(s.key)}
           />
         ))}
       </AreaChart>

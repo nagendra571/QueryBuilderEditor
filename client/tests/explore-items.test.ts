@@ -1,0 +1,105 @@
+import assert from 'node:assert/strict'
+import { test } from 'node:test'
+import { buildCartesian, buildPie, buildScatter } from '../src/features/visualizations/chart-data.ts'
+import { buildFunnel, buildWaterfall } from '../src/features/visualizations/story-models.ts'
+import { buildPivot } from '../src/features/visualizations/pivot-model.ts'
+import { pickRow, rowsOf, seriesRowsOf } from '../src/features/visualizations/mark-sources.ts'
+import { exploreItems, MAX_EXPLORE_ITEMS } from '../src/features/drill/explore-items.ts'
+import type { QueryResultColumnDto, VisualizationOptions } from '../src/types/index.ts'
+
+const opts = (o: Partial<VisualizationOptions>): VisualizationOptions => ({
+  version: 1,
+  measures: [],
+  stacked: false,
+  sortX: 'none',
+  ...o,
+})
+const dim = (name: string, dataType: QueryResultColumnDto['dataType'] = 'text'): QueryResultColumnDto => ({
+  name,
+  dataType,
+  aggregate: 'none',
+})
+const agg = (name: string): QueryResultColumnDto => ({ name, dataType: 'number', aggregate: 'sum' })
+
+test('pickRow: one row identifies the mark; several only when no key column tells them apart', () => {
+  const a = { k: 1 }
+  const b = { k: 2 }
+  assert.equal(pickRow([a]), a)
+  assert.equal(pickRow([a, b]), a)
+  assert.equal(pickRow([a, b], []), a)
+  assert.equal(pickRow([a, b], ['k']), undefined)
+  assert.equal(pickRow([]), undefined)
+})
+
+test('a sorted cartesian point still finds its own source row', () => {
+  const rows = [
+    { P: 'b', T: 2 },
+    { P: 'a', T: 1 },
+  ]
+  const m = buildCartesian(opts({ x: 'P', measures: ['T'], sortX: 'asc' }), rows)
+  assert.equal(m.points[0].x, 'a')
+  assert.equal(seriesRowsOf(m.points[0], 's0')[0], rows[1])
+  assert.equal(seriesRowsOf(m.points[1], 's0')[0], rows[0])
+})
+
+test('a split cartesian point keeps the row of each series separately', () => {
+  const rows = [
+    { P: 'a', S: 'x', T: 1 },
+    { P: 'a', S: 'y', T: 2 },
+  ]
+  const m = buildCartesian(opts({ x: 'P', series: 'S', measures: ['T'] }), rows)
+  assert.equal(m.points.length, 1)
+  assert.equal(seriesRowsOf(m.points[0], 's0')[0], rows[0])
+  assert.equal(seriesRowsOf(m.points[0], 's1')[0], rows[1])
+})
+
+test('pie, funnel, waterfall and scatter marks carry their rows; the waterfall total has none', () => {
+  const rows = [
+    { P: 'a', T: 3 },
+    { P: 'b', T: 1 },
+  ]
+  const pie = buildPie(opts({ x: 'P', measures: ['T'], sortX: 'desc' }), rows)
+  assert.equal(rowsOf(pie.slices[0])[0], rows[1])
+  assert.equal(rowsOf(buildFunnel(opts({ x: 'P', measures: ['T'] }), rows).steps[1])[0], rows[1])
+  const wf = buildWaterfall(opts({ x: 'P', measures: ['T'] }), rows)
+  assert.equal(rowsOf(wf.bars[0])[0], rows[0])
+  assert.deepEqual(rowsOf(wf.bars[2]), [])
+  const sc = buildScatter(opts({ x: 'T', measures: ['T'] }), rows)
+  assert.equal(rowsOf(sc.groups[0].points[1])[0], rows[1])
+})
+
+test('pivot keeps the raw header values, not the shown text', () => {
+  const rows = [{ D: '2026-01-02T00:00:00', S: 'on', T: 1 }]
+  const m = buildPivot(opts({ pivot: { rows: ['D'], column: 'S', values: ['T'], totals: true } as never }), rows, () => 'sum')
+  assert.deepEqual(m.rowHeaders, [['2026-01-02']])
+  assert.deepEqual(m.rowRaw, [['2026-01-02T00:00:00']])
+  assert.deepEqual(m.columnRaw, ['on'])
+})
+
+test('exploreItems lists a bar chart once per point and skips marks that cannot be drilled', () => {
+  const columns = [dim('P'), agg('T')]
+  const rows = [
+    { P: 'a', T: 3 },
+    { P: 'b', T: 1 },
+  ]
+  const { items, more } = exploreItems('bar', opts({ x: 'P', measures: ['T'] }), rows, columns)
+  assert.deepEqual(items.map((i) => [i.label, i.value]), [['a', '3'], ['b', '1']])
+  assert.equal(more, 0)
+
+  // A key past 2^53 was rounded in transit, so it must not be offered.
+  const unsafe = exploreItems('bar', opts({ x: 'P', measures: ['T'] }), [{ P: 'a', T: 1, Id: 2 ** 60 }], [...columns, dim('Id', 'number')], ['Id'])
+  assert.equal(unsafe.items.length, 0)
+})
+
+test('exploreItems: counter has one item, a non-aggregated table none, and the list is capped', () => {
+  const counter = exploreItems('counter', opts({ counter: { value: 'T' } as never }), [{ T: 5 }], [agg('T')])
+  assert.equal(counter.items.length, 1)
+  assert.equal(counter.items[0].value, '5')
+
+  assert.equal(exploreItems('table', opts({ table: { columns: ['P'] } as never }), [{ P: 'a' }], [dim('P')]).items.length, 0)
+
+  const many = Array.from({ length: MAX_EXPLORE_ITEMS + 5 }, (_, i) => ({ P: `p${i}`, T: i }))
+  const capped = exploreItems('bar', opts({ x: 'P', measures: ['T'] }), many, [dim('P'), agg('T')])
+  assert.equal(capped.items.length, MAX_EXPLORE_ITEMS)
+  assert.equal(capped.more, 5)
+})

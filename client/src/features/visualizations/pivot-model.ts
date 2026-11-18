@@ -10,6 +10,9 @@ export interface PivotCell {
 export interface PivotModel {
   kind: 'pivot'
   rowHeaders: string[][]
+  /** The first raw value behind each header part, so a click can send the value as the server wrote it. */
+  rowRaw: unknown[][]
+  columnRaw: unknown[]
   columnHeaders: string[]
   values: string[]
   cells: PivotCell[][][]
@@ -74,12 +77,14 @@ function compareHeader(a: string[], b: string[]): number {
 
 interface RowBucket {
   header: string[]
+  raw: unknown[]
   cells: Map<string, Acc[]>
   total: Acc[]
 }
 
 interface ColumnBucket {
   header: string
+  raw: unknown
   total: Acc[]
 }
 
@@ -107,12 +112,12 @@ export function buildPivot(
 
     let rowBucket = rowBuckets.get(rowKey)
     if (!rowBucket) {
-      rowBucket = { header, cells: new Map(), total: fresh(values.length) }
+      rowBucket = { header, raw: rowNames.map((n) => cellValue(row, n)), cells: new Map(), total: fresh(values.length) }
       rowBuckets.set(rowKey, rowBucket)
     }
     let columnBucket = columnBuckets.get(columnKey)
     if (!columnBucket) {
-      columnBucket = { header: columnHeader, total: fresh(values.length) }
+      columnBucket = { header: columnHeader, raw: columnName ? cellValue(row, columnName) : null, total: fresh(values.length) }
       columnBuckets.set(columnKey, columnBucket)
     }
     let cell = rowBucket.cells.get(columnKey)
@@ -136,7 +141,7 @@ export function buildPivot(
   const sortedColumns = columnName
     ? [...columnBuckets.entries()].sort((a, b) => compareHeader([a[1].header], [b[1].header]))
     : [...columnBuckets.entries()]
-  if (!columnName && sortedColumns.length === 0) sortedColumns.push([JSON.stringify(''), { header: '', total: fresh(values.length) }])
+  if (!columnName && sortedColumns.length === 0) sortedColumns.push([JSON.stringify(''), { header: '', raw: null, total: fresh(values.length) }])
 
   const toCells = (accs: Acc[], isTotal: boolean) => accs.map((a, v) => toCell(a, combines[v], isTotal))
   const empty = fresh(values.length)
@@ -162,6 +167,8 @@ export function buildPivot(
   return {
     kind: 'pivot',
     rowHeaders: sortedRows.map(([, r]) => r.header),
+    rowRaw: sortedRows.map(([, r]) => r.raw),
+    columnRaw: sortedColumns.map(([, c]) => c.raw),
     columnHeaders: sortedColumns.map(([, c]) => c.header),
     values,
     cells,

@@ -1,3 +1,4 @@
+import { tagRows, tagSeriesRows } from './mark-sources.ts'
 import type {
   AggregateFunction,
   ColumnDataType,
@@ -138,6 +139,7 @@ export function buildCartesian(options: VisualizationOptions, rows: Rows): Carte
     const measure = options.measures[0]
     const labels: string[] = []
     const byX = new Map<string, { x: string } & Record<string, string | number | null>>()
+    const rowsByX = new Map<string, Record<string, Rows>>()
     for (const row of rows) {
       const label = formatCategory(row[seriesColumn])
       if (!labels.includes(label)) labels.push(label)
@@ -145,6 +147,9 @@ export function buildCartesian(options: VisualizationOptions, rows: Rows): Carte
       const xLabel = formatCategory(row[x])
       const point = byX.get(xLabel) ?? { x: xLabel }
       byX.set(xLabel, point)
+      const bySeries = rowsByX.get(xLabel) ?? {}
+      rowsByX.set(xLabel, bySeries)
+      ;(bySeries[key] ??= []).push(row)
       const value = read(row[measure])
       const existing = point[key]
       point[key] = value === null ? (existing ?? null) : (typeof existing === 'number' ? existing : 0) + value
@@ -152,7 +157,7 @@ export function buildCartesian(options: VisualizationOptions, rows: Rows): Carte
     const series = labels.map((label, i) => ({ key: `s${i}`, label }))
     const points = [...byX.values()].map((p) => {
       for (const s of series) if (!(s.key in p)) p[s.key] = null
-      return p
+      return tagSeriesRows(p, rowsByX.get(p.x) ?? {})
     })
     return { kind: 'cartesian', series, points: sortPoints(points, options.sortX), skipped }
   }
@@ -160,10 +165,12 @@ export function buildCartesian(options: VisualizationOptions, rows: Rows): Carte
   const series = options.measures.map((measure, i) => ({ key: `s${i}`, label: measure }))
   const points = rows.map((row) => {
     const point: { x: string } & Record<string, string | number | null> = { x: formatCategory(row[x]) }
+    const bySeries: Record<string, Rows> = {}
     options.measures.forEach((measure, i) => {
       point[`s${i}`] = read(row[measure])
+      bySeries[`s${i}`] = [row]
     })
-    return point
+    return tagSeriesRows(point, bySeries)
   })
   return { kind: 'cartesian', series, points: sortPoints(points, options.sortX), skipped }
 }
@@ -173,6 +180,7 @@ export function buildPie(options: VisualizationOptions, rows: Rows): PieModel {
   const measure = options.measures[0]
   let skipped = 0
   const totals = new Map<string, number>()
+  const sources = new Map<string, Rows>()
   let negative = false
   for (const row of rows) {
     const n = toNumber(row[measure])
@@ -184,11 +192,15 @@ export function buildPie(options: VisualizationOptions, rows: Rows): PieModel {
     if (n < 0) negative = true
     const name = formatCategory(row[x])
     totals.set(name, (totals.get(name) ?? 0) + n)
+    const list = sources.get(name) ?? []
+    sources.set(name, list)
+    list.push(row)
   }
   let slices = [...totals.entries()].map(([name, value]) => ({ name, value }))
   if (options.sortX !== 'none') {
     slices = sortPoints(slices.map((s) => ({ ...s, x: s.name })), options.sortX).map(({ name, value }) => ({ name, value }))
   }
+  for (const slice of slices) tagRows(slice, sources.get(slice.name) ?? [])
   const problem = negative
     ? 'A pie chart cannot show negative values — use a bar chart instead.'
     : slices.length > MAX_PIE_SLICES
@@ -570,7 +582,7 @@ export function buildScatter(options: VisualizationOptions, rows: Rows): Scatter
       groups.push({ name, points: [] })
       index = groups.length - 1
     }
-    groups[index].points.push({ x, y, size, label })
+    groups[index].points.push(tagRows({ x, y, size, label }, [row]))
   }
   if (groups.length === 0) groups.push({ name: '', points: [] })
   return { kind: 'scatter', groups, skipped, xIsDate, problem: negativeSize ? SCATTER_NEGATIVE_SIZE : null }

@@ -1,6 +1,7 @@
 import type { CSSProperties } from 'react'
 import { formatValue } from '@/features/visualizations/format'
 import { MAX_SHADE_PERCENT, shadeFraction, type PivotCell, type PivotModel } from '@/features/visualizations/pivot-model'
+import { fireMark, type MarkDrill, type MarkWithoutAnchor } from '@/features/drill/mark-click'
 import type { ValueFormat } from '@/types'
 
 const NOT_COMBINABLE = '—'
@@ -41,6 +42,7 @@ export function PivotView({
   format,
   shade,
   fill,
+  drill,
 }: {
   model: PivotModel
   name: string
@@ -49,6 +51,7 @@ export function PivotView({
   format?: ValueFormat | null
   shade: boolean
   fill: boolean
+  drill?: MarkDrill
 }) {
   if (model.rowHeaders.length === 0) {
     return <p className="py-10 text-center text-sm text-muted-foreground">No data to show for these filters.</p>
@@ -71,16 +74,33 @@ export function PivotView({
     return { backgroundColor: `color-mix(in srgb, var(--chart-1) ${percent}%, var(--background))` }
   }
 
-  const valueCells = (cells: PivotCell[], keyPrefix: string, shaded: boolean, strong = false) =>
-    cells.map((cell, v) => (
+  // The raw header values go back to the server, not the shown text: a date's text must not be re-parsed.
+  const rowValuesAt = (ri: number) => {
+    const values: Record<string, unknown> = {}
+    rowNames.forEach((n, k) => {
+      values[n] = model.rowRaw[ri]?.[k]
+    })
+    return values
+  }
+  const cellMark = (ri: number, ci: number): MarkWithoutAnchor => ({
+    pivot: { rowValues: rowValuesAt(ri), columnValue: columnName ? { column: columnName, value: model.columnRaw[ci] } : undefined },
+  })
+  const rowTotalMark = (ri: number): MarkWithoutAnchor => ({ pivot: { rowValues: rowValuesAt(ri) } })
+  const grandMark: MarkWithoutAnchor = { pivot: { rowValues: {} } }
+
+  const valueCells = (cells: PivotCell[], keyPrefix: string, shaded: boolean, strong = false, mark?: MarkWithoutAnchor) => {
+    const clickable = !!drill && !!mark && drill.canDrill(mark)
+    return cells.map((cell, v) => (
       <td
         key={`${keyPrefix}-${v}`}
-        className={`${NUM} ${strong ? 'font-semibold' : ''}`}
+        className={`${NUM} ${strong ? 'font-semibold' : ''} ${clickable ? 'cursor-pointer hover:outline hover:outline-1 hover:-outline-offset-1 hover:outline-ring' : ''}`}
         style={shaded ? shadeStyle(cell, v) : undefined}
+        onClick={clickable ? (e) => fireMark(drill, mark!, e) : undefined}
       >
         {cellText(cell, format)}
       </td>
     ))
+  }
 
   return (
     <div className={`flex min-w-0 flex-col gap-2 ${fill ? 'h-full' : ''}`}>
@@ -156,8 +176,8 @@ export function PivotView({
                     </th>
                   ),
                 )}
-                {model.cells[ri].map((cells, ci) => valueCells(cells, `c-${ri}-${ci}`, true))}
-                {model.columnTotals && valueCells(model.columnTotals[ri], `t-${ri}`, false, true)}
+                {model.cells[ri].map((cells, ci) => valueCells(cells, `c-${ri}-${ci}`, true, false, cellMark(ri, ci)))}
+                {model.columnTotals && valueCells(model.columnTotals[ri], `t-${ri}`, false, true, rowTotalMark(ri))}
               </tr>
             ))}
             {showTotalRow && (
@@ -165,8 +185,8 @@ export function PivotView({
                 <th scope="row" colSpan={Math.max(1, rowNames.length)} className="px-3 py-1.5 text-left font-semibold">
                   Total
                 </th>
-                {model.rowTotals!.map((cells, ci) => valueCells(cells, `tr-${ci}`, false, true))}
-                {model.grandTotals && valueCells(model.grandTotals, 'g', false, true)}
+                {model.rowTotals!.map((cells, ci) => valueCells(cells, `tr-${ci}`, false, true, hasColumn ? undefined : grandMark))}
+                {model.grandTotals && valueCells(model.grandTotals, 'g', false, true, grandMark)}
               </tr>
             )}
           </tbody>
