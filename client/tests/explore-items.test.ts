@@ -124,7 +124,7 @@ test('exploreItems offers nothing where the renderer shows a message instead of 
   none('bar', { x: 'P', measures: ['T'] }, [])
 })
 
-import { pointIndexOf, rowAtX, tagSeriesRows } from '../src/features/visualizations/mark-sources.ts'
+import { nearestPointIndex, rowAtX, tagSeriesRows } from '../src/features/visualizations/mark-sources.ts'
 
 test('rowAtX resolves a single series and refuses an ambiguous X', () => {
   const a = { id: 1 }
@@ -139,10 +139,12 @@ test('rowAtX resolves a single series and refuses an ambiguous X', () => {
   assert.equal(rowAtX(one, []), undefined)
 })
 
-test('pointIndexOf reads numeric and string indexes only', () => {
-  assert.equal(pointIndexOf({ activeTooltipIndex: 3 }), 3)
-  assert.equal(pointIndexOf({ activeTooltipIndex: '2' }), 2)
-  assert.equal(pointIndexOf({ activeTooltipIndex: undefined }), undefined)
-  assert.equal(pointIndexOf({ activeTooltipIndex: 'x' }), undefined)
-  assert.equal(pointIndexOf(undefined), undefined)
+test('nearestPointIndex maps a click x to the nearest point with no prior hover', () => {
+  const xs = [10, 50, 90, undefined, 170]
+  assert.equal(nearestPointIndex(xs, 12, 0, 200), 0)
+  assert.equal(nearestPointIndex(xs, 71, 0, 200), 2)
+  assert.equal(nearestPointIndex(xs, 140, 0, 200), 4)
+  assert.equal(nearestPointIndex(xs, 5, 20, 200), undefined)
+  assert.equal(nearestPointIndex(xs, 210, 0, 200), undefined)
+  assert.equal(nearestPointIndex([], 10, 0, 200), undefined)
 })

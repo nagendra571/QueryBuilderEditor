@@ -39,7 +39,14 @@ export function rowAtX(
   return picked.every((r) => r === picked[0]) ? picked[0] : undefined
 }
 
-export const pointIndexOf = (state: { activeTooltipIndex?: unknown } | undefined): number | undefined => {
-  const n = typeof state?.activeTooltipIndex === 'string' ? Number(state.activeTooltipIndex) : state?.activeTooltipIndex
-  return typeof n === 'number' && Number.isInteger(n) && n >= 0 ? n : undefined
+/** The point nearest a click, from the click's own x. Hover state can't be used: Recharts updates it from a throttled
+ * mousemove, so a tap's click would see the previous point (or none). Outside the plot area there is no point. */
+export function nearestPointIndex(xs: (number | undefined)[], x: number, plotLeft: number, plotRight: number): number | undefined {
+  if (!(x >= plotLeft && x <= plotRight)) return undefined
+  let best: number | undefined
+  xs.forEach((px, i) => {
+    if (px === undefined || !Number.isFinite(px)) return
+    if (best === undefined || Math.abs(px - x) < Math.abs((xs[best] as number) - x)) best = i
+  })
+  return best
 }

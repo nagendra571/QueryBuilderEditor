@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useRef } from 'react'
 import type { ActiveDotProps } from 'recharts/types/util/types'
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, ComposedChart, Line, LineChart, XAxis, YAxis } from 'recharts'
 import {
@@ -14,7 +14,8 @@ import { toPercentStack, type CartesianModel } from '@/features/visualizations/c
 import { paletteColor } from '@/features/visualizations/chart-types'
 import { formatAxis, formatValue, percentTick, truncateLabel } from '@/features/visualizations/format'
 import { fireMark, type MarkDrill } from '@/features/drill/mark-click'
-import { pickRow, pointIndexOf, rowAtX, seriesRowsOf } from '@/features/visualizations/mark-sources'
+import { PlotGeometryReporter, pointIndexAtClick, type PlotGeometry } from '@/features/visualizations/PlotClick'
+import { pickRow, rowAtX, seriesRowsOf } from '@/features/visualizations/mark-sources'
 import type { ValueFormat, VisualizationOptions, VisualizationType } from '@/types'
 
 const DASHES = [undefined, '6 3', '2 3', '10 3 2 3']
@@ -149,11 +150,13 @@ export function CartesianView({
   // A click or tap anywhere on a point's X (a touch never hovers first). With several lines it only resolves when
   // every line has the same row there; the dot under the pointer covers the rest.
   const lineKeys = (type === 'combo' ? model.series.filter((s) => (options.lineMeasures ?? []).includes(s.label)) : model.series).map((s) => s.key)
+  const geometry = useRef<PlotGeometry | null>(null)
+  const reporter = <PlotGeometryReporter labels={model.points.map((p) => p.x)} into={geometry} />
   const chartClick = drill && (type === 'line' || type === 'area' || type === 'combo')
     ? {
         style: pointer,
-        onClick: (state: { activeTooltipIndex?: unknown }, e: React.MouseEvent) => {
-          const index = pointIndexOf(state)
+        onClick: (_state: unknown, e: React.MouseEvent) => {
+          const index = pointIndexAtClick(e, geometry.current)
           const row = index === undefined ? undefined : rowAtX(model.points[index], lineKeys, drill.keyColumns)
           fireMark(drill, row ? { row } : null, e)
         },
@@ -180,6 +183,7 @@ export function CartesianView({
   if (type === 'line') {
     chart = (
       <LineChart data={data} accessibilityLayer {...chartClick}>
+        {drill && reporter}
         <CartesianGrid vertical={false} />
         {category}
         {values}
@@ -191,6 +195,7 @@ export function CartesianView({
   } else if (type === 'area') {
     chart = (
       <AreaChart data={data} accessibilityLayer {...chartClick}>
+        {drill && reporter}
         <CartesianGrid vertical={false} />
         {category}
         {values}
@@ -240,6 +245,7 @@ export function CartesianView({
     let lineIndex = 0
     chart = (
       <ComposedChart data={data} accessibilityLayer {...chartClick}>
+        {drill && reporter}
         <CartesianGrid vertical={false} />
         {category}
         {values}
