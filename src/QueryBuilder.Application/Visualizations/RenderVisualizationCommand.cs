@@ -49,6 +49,6 @@ public sealed class RenderVisualizationCommandHandler(
                 }),
             cancellationToken);
 
-        return new VisualizationDataDto(data.Columns, data.Rows, data.Rows.Count, data.ExecutionTimeMs, data.RowLimit, data.Truncated);
+        return new VisualizationDataDto(data.Columns, data.Rows, data.Rows.Count, data.ExecutionTimeMs, data.RowLimit, data.Truncated, data.KeyColumns);
     }
 }

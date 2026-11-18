@@ -12,7 +12,8 @@ namespace QueryBuilder.Application.Visualizations;
 public enum VisualizationDataPurpose
 {
     Draw,
-    Download
+    Download,
+    Drill
 }
 
 public sealed record LoadedVisualizationData(
@@ -23,7 +24,17 @@ public sealed record LoadedVisualizationData(
     List<Dictionary<string, object?>> Rows,
     long ExecutionTimeMs,
     int RowLimit,
-    bool Truncated);
+    bool Truncated,
+    List<string>? KeyColumns = null);
+
+public sealed record VisualizationContext(
+    SavedQuery SavedQuery,
+    QueryVisualization Visualization,
+    QueryDefinition Definition,
+    VisualizationOptions Options,
+    DataSource DataSource,
+    Dictionary<string, string?> Values,
+    bool CanView);
 
 /// <summary>
 /// The rows behind a saved chart, for drawing it or downloading them. Both go through one path on purpose, so a download
@@ -47,6 +58,93 @@ public sealed class VisualizationDataLoader(
     Dashboards.DashboardGrantResolver grantResolver)
 {
     public async Task<LoadedVisualizationData> LoadAsync(
+        Guid savedQueryId,
+        Guid visualizationId,
+        Dictionary<string, string?> parameterValues,
+        Guid? dashboardId,
+        Guid? tileId,
+        VisualizationDataPurpose purpose,
+        CancellationToken cancellationToken)
+    {
+        var context = await ResolveAsync(
+            savedQueryId, visualizationId, parameterValues, dashboardId, tileId, purpose, cancellationToken);
+        var savedQuery = context.SavedQuery;
+        var visualization = context.Visualization;
+        var definition = context.Definition;
+        var options = context.Options;
+
+        var effectiveLimit = RecordLimits.Effective(context.DataSource.MaxRecords, await appSettings.MaxRecordsAsync(cancellationToken), recordLimitSettings);
+
+        // A downloaded table is a file, not a screen: it gets every row up to the record limit (or the legacy export cap)
+        // instead of the first screenful. Every other chart downloads exactly the rows it is drawn from.
+        var downloadTable = purpose == VisualizationDataPurpose.Download && visualization.Type == VisualizationType.Table;
+        var requestedCap = downloadTable ? effectiveLimit ?? RecordLimits.LegacyExportRows : RecordLimits.ChartRows(effectiveLimit);
+
+        var (result, cap, _) = await ExecuteAsync(context, definition, requestedCap, cancellationToken);
+
+        if (result.Truncated)
+        {
+            if (downloadTable)
+            {
+                // A cut-off file looks complete to whoever opens it, so an oversized download is refused, never trimmed.
+                throw new RecordLimitExceededException(effectiveLimit is { } limit
+                    ? $"This chart has more than {limit:N0} records, the record limit. Add filters to narrow it down before downloading."
+                    : $"This chart has more than {RecordLimits.LegacyExportRows:N0} records, too many to download. Add filters to narrow it down.");
+            }
+
+            // A table is a list, not a picture: showing the first N rows with a warning is honest, whereas a
+            // truncated chart or pivot would silently draw wrong totals.
+            if (visualization.Type != VisualizationType.Table)
+            {
+                throw new RecordLimitExceededException(effectiveLimit is { } limit && limit <= RecordLimits.ChartMaxRows
+                    ? $"This query has more than {cap:N0} records — add filters or totals to chart it."
+                    : $"This chart has too many points to chart (max {RecordLimits.ChartMaxRows:N0}) — add filters or totals.");
+            }
+        }
+
+        var referenced = VisualizationOptionsValidator.ReferencedColumns(visualization.Type, options);
+        var columns = ProjectColumns(result, referenced, options, visualization.Type, definition);
+
+        var rows = result.Rows
+            .Select(row => referenced.ToDictionary(name => name, name => row.GetValueOrDefault(name), StringComparer.Ordinal))
+            .ToList();
+
+        VisualizationDataChecks.Check(visualization.Type, options, rows);
+        if (visualization.Type == VisualizationType.Counter)
+        {
+            rows = rows.Take(1).ToList();
+        }
+
+        // Row keys tell the browser which row was clicked when drilling. Only columns the query itself shows, never
+        // hidden ones, so a click can't smuggle in a value the viewer was not given.
+        List<string>? keyColumns = null;
+        if (purpose == VisualizationDataPurpose.Draw && visualization.Type != VisualizationType.Counter
+            && Drill.DrillDefinitions.IsAggregated(definition))
+        {
+            var referencedSet = new HashSet<string>(referenced, StringComparer.Ordinal);
+            var keys = definition.Columns
+                .Where(c => c.IsVisible && c.Aggregate == AggregateFunction.None)
+                .Select(c => c.EffectiveAlias)
+                .Where(name => !referencedSet.Contains(name))
+                .Distinct(StringComparer.Ordinal)
+                .ToList();
+            if (keys.Count > 0)
+            {
+                keyColumns = keys;
+                for (var i = 0; i < rows.Count; i++)
+                {
+                    foreach (var key in keys)
+                    {
+                        rows[i][key] = result.Rows[i].GetValueOrDefault(key);
+                    }
+                }
+            }
+        }
+
+        return new LoadedVisualizationData(savedQuery, visualization, definition, columns, rows, result.ExecutionTimeMs, cap, result.Truncated, keyColumns);
+    }
+
+    public async Task<VisualizationContext> ResolveAsync(
         Guid savedQueryId,
         Guid visualizationId,
         Dictionary<string, string?> parameterValues,
@@ -95,57 +193,29 @@ public sealed class VisualizationDataLoader(
         var dataSource = await dataSources.GetByIdAsync(savedQuery.DataSourceId, cancellationToken)
             ?? throw new NotFoundException(nameof(DataSource), savedQuery.DataSourceId);
 
-        await catalogService.ValidateAsync(savedQuery.DataSourceId, definition, cancellationToken);
-        var bound = await parameterBinder.MaterializeAsync(definition, values, cancellationToken);
-        var scopePredicates = await dataScopeGuard.AuthorizeAsync(savedQuery.DataSourceId, bound, cancellationToken);
+        return new VisualizationContext(savedQuery, visualization, definition, options, dataSource, values, canView);
+    }
 
-        var builder = sqlBuilderFactory.GetBuilder(dataSource.Provider);
+    /// <summary>
+    /// The only way chart and drill code reaches SQL. The definition passed in is validated against the catalog (a derived
+    /// drill definition may name columns that have left the view since the chart was saved), then parameters are bound,
+    /// the caller's row-level scope is applied, and only then is SQL built.
+    /// </summary>
+    public async Task<(QueryResultSet Result, int Cap, int? EffectiveLimit)> ExecuteAsync(
+        VisualizationContext context, QueryDefinition definition, int cap, CancellationToken cancellationToken)
+    {
+        var dataSourceId = context.SavedQuery.DataSourceId;
+        await catalogService.ValidateAsync(dataSourceId, definition, cancellationToken);
+        var bound = await parameterBinder.MaterializeAsync(definition, context.Values, cancellationToken);
+        var scopePredicates = await dataScopeGuard.AuthorizeAsync(dataSourceId, bound, cancellationToken);
+
+        var builder = sqlBuilderFactory.GetBuilder(context.DataSource.Provider);
         var generated = builder.Build(bound, scopePredicates);
 
-        var effectiveLimit = RecordLimits.Effective(dataSource.MaxRecords, await appSettings.MaxRecordsAsync(cancellationToken), recordLimitSettings);
-
-        // A downloaded table is a file, not a screen: it gets every row up to the record limit (or the legacy export cap)
-        // instead of the first screenful. Every other chart downloads exactly the rows it is drawn from.
-        var downloadTable = purpose == VisualizationDataPurpose.Download && visualization.Type == VisualizationType.Table;
-        var cap = downloadTable ? effectiveLimit ?? RecordLimits.LegacyExportRows : RecordLimits.ChartRows(effectiveLimit);
-
+        var effectiveLimit = RecordLimits.Effective(context.DataSource.MaxRecords, await appSettings.MaxRecordsAsync(cancellationToken), recordLimitSettings);
         var result = await executionService.ExecuteAsync(
-            dataSource, generated, new Dictionary<string, string?>(), cap, cancellationToken);
-
-        if (result.Truncated)
-        {
-            if (downloadTable)
-            {
-                // A cut-off file looks complete to whoever opens it, so an oversized download is refused, never trimmed.
-                throw new RecordLimitExceededException(effectiveLimit is { } limit
-                    ? $"This chart has more than {limit:N0} records, the record limit. Add filters to narrow it down before downloading."
-                    : $"This chart has more than {RecordLimits.LegacyExportRows:N0} records, too many to download. Add filters to narrow it down.");
-            }
-
-            // A table is a list, not a picture: showing the first N rows with a warning is honest, whereas a
-            // truncated chart or pivot would silently draw wrong totals.
-            if (visualization.Type != VisualizationType.Table)
-            {
-                throw new RecordLimitExceededException(effectiveLimit is { } limit && limit <= RecordLimits.ChartMaxRows
-                    ? $"This query has more than {cap:N0} records — add filters or totals to chart it."
-                    : $"This chart has too many points to chart (max {RecordLimits.ChartMaxRows:N0}) — add filters or totals.");
-            }
-        }
-
-        var referenced = VisualizationOptionsValidator.ReferencedColumns(visualization.Type, options);
-        var columns = ProjectColumns(result, referenced, options, visualization.Type, definition);
-
-        var rows = result.Rows
-            .Select(row => referenced.ToDictionary(name => name, name => row.GetValueOrDefault(name), StringComparer.Ordinal))
-            .ToList();
-
-        VisualizationDataChecks.Check(visualization.Type, options, rows);
-        if (visualization.Type == VisualizationType.Counter)
-        {
-            rows = rows.Take(1).ToList();
-        }
-
-        return new LoadedVisualizationData(savedQuery, visualization, definition, columns, rows, result.ExecutionTimeMs, cap, result.Truncated);
+            context.DataSource, generated, new Dictionary<string, string?>(), cap, cancellationToken);
+        return (result, cap, effectiveLimit);
     }
 
     private static void ThrowIfStale(VisualizationType type, VisualizationOptions options, QueryDefinition definition)

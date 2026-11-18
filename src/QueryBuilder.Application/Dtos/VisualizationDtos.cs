@@ -28,4 +28,5 @@ public sealed record VisualizationDataDto(
     int RowCount,
     long ExecutionTimeMs,
     int RowLimit,
-    bool Truncated = false);
+    bool Truncated = false,
+    List<string>? KeyColumns = null);
