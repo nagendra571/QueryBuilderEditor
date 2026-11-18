@@ -1,6 +1,6 @@
 import type { MutableRefObject } from 'react'
 import { usePlotArea, useXAxisScale } from 'recharts'
-import { nearestPointIndex } from '@/features/visualizations/mark-sources'
+import { nearestPointIndex, pointCenters } from '@/features/visualizations/mark-sources'
 
 export interface PlotGeometry {
   xs: (number | undefined)[]
@@ -14,10 +14,7 @@ export function PlotGeometryReporter({ labels, into }: { labels: unknown[]; into
   const area = usePlotArea()
   if (scale && area) {
     into.current = {
-      xs: labels.map((l) => {
-        const v = scale(l as never)
-        return typeof v === 'number' ? v : undefined
-      }),
+      xs: pointCenters(scale as Parameters<typeof pointCenters>[0], labels),
       left: area.x,
       right: area.x + area.width,
     }

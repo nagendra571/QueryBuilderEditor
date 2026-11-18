@@ -50,3 +50,15 @@ export function nearestPointIndex(xs: (number | undefined)[], x: number, plotLef
   })
   return best
 }
+
+type XScale = ((v: never) => unknown) & { bandwidth?: () => number }
+
+/** A band scale (an axis shared with bars) returns a band's left edge; a click must be matched against its centre.
+ * Point scales have no bandwidth and are used as is. */
+export function pointCenters(scale: XScale, labels: unknown[]): (number | undefined)[] {
+  const half = typeof scale.bandwidth === 'function' ? scale.bandwidth() / 2 : 0
+  return labels.map((l) => {
+    const v = scale(l as never)
+    return typeof v === 'number' ? v + half : undefined
+  })
+}
