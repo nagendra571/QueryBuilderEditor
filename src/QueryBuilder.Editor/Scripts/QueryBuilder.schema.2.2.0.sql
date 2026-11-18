@@ -1278,3 +1278,24 @@ END;
 COMMIT;
 GO
 
+BEGIN TRANSACTION;
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261118042505_AddDashboardClickToFilter'
+)
+BEGIN
+    ALTER TABLE [Dashboards] ADD [ClickToFilterEnabled] bit NOT NULL DEFAULT CAST(1 AS bit);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261118042505_AddDashboardClickToFilter'
+)
+BEGIN
+    INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
+    VALUES (N'20261118042505_AddDashboardClickToFilter', N'10.0.14');
+END;
+
+COMMIT;
+GO
+

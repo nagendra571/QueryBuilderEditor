@@ -579,8 +579,20 @@ A drill export is recorded as a `QueryExported` with the trail added. A chart dr
 them (`CrossFilters`) in its `QueryRun` or `QueryExported` details.
 
 **Upgrading.** Drill adds one column, `Dashboards.ClickToFilterEnabled` (default on, so existing dashboards respond to
-click-filters). Auto-migration adds it; for DDL-restricted hosts the next release's DBA script includes it (see `Scripts/README.md`).
-The list of drill columns is part of a chart's options and needs no migration.
+click-filters). It arrived in 2.2.0: auto-migration adds it, and for DDL-restricted hosts `QueryBuilder.schema.2.2.0.sql` includes it
+(see `Scripts/README.md`). The list of drill columns is part of a chart's options and needs no migration.
+
+**Other changes in 2.2.0 that affect existing queries.** These came from making clicked values match their own rows exactly:
+
+- Number values in filters and parameters may use exponent form (`1E-05`).
+- A date-time value carrying `Z` or an offset (`+05:30`) is now read as that instant in UTC, on both providers, instead of
+  being converted to the server's local time.
+- On SQL Server, a date-time with fractions of a second is sent as `datetime2` when the column is `datetime2` or
+  `datetimeoffset`, so `= '2024-03-01 10:30:00.1234567'` now matches exactly (it used to be rounded to `datetime`'s 1/300 s).
+  Classic `datetime` columns are sent as before. To know each column's type, a saved query now stores it on each filter
+  condition (`nativeType`); it is refreshed on every run and older versions ignore it.
+- Chart data for a chart over a totalled query now also returns the query's visible plain columns the chart doesn't draw
+  (`keyColumns`), which a click needs to identify its row.
 
 **Known limits.** SQL Server `time` columns can't be filtered by a click, and ids too large for a JavaScript number are not
 clickable. Zooming into dates (year, quarter, month) and author-linked destinations ("open this dashboard for this program") are

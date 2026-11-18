@@ -11,12 +11,12 @@ strictly-versioned "run each release's script in order" scheme, the *latest* scr
 both first-time provisioning and every upgrade in between. Only keep the latest one around; older
 ones are superseded, not additive.
 
-A release without a migration ships the previous script unchanged: **2.1.0 adds no migration, so
-`QueryBuilder.schema.2.0.0.sql` is still the current script** for 2.1.0.
+A release without a migration ships the previous script unchanged (2.1.0 added none and shipped the 2.0.0 script).
 
-**The next release (chart drill-down) adds one migration**, which adds `Dashboards.ClickToFilterEnabled` (bit, default on, so existing
-dashboards respond to click-filters). Its script, `QueryBuilder.schema.<version>.sql`, is generated at release time (see below) and
-replaces the 2.0.0 script; until then `QueryBuilder.schema.2.0.0.sql` does not contain it.
+**2.2.0 adds one migration**, `AddDashboardClickToFilter`, which adds `Dashboards.ClickToFilterEnabled` (`bit NOT NULL`, default 1,
+so existing dashboards respond to click-filters). **`QueryBuilder.schema.2.2.0.sql` is the current script**: it provisions a new
+database and upgrades any earlier one, including everything the 2.0.0 script did. Rolling back to 2.1.0 is safe: older code
+ignores the column and its default fills it.
 
 ## Regenerating after a migration change
 
@@ -36,7 +36,7 @@ Whenever a new EF Core migration is added under `QueryBuilder.Infrastructure/Per
 
 ## What the 2.0.0 script contains (hub mode)
 
-Four migrations were added for hub mode. `QueryBuilder.schema.2.0.0.sql` applies them (it was checked twice on an empty
+Four migrations were added for hub mode in 2.0.0. The current script applies them (it was checked twice on an empty
 database and twice on top of a 1.5.0 database):
 
 | Migration | What it does |
