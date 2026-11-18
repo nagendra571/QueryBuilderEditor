@@ -1,5 +1,6 @@
 import type {
   ColumnDataType,
+  QueryColumn,
   QueryResultColumnDto,
   VisualizationOptions,
   VisualizationType,
@@ -99,4 +100,15 @@ export function menuItems(ctx: {
 export function breakdownChoices(allowed: string[], trail: DrillStep[]): string[] {
   const used = new Set(trail.map((s) => s.column))
   return allowed.filter((c) => !used.has(c))
+}
+
+/** The run endpoint reports no aggregate on its columns, so totals are read from the saved definition by output name
+ * (alias, else column name). An unmatched result column is treated as plain. */
+export function withSavedAggregates(columns: QueryResultColumnDto[], saved: QueryColumn[]): QueryResultColumnDto[] {
+  const byName = new Map<string, QueryColumn>()
+  for (const c of saved) if (c.isVisible) byName.set(c.alias || c.columnName, c)
+  return columns.map((c) => {
+    const s = byName.get(c.name)
+    return s ? { ...c, aggregate: s.aggregate } : c
+  })
 }

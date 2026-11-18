@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import { drillUrl, rowSteps } from '@/features/drill/drill-nav'
-import { isAggregated } from '@/features/drill/drill-model'
+import { isAggregated, withSavedAggregates } from '@/features/drill/drill-model'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -248,10 +248,12 @@ export function QueryEditorPage() {
   }
 
   // The server rebuilds the drill from the saved query, so the grid may only drill while the editor has no unsaved changes.
+  const drillColumns =
+    savedDefinition && runMutation.data ? withSavedAggregates(runMutation.data.columns, savedDefinition.columns) : null
   const gridDrill =
-    queryId && !!savedDefinition && !isDirty && !isDisabled && runMutation.data && isAggregated(runMutation.data.columns)
+    queryId && !!savedDefinition && !isDirty && !isDisabled && drillColumns && isAggregated(drillColumns)
       ? (row: Record<string, unknown>) => {
-          const steps = rowSteps(runMutation.data!.columns, row)
+          const steps = rowSteps(drillColumns, row)
           if (!steps) {
             toast.error('This row cannot be opened: one of its values cannot be sent back exactly.')
             return

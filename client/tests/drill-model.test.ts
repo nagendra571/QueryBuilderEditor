@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { breakdownChoices, menuItems, stepsForMark, toWireValue } from '../src/features/drill/drill-model.ts'
+import { withSavedAggregates, breakdownChoices, menuItems, stepsForMark, toWireValue } from '../src/features/drill/drill-model.ts'
 import type { QueryResultColumnDto, VisualizationOptions } from '../src/types/index.ts'
 
 const anchor = { x: 1, y: 2 }
@@ -137,4 +137,15 @@ test('menuItems', () => {
 test('breakdownChoices drops columns already in the trail', () => {
   assert.deepEqual(breakdownChoices(['A', 'B', 'C'], [{ column: 'B', value: 'x' }]), ['A', 'C'])
   assert.deepEqual(breakdownChoices([], []), [])
+})
+
+test('withSavedAggregates reads totals from the saved definition by output name', () => {
+  const col = (name: string): QueryResultColumnDto => ({ name, dataType: 'text', aggregate: null } as unknown as QueryResultColumnDto)
+  const saved = [
+    { tableAlias: 't', columnName: 'Budget', alias: 'Total', dataType: 'decimal', aggregate: 'sum', orderIndex: 1, isVisible: true },
+    { tableAlias: 't', columnName: 'Program', alias: null, dataType: 'text', aggregate: 'none', orderIndex: 0, isVisible: true },
+    { tableAlias: 't', columnName: 'Hidden', alias: null, dataType: 'decimal', aggregate: 'sum', orderIndex: 2, isVisible: false },
+  ] as never
+  const out = withSavedAggregates([col('Program'), col('Total'), col('Hidden'), col('Other')], saved)
+  assert.deepEqual(out.map((c) => c.aggregate), ['none', 'sum', null, null])
 })
