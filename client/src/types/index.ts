@@ -613,6 +613,8 @@ export interface RenderVisualizationRequest {
   /** Set when the chart is drawn as a tile: the server then checks the caller may see that dashboard and tile. */
   dashboardId?: string
   tileId?: string
+  /** Dashboard click-to-filter values; the server refuses them while the dashboard's switch is off. */
+  crossFilters?: { sourceTileId: string; column: string; value: string | null }[]
 }
 
 export type DownloadFormat = 'csv' | 'xlsx'
@@ -766,6 +768,7 @@ export interface DashboardDetailDto {
   isOwner: boolean
   accessLevel: QueryAccessLevel
   published?: boolean
+  clickToFilterEnabled?: boolean
   version: number
   tiles: DashboardTileDto[]
   parameters?: DashboardParameterDto[] | null
@@ -775,6 +778,7 @@ export interface SaveDashboardRequest {
   name: string
   description?: string | null
   version?: number | null
+  clickToFilterEnabled?: boolean
 }
 
 export interface SaveDashboardTileRequest {

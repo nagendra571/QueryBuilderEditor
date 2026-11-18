@@ -1,9 +1,12 @@
-import { AlertTriangle, Ban, Check, Loader2, Lock, SlidersHorizontal, Trash2 } from 'lucide-react'
+import { AlertTriangle, Ban, Check, Filter, Loader2, Lock, SlidersHorizontal, Trash2 } from 'lucide-react'
 import { useContext, useId, useMemo, useState, type ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Button } from '@/components/ui/button'
 import { ParameterPromptDialog } from '@/features/builder/ParameterPromptDialog'
 import { DashboardIdContext, DashboardValuesContext, mappedBy, resolveTileValues } from '@/features/dashboards/dashboard-params'
+import { filterStepFor, tileFilters } from '@/features/dashboards/cross-filters'
+import { DashboardFiltersContext } from '@/features/dashboards/filter-context'
+import { encodeFilters } from '@/features/drill/drill-url'
 import { useRenderLimiter } from '@/features/dashboards/render-limiter'
 import { Label } from '@/components/ui/label'
 import { ParameterControl } from '@/features/parameters/controls/ParameterControl'
@@ -72,6 +75,7 @@ export function ChartTileBody({ tile, titleId, statusId }: { tile: DashboardTile
   const limit = useRenderLimiter()
   const dashboardValues = useContext(DashboardValuesContext)
   const dashboardId = useContext(DashboardIdContext)
+  const dashboardFilters = useContext(DashboardFiltersContext)
   const context = useMemo(() => (dashboardId ? { dashboardId, tileId: tile.id } : undefined), [dashboardId, tile.id])
   // Values typed into the "Set values" prompt, for parameters that have no mapping.
   const [promptValues, setPromptValues] = useState<ParameterValues | null>(null)
@@ -120,16 +124,20 @@ export function ChartTileBody({ tile, titleId, statusId }: { tile: DashboardTile
   const isDisabled = (hubTile ? tileChart.data?.isDisabled : queryDetail.data?.isDisabled) ?? false
   const ready = !!detail.data && !!visualization && !isDisabled && !needsValues
 
+  const crossFilters = tileFilters(dashboardFilters.enabled, dashboardFilters.filters)
+  // In the key so every tile refetches when a filter is added, changed or removed.
+  const filterKey = crossFilters ? encodeFilters(crossFilters) : ''
   const data = useQuery({
-    queryKey: [...visualizationDataPrefix(queryId), vizId, values, dashboardId, tile.id],
-    queryFn: () => limit(() => visualizationsApi.render(queryId, vizId, { parameterValues: values, ...context })),
+    queryKey: [...visualizationDataPrefix(queryId), vizId, values, dashboardId, tile.id, filterKey],
+    queryFn: () => limit(() => visualizationsApi.render(queryId, vizId, { parameterValues: values, ...context, crossFilters })),
     enabled: ready,
     // Errors here are meaningful tile states (no access, disabled, too many rows), not transient.
     retry: false,
     staleTime: 30_000,
   })
 
-  // Task 11 passes onFilter here (the dashboard's click-filter); until then "Filter this dashboard" stays out of the menu.
+  const filterable = (steps: { column: string; value: string | null }[]) =>
+    !!visualization && !!context && filterStepFor(visualization.type, visualization.options, steps) !== null
   const drill = useChartDrill({
     queryId,
     visualization,
@@ -137,12 +145,22 @@ export function ChartTileBody({ tile, titleId, statusId }: { tile: DashboardTile
     baseUpdatedAt: data.dataUpdatedAt,
     parameterValues: values,
     context,
+    crossFilters,
+    onFilter:
+      dashboardFilters.enabled && visualization
+        ? (steps) => {
+            const step = filterStepFor(visualization.type, visualization.options, steps)
+            if (step) dashboardFilters.add({ sourceTileId: tile.id, column: step.column, value: step.value })
+          }
+        : undefined,
+    canFilter: filterable,
   })
   const view = drill.view
 
   const title = tile.title?.trim() || chart?.visualizationName || 'Chart'
   const zone = zoneLabel(me)
   const refreshing = data.isFetching && !!data.data
+  const notFilteredBy = crossFilters && !data.isError ? (data.data?.crossFilter?.notApplied ?? []) : []
 
   let body: ReactNode
   let status = ''
@@ -260,6 +278,15 @@ export function ChartTileBody({ tile, titleId, statusId }: { tile: DashboardTile
             />
             <span className="hidden max-w-40 truncate sm:inline">{me?.zone?.unrestricted ? 'All data' : `Your zone: ${zone}`}</span>
             <span className="sr-only sm:hidden">{me?.zone?.unrestricted ? 'All data' : `Your zone: ${zone}`}</span>
+          </span>
+        )}
+        {notFilteredBy.length > 0 && (
+          <span
+            className="flex shrink-0 items-center gap-1 rounded-sm border border-dashed border-border px-1.5 py-0.5 text-xs text-muted-foreground"
+            title={`This chart has no ${notFilteredBy.join(', ')} column, so that filter does not narrow it.`}
+          >
+            <Filter aria-hidden="true" className="size-3" />
+            <span className="max-w-32 truncate">Not filtered by {notFilteredBy.join(', ')}</span>
           </span>
         )}
         {hasUnmapped && parameters.length > 0 && !isDisabled && visualization && (

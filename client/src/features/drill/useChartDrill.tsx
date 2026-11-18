@@ -61,6 +61,7 @@ export function useChartDrill({
   context,
   crossFilters,
   onFilter,
+  canFilter,
 }: {
   queryId: string
   visualization: { id: string; name: string; type: VisualizationType; options: VisualizationOptions } | null | undefined
@@ -71,10 +72,11 @@ export function useChartDrill({
   context?: DashboardContext
   crossFilters?: CrossFilterValue[]
   /**
-   * The seam for "Filter this dashboard" (Task 11): the item shows only where a dashboard passes this. It receives the
-   * trail of the clicked mark.
+   * "Filter this dashboard": the item shows only where a dashboard passes this. It receives the trail of the clicked mark.
    */
   onFilter?: (steps: TrailStep[]) => void
+  /** Hides "Filter this dashboard" for a mark that has no value to filter on. */
+  canFilter?: (steps: TrailStep[]) => boolean
 }) {
   const navigate = useNavigate()
   const chartEl = useRef<HTMLDivElement | null>(null)
@@ -164,7 +166,7 @@ export function useChartDrill({
 
   let menu: ReactNode = null
   if (pending && view && visualization) {
-    const items = menuItems({ type: view.type, aggregated: isAggregated(view.columns), onDashboard: !!context, clickToFilter: !!onFilter })
+    const items = menuItems({ type: view.type, aggregated: isAggregated(view.columns), onDashboard: !!context, clickToFilter: !!onFilter && (canFilter ? canFilter(pending.steps) : true) })
     const n = clickedCount(view.columns, pending.mark.row)
     // Portalled: a dashboard tile sits in a transformed grid cell, which would make this menu's fixed position tile-relative.
     menu = createPortal(
