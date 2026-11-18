@@ -526,6 +526,75 @@ downloads the rows behind it (not the pivoted grid); a Counter downloads its one
   for a tile). Any other format is a 400. Since 2.1.0 the query results export (`POST /querybuilder/api/queries/export`) also
   answers 400 for a format other than `csv` or `xlsx`, where it used to fail with a 500 (or accept a number).
 
+### Drilling into a chart
+
+Click a bar, slice, point, pivot cell or counter and QueryBuilder offers what is behind it. The same menu opens on a chart
+on the query page, on a dashboard tile, and on a row of the results grid of a saved query that has totals. It is also
+reachable from the keyboard: each chart has an "Explore values" list offering the same choices.
+
+- **See these rows** opens a page listing the underlying rows. The trail across the top
+  (`Enrolments by program › Program = 20 › Status = Active`) names each click, and each crumb can be clicked to go back.
+  The page shows the viewer's zone chip, the row count, the parameter values in effect, a table with paging, **Export**
+  (CSV or Excel) and **Copy link**. Its address holds only the trail, so a shared link opens for the next person with *their own*
+  access and zone.
+- **Break down by** redraws the same chart in place for the clicked value, grouped by another column, with a trail above the chart
+  to step back up to any level. Offered for Bar, Horizontal bar, Line, Area, Combo, Waterfall, Pie and Funnel charts (not Trend,
+  Pivot, Scatter, Counter or Table) and only for queries with totals. It is a view, never saved. The usual chart rules still
+  apply (a pie of more than 12 slices, or a chart of too many rows, is refused).
+- **Filter this dashboard** (dashboards only) adds `Program = 20` to a bar above the tiles. Every tile whose query reads the same
+  data source and has a column of that name is filtered; any other tile is marked "not filtered by Program". Several filters
+  combine with AND, and they live in the page address so the filtered view can be shared. An author can turn this off for a
+  dashboard with the **Allow click-to-filter** switch in the dashboard's settings (on by default). When it is off the menu item
+  disappears and the server refuses click-filters for that dashboard, including ones typed into an address.
+
+**Who can drill.** Anyone who can see the chart: the query's owner and shares, Admins in hub mode, and hub Viewers through a
+dashboard they can see. A Viewer has no query page, so they drill on a dashboard tile only.
+
+**Which columns appear.** Only columns somebody chose to show: the query's own columns (a totalled column is replaced by the column
+it totals), plus the extra columns the chart's author lists under **Columns to show when drilling** in the chart editor (at most 20,
+columns of the query's own source). Never the rest of the view.
+
+**The row-level scope guarantee.** The browser sends only what was clicked (column names and values), never a query or SQL. The server
+rebuilds the drill from the saved query, binds each clicked value as a SQL parameter, ANDs it inside the filters, and applies the
+viewer's data scope in front of everything exactly as for every other query. A click can only narrow the result. A person zoned to
+`ProgramId = 10` who edits the address to `Program = 20` gets an ordinary empty result. Breakdown totals are counted inside the zone,
+so they never reveal other zones. The same holds at every level, for every link, for exports and for click-filters on every tile. A
+query whose scope rule is stale or undecided is refused, as when running it.
+
+**Limits.**
+
+| Limit | Value |
+|---|---|
+| Steps in a trail | 8 |
+| Characters in one clicked value | 4,000 |
+| Click-filters on a dashboard at once | 5 |
+| "Columns to show when drilling" per chart | 20 |
+
+The record limits apply: with a limit set, the rows page shows the first rows with the "narrow it down" banner, and a drill export is
+refused (HTTP 409) instead of being cut off; without one, the legacy 1,000-row page and 100,000-row export caps apply.
+
+**Audit.** Each drill is recorded as `QueryDrilled` (query, chart, dashboard and tile, action, trail, row count, the viewer's scope).
+A drill export is recorded as a `QueryExported` with the trail added.
+
+**Upgrading.** Drill adds one column, `Dashboards.ClickToFilterEnabled` (default on, so existing dashboards respond to
+click-filters). Auto-migration adds it; for DDL-restricted hosts the next release's DBA script includes it (see `Scripts/README.md`).
+The list of drill columns is part of a chart's options and needs no migration.
+
+**Known limits.** SQL Server `time` columns can't be filtered by a click, and ids too large for a JavaScript number are not
+clickable. Zooming into dates (year, quarter, month) and author-linked destinations ("open this dashboard for this program") are
+planned for a later release.
+
+API (all bodies camelCase JSON; a Viewer may call the two chart routes):
+
+- `POST /querybuilder/api/queries/{queryId}/visualizations/{visualizationId}/drill` with
+  `{ "action": "rows" | "breakdown", "steps": [{ "column": "...", "value": "..." | null }], "breakdownColumn": "...",
+  "crossFilters": [{ "sourceTileId": "...", "column": "...", "value": "..." | null }], "parameterValues": { ... },
+  "dashboardId": "...", "tileId": "..." }`.
+- `POST .../visualizations/{visualizationId}/drill/export` with the same body plus `"format": "csv" | "xlsx"` (rows only).
+- `POST /querybuilder/api/queries/{queryId}/drill` and `.../drill/export` for the results grid of a saved query:
+  `{ "steps": [...], "parameterValues": { ... } }` (plus `format`).
+- The chart render and chart download routes also accept `crossFilters` (with `dashboardId` and `tileId`).
+
 ## Dashboards
 
 A dashboard is a page of **tiles**: charts from saved queries (see Visualizations) and plain-text
@@ -725,9 +794,9 @@ A person's role comes from the **latest launch token only**; it is never stored 
 
 - **Isolation.** A user is the pair (app, user id): the same email from two apps is two people. A request that names another
   app's query, dashboard, share or data source is answered 404 and changes nothing.
-- **Viewer allowlist.** A Viewer can call exactly eight endpoints: the dashboard list, one dashboard, a dashboard tile's chart,
+- **Viewer allowlist.** A Viewer can call exactly ten endpoints: the dashboard list, one dashboard, a dashboard tile's chart,
   a dashboard's parameter options, a query's parameter options (through a dashboard), the chart render and the chart data
-  download for a query (both only through a dashboard they can see), and `/api/me`. The Viewer role wins over any share: sharing a query with a Viewer gives them nothing beyond dashboards.
+  download for a query (both only through a dashboard they can see), the chart drill and drill download (same rule), and `/api/me`. The Viewer role wins over any share: sharing a query with a Viewer gives them nothing beyond dashboards.
 - **Publishing.** Admins (and super admins) can **Publish** a dashboard to the app and **Unpublish** it; every Viewer and
   Author of the app then sees it read-only.
 - **Dashboard-context charts.** A chart tile on a dashboard the viewer can see renders with the **viewer's own data scope**.
@@ -889,10 +958,13 @@ Every failing check includes a one-line fix. Returns 404 outside Development.
   Scatter/bubble, Table, Pivot and Counter per saved query, with number formats, drawn with the
   viewer's own data scope; charts over too many rows are refused instead of drawn partially (Table
   shows the first rows with a banner)
+- Drill-down: click a bar, slice, point, pivot cell, counter or aggregated result row to **See these rows**, **Break down by**
+  another column, or **Filter this dashboard** (switchable per dashboard). Only columns the author chose are shown, and the
+  viewer's row-level scope applies at every level, link and export. See "Drilling into a chart"
 - Dashboards: charts from several saved queries plus text notes on one page, shared with named
   users; each viewer sees only the charts their own query access and data scope allow
 - Full audit log (created/updated/deleted/run/exported/shared/unshared/disabled/enabled/catalog
-  policy updated/data scope updated/record limit updated/chart created/updated/deleted) with a configurable actor identity and
+  policy updated/data scope updated/record limit updated/chart created/updated/deleted/drilled) with a configurable actor identity and
   access control
 
 ## Links

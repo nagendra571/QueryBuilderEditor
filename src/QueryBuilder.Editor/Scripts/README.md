@@ -14,6 +14,10 @@ ones are superseded, not additive.
 A release without a migration ships the previous script unchanged: **2.1.0 adds no migration, so
 `QueryBuilder.schema.2.0.0.sql` is still the current script** for 2.1.0.
 
+**The next release (chart drill-down) adds one migration**, which adds `Dashboards.ClickToFilterEnabled` (bit, default on, so existing
+dashboards respond to click-filters). Its script, `QueryBuilder.schema.<version>.sql`, is generated at release time (see below) and
+replaces the 2.0.0 script; until then `QueryBuilder.schema.2.0.0.sql` does not contain it.
+
 ## Regenerating after a migration change
 
 Whenever a new EF Core migration is added under `QueryBuilder.Infrastructure/Persistence/Migrations`:
