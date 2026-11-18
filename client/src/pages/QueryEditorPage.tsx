@@ -3,6 +3,8 @@ import { ArrowLeft, Ban, ChartColumn, Code2, Download, FileSpreadsheet, History,
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
+import { drillUrl, rowSteps } from '@/features/drill/drill-nav'
+import { isAggregated } from '@/features/drill/drill-model'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -241,6 +243,20 @@ export function QueryEditorPage() {
     if (missing.length > 0) return
     exportMutation.mutate({ format, exportValues: parameterValues })
   }
+
+  // The server rebuilds the drill from the saved query, so the grid may only drill while it shows exactly that query.
+  const unchangedFromSaved = !!savedDefinition && JSON.stringify(definition) === JSON.stringify(savedDefinition)
+  const gridDrill =
+    queryId && unchangedFromSaved && !isDisabled && runMutation.data && isAggregated(runMutation.data.columns)
+      ? (row: Record<string, unknown>) => {
+          const steps = rowSteps(runMutation.data!.columns, row)
+          if (!steps) {
+            toast.error('This row cannot be opened: one of its values cannot be sent back exactly.')
+            return
+          }
+          navigate(drillUrl({ queryId, steps, params: pickKnown(savedDefinition?.parameters ?? [], appliedValues) }))
+        }
+      : undefined
 
   const settingsParameter = definition.parameters.find((p) => p.name === store.parameterSettingsFor) ?? null
   const settingsBound = settingsParameter ? boundConditions(definition, settingsParameter.name) : []
@@ -521,7 +537,13 @@ export function QueryEditorPage() {
                 <Loader2 className="mr-2 size-4 animate-spin" /> Running query…
               </div>
             )}
-            {!runMutation.isPending && runMutation.data && <ResultsTable result={runMutation.data} />}
+            {!runMutation.isPending && runMutation.data && (
+              <ResultsTable
+                result={runMutation.data}
+                onRowClick={gridDrill}
+                rowActionLabel={gridDrill ? 'See the rows behind this row' : undefined}
+              />
+            )}
             {!runMutation.isPending && !runMutation.data && (
               <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
                 Run the query to see results here.

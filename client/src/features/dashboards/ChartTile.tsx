@@ -8,6 +8,7 @@ import { useRenderLimiter } from '@/features/dashboards/render-limiter'
 import { Label } from '@/components/ui/label'
 import { ParameterControl } from '@/features/parameters/controls/ParameterControl'
 import { isBlank, parameterTitle, valuesEqual, type ParameterValues } from '@/features/parameters/param-values'
+import { useChartDrill } from '@/features/drill/useChartDrill'
 import { ChartDownloadMenu } from '@/features/visualizations/ChartDownloadMenu'
 import { ChartRenderer } from '@/features/visualizations/ChartRenderer'
 import { isHub } from '@/features/hub/permissions'
@@ -128,6 +129,17 @@ export function ChartTileBody({ tile, titleId, statusId }: { tile: DashboardTile
     staleTime: 30_000,
   })
 
+  // Task 11 passes onFilter here (the dashboard's click-filter); until then "Filter this dashboard" stays out of the menu.
+  const drill = useChartDrill({
+    queryId,
+    visualization,
+    base: data.isError ? null : data.data,
+    baseUpdatedAt: data.dataUpdatedAt,
+    parameterValues: values,
+    context,
+  })
+  const view = drill.view
+
   const title = tile.title?.trim() || chart?.visualizationName || 'Chart'
   const zone = zoneLabel(me)
   const refreshing = data.isFetching && !!data.data
@@ -193,12 +205,29 @@ export function ChartTileBody({ tile, titleId, statusId }: { tile: DashboardTile
     body = <Notice icon={icon} title={heading} message={failure.message} fenced={failure.kind === 'noAccess'} />
   } else if (data.data) {
     status = data.isFetching ? 'Refreshing' : data.data.rows.length === 0 ? 'No data' : 'Loaded'
+    if (drill.error) status = drill.error
     // overflow-x-hidden: charts round up by under a pixel at fractional tile widths, which would
     // otherwise reserve a scrollbar. Wide tables have their own horizontal scroller.
-    body = (
-      <div className={natural ? undefined : 'h-full min-h-0 overflow-y-auto overflow-x-hidden'}>
-        <ChartRenderer type={visualization.type} options={visualization.options} rows={data.data.rows} name={title} fill={!natural} compact={natural} columns={data.data.columns} truncated={data.data.truncated} rowLimit={data.data.rowLimit} />
+    body = drill.error ? (
+      <Notice icon={<AlertTriangle className="size-4" />} title="The chart could not be broken down" message={drill.error} />
+    ) : view ? (
+      <div ref={drill.chartRef} tabIndex={-1} className={cn('outline-none', natural ? undefined : 'h-full min-h-0 overflow-y-auto overflow-x-hidden')}>
+        <ChartRenderer
+          type={view.type}
+          options={view.options}
+          rows={view.rows}
+          name={title}
+          fill={!natural}
+          compact={natural}
+          columns={view.columns}
+          truncated={view.truncated}
+          rowLimit={view.rowLimit}
+          keyColumns={view.keyColumns}
+          onMarkClick={drill.onMarkClick}
+        />
       </div>
+    ) : (
+      <Loading />
     )
   } else {
     status = 'Loading'
@@ -238,6 +267,7 @@ export function ChartTileBody({ tile, titleId, statusId }: { tile: DashboardTile
             <SlidersHorizontal className="size-3.5" />
           </Button>
         )}
+        {ready && data.data && !data.isError && drill.explore}
         {ready && data.data && !data.isError && (
           <ChartDownloadMenu compact queryId={queryId} visualizationId={vizId} name={title} parameterValues={values} context={context} />
         )}
@@ -256,7 +286,9 @@ export function ChartTileBody({ tile, titleId, statusId }: { tile: DashboardTile
           onApply={setTileValues}
         />
       )}
+      {drill.trail && <div className="shrink-0 border-b border-border py-1">{drill.trail}</div>}
       <div className={natural ? undefined : 'min-h-0 flex-1'}>{body}</div>
+      {drill.menu}
       <p id={statusId} role="status" aria-live="polite" className="sr-only">
         {status}
       </p>

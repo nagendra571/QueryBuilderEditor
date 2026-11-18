@@ -671,6 +671,24 @@ export interface DrillRequest {
   tileId?: string | null
 }
 
+export interface DrillResultDto {
+  action: DrillAction
+  columns: QueryResultColumnDto[]
+  rows: Record<string, unknown>[]
+  rowCount: number
+  executionTimeMs: number
+  rowLimit: number
+  truncated: boolean
+  type: VisualizationType
+  /** The chart options rewritten for a breakdown; null for rows. */
+  options?: VisualizationOptions | null
+}
+
+export interface DrillQueryRequest {
+  steps: { column: string; value: string | null }[]
+  parameterValues?: Record<string, string | null>
+}
+
 export type DashboardTileKind = 'chart' | 'text' | 'section'
 
 export interface DashboardSummaryDto {

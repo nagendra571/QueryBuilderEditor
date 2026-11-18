@@ -27,7 +27,7 @@ export function toWireValue(value: unknown, dataType: ColumnDataType): string | 
 
 // A key past 2^53 was already rounded when the response JSON was parsed, so sending it back would match the wrong row (or none).
 // A missing key must not become a null step, which would match rows whose value is NULL.
-const unusableKey = (v: unknown) =>
+export const unusableKey = (v: unknown) =>
   v === undefined || (typeof v === 'number' && (!Number.isFinite(v) || (Number.isInteger(v) && !Number.isSafeInteger(v))))
 
 const isPlain = (c: QueryResultColumnDto) => !c.aggregate || c.aggregate === 'none'
