@@ -230,7 +230,7 @@ public static class DrillDefinitions
         else
         {
             // Checked here so a bad value is a clear 400, not a failure (or, on SQL Server, a 500) at execution time.
-            if (!IsValidLiteral(dataType, step.Value))
+            if (!IsValidValue(dataType, step.Value))
                 throw new CatalogValidationException($"'{step.Value}' is not a valid {dataType} value for '{step.Column}'.");
             condition.Operator = FilterOperator.Equals;
             condition.Value = step.Value;
@@ -238,12 +238,14 @@ public static class DrillDefinitions
         return condition;
     }
 
-    // Mirrors QueryParameterValues, which converts the same literals when the query runs.
-    private static bool IsValidLiteral(ColumnDataType type, string value) => type switch
+    /// <summary>Whether a drill value can be bound as this column type. Mirrors QueryParameterValues, which converts the
+    /// same literals when the query runs; null (no value) is always fine.</summary>
+    public static bool IsValidValue(ColumnDataType type, string? value) => value is null || type switch
     {
-        ColumnDataType.Number => decimal.TryParse(value, NumberStyles.Number, CultureInfo.InvariantCulture, out _),
-        ColumnDataType.Date or ColumnDataType.DateTime => DateTime.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.None, out _),
+        ColumnDataType.Number => QueryLiteral.TryParseNumber(value, out _),
+        ColumnDataType.Date or ColumnDataType.DateTime => QueryLiteral.TryParseDateTime(value, out _),
         ColumnDataType.Guid => Guid.TryParse(value, out _),
+        ColumnDataType.Boolean => value is "true" or "false",
         _ => true
     };
 

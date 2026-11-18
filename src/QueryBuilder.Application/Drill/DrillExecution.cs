@@ -54,7 +54,7 @@ internal static class DrillAudit
         return details;
     }
 
-    private static string? Truncate(string? value)
+    internal static string? Truncate(string? value)
     {
         if (value is null || value.Length <= MaxAuditedValueLength) return value;
         var end = char.IsHighSurrogate(value[MaxAuditedValueLength - 1]) ? MaxAuditedValueLength - 1 : MaxAuditedValueLength;

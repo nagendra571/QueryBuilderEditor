@@ -35,7 +35,7 @@ public sealed class SqlServerQueryExecutionService(IConnectionStringResolver con
             await using var command = new SqlCommand(sql, connection) { CommandTimeout = 60 };
             foreach (var parameter in generatedQuery.Parameters)
             {
-                command.Parameters.Add(new SqlParameter(parameter.Name, QueryParameterValues.Resolve(parameter, runtimeParameterValues)));
+                command.Parameters.Add(CreateParameter(parameter.Name, QueryParameterValues.Resolve(parameter, runtimeParameterValues)));
             }
 
             await using var reader = await command.ExecuteReaderAsync(cancellationToken);
@@ -91,6 +91,14 @@ public sealed class SqlServerQueryExecutionService(IConnectionStringResolver con
                 $"The database rejected the query: {ex.Message.Split('\n')[0]}", ex);
         }
     }
+
+    /// <summary>A bare <see cref="DateTime"/> is sent as <c>datetime</c>, which rounds to 1/300 s: a value copied from a datetime2
+    /// column's chart (".1234567") would then match no row. Fractions of a second go as datetime2; whole seconds stay as before
+    /// so an index on a legacy datetime column is still used.</summary>
+    internal static SqlParameter CreateParameter(string name, object value) =>
+        value is DateTime date && date.Ticks % TimeSpan.TicksPerSecond != 0
+            ? new SqlParameter(name, System.Data.SqlDbType.DateTime2) { Value = date }
+            : new SqlParameter(name, value);
 
     private static ColumnDataType InferDataType(Type clrType) => Type.GetTypeCode(clrType) switch
     {

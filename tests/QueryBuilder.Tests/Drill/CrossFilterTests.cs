@@ -452,6 +452,119 @@ public class CrossFilterTests
         Assert.True(f.Dashboard.ClickToFilterEnabled);
     }
 
+    private static void SetCatalogType(Setup s, string view, string column, ColumnDataType type) =>
+        s.F.Catalog.Catalog!.Schemas[0].Objects.Single(o => o.Name == view).Columns.Single(c => c.Name == column).DataType = type;
+
+    [Fact]
+    public async Task A_value_valid_for_the_source_type_but_not_the_target_type_is_not_applied()
+    {
+        var s = Arrange();
+        SetCatalogType(s, "vw_Orders", "RegionCode", ColumnDataType.Number);
+
+        var data = await Render(s, new CrossFilterDto(s.Source.Id, "Region", "EU"));
+
+        Assert.Empty(data.CrossFilter!.Applied);
+        Assert.Equal(["Region"], data.CrossFilter.NotApplied);
+        Assert.Empty(AllConditions(s.F.Guard.ReceivedDefinition!.Filters));
+        Assert.Equal(1, s.F.Executor.Calls);
+    }
+
+    [Fact]
+    public async Task A_drill_ignores_a_cross_filter_the_target_cannot_type()
+    {
+        var s = Arrange();
+        SetCatalogType(s, "vw_Orders", "RegionCode", ColumnDataType.Number);
+
+        await DrillRows(s, new CrossFilterDto(s.Source.Id, "Region", "EU"));
+
+        Assert.Empty(AllConditions(s.F.Guard.ReceivedDefinition!.Filters));
+    }
+
+    [Fact]
+    public async Task A_value_invalid_for_the_source_type_stays_a_400()
+    {
+        var s = Arrange(sourceDefinition: d => d.Columns.Single(c => c.EffectiveAlias == "Region").DataType = ColumnDataType.Number);
+
+        await Assert.ThrowsAsync<CatalogValidationException>(() => Render(s, new CrossFilterDto(s.Source.Id, "Region", "EU")));
+
+        Assert.Equal(0, s.F.Executor.Calls);
+    }
+
+    [Fact]
+    public async Task A_cross_filtered_render_audits_the_applied_filters_with_values_cut_short()
+    {
+        var s = Arrange();
+        var long200 = new string('x', 250);
+
+        await Render(s, new CrossFilterDto(s.Source.Id, "Region", long200));
+
+        var details = JsonSerializer.Serialize(Assert.Single(s.F.Audit.Entries).Details);
+        using var json = JsonDocument.Parse(details);
+        var filter = Assert.Single(json.RootElement.GetProperty("CrossFilters").EnumerateArray());
+        Assert.Equal("RegionCode", filter.GetProperty("Column").GetString());
+        Assert.Equal(200, filter.GetProperty("Value").GetString()!.Length);
+    }
+
+    [Fact]
+    public async Task A_render_without_filters_audits_no_cross_filters()
+    {
+        var s = Arrange();
+
+        await Render(s);
+
+        Assert.DoesNotContain("CrossFilters", JsonSerializer.Serialize(Assert.Single(s.F.Audit.Entries).Details));
+    }
+
+    [Fact]
+    public async Task Changing_the_switch_is_audited_with_before_and_after()
+    {
+        var f = new DashFixture();
+        var handler = new RenameDashboardCommandHandler(f.Dashboards, f.User, f.Audit);
+
+        await handler.Handle(new RenameDashboardCommand(f.Dashboard.Id, "Ops overview", null, 1, false), default);
+        await handler.Handle(new RenameDashboardCommand(f.Dashboard.Id, "Ops overview", null, 2, false), default);
+        await handler.Handle(new RenameDashboardCommand(f.Dashboard.Id, "Ops overview", null, 3), default);
+
+        var changed = f.Audit.Entries.Where(e => e.Details is not null).ToList();
+        var entry = Assert.Single(changed);
+        using var json = JsonDocument.Parse(JsonSerializer.Serialize(entry.Details));
+        var change = json.RootElement.GetProperty("ClickToFilterEnabled");
+        Assert.True(change.GetProperty("Before").GetBoolean());
+        Assert.False(change.GetProperty("After").GetBoolean());
+    }
+
+    [Fact]
+    public void The_switch_has_a_sentinel_equal_to_its_default_so_an_explicit_false_is_saved()
+    {
+        var options = new DbContextOptionsBuilder<AppDbContext>().UseSqlServer("Server=never_opened;Database=never_opened").Options;
+        using var db = new AppDbContext(options);
+
+        var property = db.Model.FindEntityType(typeof(Dashboard))!.FindProperty(nameof(Dashboard.ClickToFilterEnabled))!;
+
+        Assert.Equal(true, property.Sentinel);
+    }
+
+    [MetadataSqlFact]
+    public Task An_explicit_false_switch_survives_a_save() => MetadataDb.WithDatabaseAsync(async (options, cs) =>
+    {
+        Guid id;
+        await using (var db = new AppDbContext(options))
+        {
+            var source = new DataSource { Name = "ds", ConnectionStringName = "x" };
+            db.DataSources.Add(source);
+            var dashboard = new Dashboard { Name = "Off", OwnerId = "u", OwnerName = "U", ClickToFilterEnabled = false };
+            db.Dashboards.Add(dashboard);
+            await db.SaveChangesAsync();
+            id = dashboard.Id;
+        }
+
+        await using var connection = new SqlConnection(cs);
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = $"SELECT ClickToFilterEnabled FROM Dashboards WHERE Id = '{id}'";
+        Assert.False((bool)(await command.ExecuteScalarAsync())!);
+    });
+
     [MetadataSqlFact]
     public Task Migration_adds_the_switch_on_for_existing_dashboards() => MetadataDb.WithDatabaseAsync(async (options, cs) =>
     {

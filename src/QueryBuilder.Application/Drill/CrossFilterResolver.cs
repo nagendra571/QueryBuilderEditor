@@ -88,13 +88,22 @@ public sealed class CrossFilterResolver(IDashboardRepository dashboards, IDataSo
             var catalogName = shown?.ColumnName ?? filter.Column;
 
             string? targetColumn = null;
+            ColumnDataType targetType = ColumnDataType.Text;
+            ColumnDataType sourceType = shown?.DataType ?? ColumnDataType.Text;
             if (sourceQuery.DataSourceId == targetQuery.DataSourceId)
             {
                 targetCatalog ??= await catalog.GetCatalogAsync(targetQuery.DataSourceId, cancellationToken);
-                targetColumn = TargetColumn(targetCatalog, targetDefinition, catalogName, comparer);
+                if (shown is null)
+                    sourceType = CatalogColumn(targetCatalog, sourceDefinition.Source, catalogName, comparer)?.DataType ?? ColumnDataType.Text;
+                (targetColumn, targetType) = TargetColumn(targetCatalog, targetDefinition, catalogName, comparer);
             }
 
-            if (targetColumn is null)
+            // A value the clicked chart's own column could not hold was never produced by it: that is a bad request. One that
+            // only the target's type refuses (the same name typed differently in another view) just can't filter that tile.
+            if (!DrillDefinitions.IsValidValue(sourceType, filter.Value))
+                throw new CatalogValidationException($"'{filter.Value}' is not a valid {sourceType} value for '{filter.Column}'.");
+
+            if (targetColumn is null || !DrillDefinitions.IsValidValue(targetType, filter.Value))
             {
                 notApplied.Add(filter.Column);
                 continue;
@@ -107,24 +116,28 @@ public sealed class CrossFilterResolver(IDashboardRepository dashboards, IDataSo
         return (steps, new CrossFilterResultDto(applied.Distinct(StringComparer.Ordinal).ToList(), notApplied.Distinct(StringComparer.Ordinal).ToList()));
     }
 
-    private static string? TargetColumn(
+    private static ColumnMetadata? CatalogColumn(
+        DataSourceCatalog catalog, QuerySource source, string name, StringComparer comparer) =>
+        catalog.Schemas
+            .SelectMany(s => s.Objects)
+            .FirstOrDefault(o => comparer.Equals(o.SchemaName, source.SchemaName) && comparer.Equals(o.Name, source.ObjectName))
+            ?.Columns.FirstOrDefault(c => comparer.Equals(c.Name, name));
+
+    private static (string? Name, ColumnDataType Type) TargetColumn(
         DataSourceCatalog catalog, QueryDefinition target, string catalogName, StringComparer comparer)
     {
         var source = target.Source;
-        var column = catalog.Schemas
-            .SelectMany(s => s.Objects)
-            .FirstOrDefault(o => comparer.Equals(o.SchemaName, source.SchemaName) && comparer.Equals(o.Name, source.ObjectName))
-            ?.Columns.FirstOrDefault(c => comparer.Equals(c.Name, catalogName));
-        if (column is null) return null;
+        var column = CatalogColumn(catalog, source, catalogName, comparer);
+        if (column is null) return (null, ColumnDataType.Text);
 
         // A drill step is matched to the query's own outputs by name first, so a target that outputs some other column
         // under this name would be filtered on that one instead. Better unfiltered (and reported) than filtered wrongly.
         var clash = target.Columns.FirstOrDefault(c =>
             c.IsVisible && c.Aggregate == AggregateFunction.None && c.EffectiveAlias == column.Name);
         if (clash is not null && !(comparer.Equals(clash.TableAlias, source.Alias) && comparer.Equals(clash.ColumnName, column.Name)))
-            return null;
+            return (null, ColumnDataType.Text);
 
-        return column.Name;
+        return (column.Name, column.DataType);
     }
 
     /// <summary>Applies resolved steps to a saved definition: each becomes an extra AND condition, HAVING and everything

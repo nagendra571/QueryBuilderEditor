@@ -27,7 +27,8 @@ public sealed record LoadedVisualizationData(
     int RowLimit,
     bool Truncated,
     List<string>? KeyColumns = null,
-    CrossFilterResultDto? CrossFilter = null);
+    CrossFilterResultDto? CrossFilter = null,
+    IReadOnlyList<DrillStep>? CrossFilterSteps = null);
 
 /// <summary>
 /// What the loader proved about a request on a saved query: the caller may see it, it is not disabled, and
@@ -114,7 +115,7 @@ public sealed class VisualizationDataLoader(
 
         // Filters become extra AND conditions on the saved definition; the result still goes through ExecuteAsync below, so
         // validation, parameter binding and the caller's row scope apply to the narrowed query exactly as to the plain one.
-        var (definition, _, crossFilterResult) = await ApplyCrossFiltersAsync(
+        var (definition, crossFilterSteps, crossFilterResult) = await ApplyCrossFiltersAsync(
             context, dashboardId, tileId, crossFilters, crossFilterResolver, cancellationToken);
 
         var effectiveLimit = RecordLimits.Effective(context.DataSource.MaxRecords, await appSettings.MaxRecordsAsync(cancellationToken), recordLimitSettings);
@@ -183,7 +184,7 @@ public sealed class VisualizationDataLoader(
             }
         }
 
-        return new LoadedVisualizationData(savedQuery, visualization, definition, columns, rows, result.ExecutionTimeMs, cap, result.Truncated, keyColumns, crossFilterResult);
+        return new LoadedVisualizationData(savedQuery, visualization, definition, columns, rows, result.ExecutionTimeMs, cap, result.Truncated, keyColumns, crossFilterResult, crossFilterSteps);
     }
 
     /// <summary>The saved definition with a dashboard's click-filters added as extra AND conditions (HAVING and everything else

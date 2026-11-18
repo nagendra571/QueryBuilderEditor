@@ -42,15 +42,28 @@ public sealed class RenderVisualizationCommandHandler(
                 entityName,
                 data.SavedQuery.DataSourceId,
                 $"Rendered chart '{data.Visualization.Name}' on '{data.SavedQuery.Name}', returned {data.Rows.Count} row(s) in {data.ExecutionTimeMs}ms",
-                new
-                {
-                    VisualizationId = data.Visualization.Id,
-                    RowCount = data.Rows.Count,
-                    data.ExecutionTimeMs,
-                    Scope = (await currentScope.GetAsync(cancellationToken)).Describe()
-                }),
+                RunDetails(data, (await currentScope.GetAsync(cancellationToken)).Describe())),
             cancellationToken);
 
         return new VisualizationDataDto(data.Columns, data.Rows, data.Rows.Count, data.ExecutionTimeMs, data.RowLimit, data.Truncated, data.KeyColumns, data.CrossFilter);
+    }
+
+    // Only when a click-filter narrowed the chart, so a plain render's audit entry keeps its old shape. The filters are the
+    // resolved ones (the target's own column names), cut short like drill audits: a value can be up to 4,000 characters.
+    private static object RunDetails(LoadedVisualizationData data, object scope)
+    {
+        if (data.CrossFilterSteps is not { Count: > 0 } steps)
+        {
+            return new { VisualizationId = data.Visualization.Id, RowCount = data.Rows.Count, data.ExecutionTimeMs, Scope = scope };
+        }
+
+        return new
+        {
+            VisualizationId = data.Visualization.Id,
+            RowCount = data.Rows.Count,
+            data.ExecutionTimeMs,
+            Scope = scope,
+            CrossFilters = steps.Select(s => new { s.Column, Value = Drill.DrillAudit.Truncate(s.Value) }).ToList()
+        };
     }
 }
