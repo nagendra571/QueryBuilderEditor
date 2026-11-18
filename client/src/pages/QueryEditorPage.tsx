@@ -583,6 +583,7 @@ export function QueryEditorPage() {
           open={chartEditorOpen}
           onOpenChange={setChartEditorOpen}
           columns={outputColumns(savedDefinition.columns)}
+          drillColumnChoices={availableColumns.map((c) => c.name)}
           editing={editingChart}
           previewResult={runMutation.data}
           isSaving={saveVisualization.isPending}

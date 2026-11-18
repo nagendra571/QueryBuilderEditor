@@ -545,6 +545,10 @@ export interface ValueFormat {
   currency?: string | null
 }
 
+export interface DrillOptions {
+  columns: string[]
+}
+
 export interface TableOptions {
   columns: string[]
 }
@@ -582,6 +586,7 @@ export interface VisualizationOptions {
   table?: TableOptions | null
   pivot?: PivotOptions | null
   format?: ValueFormat | null
+  drill?: DrillOptions | null
 }
 
 export interface VisualizationDto {

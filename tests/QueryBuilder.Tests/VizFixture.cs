@@ -180,7 +180,9 @@ internal sealed class VizFixture
     public sealed class FakeCatalog : IDataCatalogService
     {
         public int ValidateCalls { get; private set; }
-        public Task<DataSourceCatalog> GetCatalogAsync(Guid dataSourceId, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public DataSourceCatalog? Catalog { get; set; }
+        public Task<DataSourceCatalog> GetCatalogAsync(Guid dataSourceId, CancellationToken cancellationToken) =>
+            Catalog is null ? throw new NotSupportedException() : Task.FromResult(Catalog);
         public Task ValidateAsync(Guid dataSourceId, QueryDefinition definition, CancellationToken cancellationToken)
         {
             ValidateCalls++;

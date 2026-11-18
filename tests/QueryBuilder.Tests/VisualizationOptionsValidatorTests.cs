@@ -401,4 +401,48 @@ public class VisualizationOptionsValidatorTests
 
         Assert.Empty(Validate(VisualizationType.Bar, options));
     }
+
+    [Fact]
+    public void Drill_columns_over_20_or_blank_are_refused()
+    {
+        var tooMany = Bar();
+        tooMany.Drill = new DrillOptions { Columns = Enumerable.Range(0, 21).Select(i => $"C{i}").ToList() };
+        Assert.Contains(Validate(VisualizationType.Bar, tooMany), x => x.Message.Contains("20"));
+
+        var atLimit = Bar();
+        atLimit.Drill = new DrillOptions { Columns = Enumerable.Range(0, 20).Select(i => $"C{i}").ToList() };
+        Assert.Empty(Validate(VisualizationType.Bar, atLimit));
+
+        var blank = Bar();
+        blank.Drill = new DrillOptions { Columns = ["Ok", " "] };
+        Assert.NotEmpty(Validate(VisualizationType.Bar, blank));
+    }
+
+    [Fact]
+    public void Drill_columns_do_not_count_as_referenced_columns()
+    {
+        var options = Bar();
+        options.Drill = new DrillOptions { Columns = ["NotAnOutput"] };
+
+        Assert.DoesNotContain("NotAnOutput", VisualizationOptionsValidator.ReferencedColumns(VisualizationType.Bar, options));
+        Assert.Empty(Validate(VisualizationType.Bar, options));
+    }
+
+    [Fact]
+    public void Old_options_without_drill_still_deserialize()
+    {
+        var options = VisualizationOptionsSerializer.Deserialize("{\"version\":1,\"x\":\"Region\",\"measures\":[\"Total\"]}");
+
+        Assert.Null(options.Drill);
+        options.Normalize();
+        Assert.Equal("Region", options.X);
+    }
+
+    [Fact]
+    public void Null_drill_columns_are_normalized()
+    {
+        var options = new VisualizationOptions { Drill = new DrillOptions { Columns = null! } };
+        options.Normalize();
+        Assert.Empty(options.Drill!.Columns);
+    }
 }

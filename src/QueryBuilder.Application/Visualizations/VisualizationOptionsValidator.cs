@@ -115,6 +115,16 @@ public static class VisualizationOptionsValidator
             }
         }
 
+        if (options.Drill is { } drill)
+        {
+            if (drill.Columns.Count > QueryBuilder.Application.Drill.DrillLimits.MaxDrillColumns)
+            {
+                issues.Add(new VisualizationIssue(
+                    $"Choose at most {QueryBuilder.Application.Drill.DrillLimits.MaxDrillColumns} columns to show when drilling."));
+            }
+            RejectBlank(drill.Columns, "drill");
+        }
+
         var output = OutputColumns(definition)
             .GroupBy(c => c.Name, StringComparer.Ordinal)
             .ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);

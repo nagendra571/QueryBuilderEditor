@@ -9,7 +9,7 @@ namespace QueryBuilder.Tests;
 public class VisualizationEditCommandsTests
 {
     private static SaveVisualizationCommandHandler SaveHandler(VizFixture f) =>
-        new(f.Queries, f.Visualizations, f.User, f.Audit);
+        new(f.Queries, f.Visualizations, f.Catalog, f.User, f.Audit);
 
     private static DeleteVisualizationCommandHandler DeleteHandler(VizFixture f) =>
         new(f.Queries, f.Visualizations, f.User, f.Audit);
@@ -168,5 +168,71 @@ public class VisualizationEditCommandsTests
         {
             await Assert.ThrowsAsync<ForbiddenException>(() => ListHandler(f).Handle(new GetVisualizationsQuery(f.Query.Id), default));
         }
+    }
+
+    private static VisualizationOptions WithDrill(params string[] columns)
+    {
+        var o = VizFixture.BarOptions();
+        o.Drill = new DrillOptions { Columns = [.. columns] };
+        return o;
+    }
+
+    private static void SetCatalog(VizFixture f, DataSourceProvider provider, params string[] columns) =>
+        f.Catalog.Catalog = new DataSourceCatalog
+        {
+            DataSourceId = TestData.DataSourceId,
+            Provider = provider,
+            Schemas =
+            [
+                new SchemaMetadata
+                {
+                    Name = "sales",
+                    Objects = [new SchemaObjectMetadata
+                    {
+                        SchemaName = "sales", Name = "vw_Orders",
+                        Columns = columns.Select(c => new ColumnMetadata { Name = c }).ToList()
+                    }]
+                }
+            ]
+        };
+
+    [Fact]
+    public async Task Saving_a_drill_column_that_is_not_in_the_source_object_is_refused()
+    {
+        var f = new VizFixture();
+        SetCatalog(f, DataSourceProvider.SqlServer, "RegionCode", "Channel");
+
+        var ex = await Assert.ThrowsAsync<CatalogValidationException>(() =>
+            SaveHandler(f).Handle(Create(f, WithDrill("Channel", "Ghost")), default));
+
+        Assert.Equal("'Ghost' is not a column of sales.vw_Orders.", ex.Message);
+        Assert.Empty(f.Visualizations.Items);
+    }
+
+    [Fact]
+    public async Task Saving_valid_drill_columns_persists_them()
+    {
+        var f = new VizFixture();
+        SetCatalog(f, DataSourceProvider.SqlServer, "RegionCode", "Channel");
+
+        var dto = await SaveHandler(f).Handle(Create(f, WithDrill("channel")), default);
+
+        Assert.Equal(["channel"], dto.Options.Drill!.Columns);
+    }
+
+    [Fact]
+    public async Task Duplicate_drill_columns_follow_the_provider_comparer()
+    {
+        var sqlServer = new VizFixture();
+        SetCatalog(sqlServer, DataSourceProvider.SqlServer, "Channel");
+        await Assert.ThrowsAsync<CatalogValidationException>(() =>
+            SaveHandler(sqlServer).Handle(Create(sqlServer, WithDrill("Channel", "channel")), default));
+
+        var postgres = new VizFixture();
+        postgres.DataSource.Provider = DataSourceProvider.PostgreSql;
+        SetCatalog(postgres, DataSourceProvider.PostgreSql, "Channel", "channel");
+        await SaveHandler(postgres).Handle(Create(postgres, WithDrill("Channel", "channel")), default);
+        await Assert.ThrowsAsync<CatalogValidationException>(() =>
+            SaveHandler(postgres).Handle(Create(postgres, WithDrill("Channel", "Channel")), default));
     }
 }

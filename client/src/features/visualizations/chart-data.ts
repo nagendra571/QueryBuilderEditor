@@ -254,6 +254,8 @@ export function isNumberColumn(
 }
 
 export const MAX_TABLE_COLUMNS = 30
+/** Mirrors the server's DrillLimits.MaxDrillColumns. */
+export const MAX_DRILL_COLUMNS = 20
 
 export function defaultTableColumns(columns: OutputColumn[]): string[] {
   return columns.slice(0, MAX_TABLE_COLUMNS).map((c) => c.name)
