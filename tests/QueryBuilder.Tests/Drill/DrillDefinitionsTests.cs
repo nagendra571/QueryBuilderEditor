@@ -87,6 +87,30 @@ public class DrillDefinitionsTests
     }
 
     [Fact]
+    public void Breakdown_with_a_stale_series_naming_a_hidden_column_is_refused()
+    {
+        var options = new VisualizationOptions { X = "Region", Series = "HiddenNote", Measures = ["Total"] };
+
+        var ex = Assert.Throws<CatalogValidationException>(() =>
+            DrillDefinitions.ForBreakdown(Saved(), VisualizationType.Bar, options, [], "Channel", NoDrill));
+        Assert.Equal("This chart can't be broken down.", ex.Message);
+    }
+
+    [Fact]
+    public void Rows_keeps_case_distinct_columns_with_an_ordinal_comparer()
+    {
+        var saved = Saved();
+        saved.Columns.Add(new QueryColumn { TableAlias = "t0", ColumnName = "amount", Alias = "CountLower", Aggregate = AggregateFunction.Count });
+
+        var ordinal = DrillDefinitions.ForRows(saved, [], NoDrill, (a, b) => string.Equals(a, b, StringComparison.Ordinal));
+        var byDefault = DrillDefinitions.ForRows(saved, [], NoDrill);
+
+        Assert.Contains(ordinal.Columns, c => c.ColumnName == "amount");
+        Assert.Contains(ordinal.Columns, c => c.ColumnName == "Amount");
+        Assert.Contains(byDefault.Columns, c => c.ColumnName == "amount");
+    }
+
+    [Fact]
     public void Rows_removes_grouping_and_having_and_replaces_aggregates_with_base_columns()
     {
         var result = DrillDefinitions.ForRows(Saved(), [], NoDrill);

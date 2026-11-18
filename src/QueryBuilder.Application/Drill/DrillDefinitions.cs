@@ -32,8 +32,9 @@ public static class DrillDefinitions
 
     public static QueryDefinition ApplySteps(
         QueryDefinition definition, IReadOnlyList<DrillStep> steps, IReadOnlyList<string> drillColumns,
-        IReadOnlyDictionary<string, ColumnDataType>? drillColumnTypes = null) =>
-        ApplyStepsCore(definition, steps, drillColumns, drillColumnTypes, null);
+        IReadOnlyDictionary<string, ColumnDataType>? drillColumnTypes = null,
+        Func<string, string, bool>? sameIdentifier = null) =>
+        ApplyStepsCore(definition, steps, drillColumns, drillColumnTypes, sameIdentifier);
 
     private static QueryDefinition ApplyStepsCore(
         QueryDefinition definition, IReadOnlyList<DrillStep> steps, IReadOnlyList<string> drillColumns,
@@ -67,8 +68,10 @@ public static class DrillDefinitions
         Func<string, string, bool>? sameIdentifier = null,
         IReadOnlyDictionary<string, ColumnDataType>? drillColumnTypes = null)
     {
+        // Ordinal unless the caller passes the provider's comparer: folding case would merge PostgreSQL's
+        // distinct "amount" and "Amount".
+        sameIdentifier ??= (a, b) => string.Equals(a, b, StringComparison.Ordinal);
         var lookupIdentifier = sameIdentifier;
-        sameIdentifier ??= (a, b) => string.Equals(a, b, StringComparison.OrdinalIgnoreCase);
         var result = ApplyStepsCore(saved, steps, drillColumns, drillColumnTypes, lookupIdentifier);
 
         var visible = result.Columns.Where(c => c.IsVisible).ToList();
@@ -118,8 +121,10 @@ public static class DrillDefinitions
     public static (QueryDefinition Definition, VisualizationOptions Options) ForBreakdown(
         QueryDefinition saved, VisualizationType type, VisualizationOptions options,
         IReadOnlyList<DrillStep> steps, string breakdownColumn, IReadOnlyList<string> drillColumns,
-        IReadOnlyDictionary<string, ColumnDataType>? drillColumnTypes = null)
+        IReadOnlyDictionary<string, ColumnDataType>? drillColumnTypes = null,
+        Func<string, string, bool>? sameIdentifier = null)
     {
+        sameIdentifier ??= (a, b) => string.Equals(a, b, StringComparison.Ordinal);
         if (!BreakdownTypes.Contains(type) || !IsAggregated(saved))
             throw new CatalogValidationException("This chart can't be broken down.");
 
@@ -127,7 +132,7 @@ public static class DrillDefinitions
             || steps.Any(s => string.Equals(s.Column, breakdownColumn, StringComparison.Ordinal)))
             throw new CatalogValidationException($"'{breakdownColumn}' can't be used to break down this chart.");
 
-        var result = ApplySteps(saved, steps, drillColumns, drillColumnTypes);
+        var result = ApplySteps(saved, steps, drillColumns, drillColumnTypes, sameIdentifier);
         var newOptions = VisualizationOptionsSerializer.Deserialize(VisualizationOptionsSerializer.Serialize(options));
         newOptions.Normalize();
 
@@ -138,11 +143,15 @@ public static class DrillDefinitions
         {
             if (columns.Any(c => c.EffectiveAlias == name)) return;
             var existing = visible.FirstOrDefault(c => c.Aggregate == AggregateFunction.None && c.EffectiveAlias == name);
+            // Only a drill column may be made up; anything else (a stale Series naming a hidden column)
+            // would reach a column the saved query never exposed.
+            if (existing is null && !drillColumns.Contains(name, StringComparer.Ordinal))
+                throw new CatalogValidationException("This chart can't be broken down.");
             columns.Add(existing ?? new QueryColumn
             {
                 TableAlias = result.Source.Alias,
                 ColumnName = name,
-                DataType = DrillColumnType(drillColumnTypes, name, null)
+                DataType = DrillColumnType(drillColumnTypes, name, sameIdentifier)
             });
         }
 
@@ -168,7 +177,7 @@ public static class DrillDefinitions
         result.Having = null;
         // A sort on a column that is neither grouped nor selected would be invalid SQL once regrouped.
         result.Sorts = result.Sorts
-            .Where(s => columns.Any(c => c.TableAlias == s.TableAlias && c.ColumnName == s.ColumnName))
+            .Where(s => columns.Any(c => sameIdentifier(c.TableAlias, s.TableAlias) && sameIdentifier(c.ColumnName, s.ColumnName)))
             .ToList();
 
         newOptions.X = breakdownColumn;
