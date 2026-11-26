@@ -1,221 +1,148 @@
-import {
-  DndContext,
-  type DragEndEvent,
-  KeyboardSensor,
-  PointerSensor,
-  closestCenter,
-  useSensor,
-  useSensors,
-} from '@dnd-kit/core'
-import { restrictToHorizontalAxis, restrictToParentElement } from '@dnd-kit/modifiers'
-import {
-  SortableContext,
-  horizontalListSortingStrategy,
-  sortableKeyboardCoordinates,
-  useSortable,
-} from '@dnd-kit/sortable'
-import { CSS } from '@dnd-kit/utilities'
-import { AlertTriangle, ArrowDown, ArrowUp, Check, ChevronsUpDown, GripVertical, X as XIcon } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
-import { ResultsPagination } from '@/features/builder/results/ResultsPagination'
+import { Button } from '@/components/ui/button'
+import { ResultsFooter } from '@/features/builder/results/ResultsFooter'
+import { ResultsGrid } from '@/features/builder/results/ResultsGrid'
 import { ResultsToolbar } from '@/features/builder/results/ResultsToolbar'
-import { useResultsView } from '@/features/builder/results/useResultsView'
-import { DataTypeIcon } from '@/lib/data-type-icons'
-import { cn } from '@/lib/utils'
-import type { QueryResultColumnDto, QueryResultDto } from '@/types'
+import { useResultsGrid } from '@/features/builder/results/useResultsGrid'
+import type { QueryResultDto } from '@/types'
 
 export function ResultsTable({
   result,
   onRowClick,
   rowActionLabel,
+  onAddFilter,
 }: {
   result: QueryResultDto
   /** Makes each row a button that opens the rows behind it (saved, aggregated queries only). */
   onRowClick?: (row: Record<string, unknown>) => void
   rowActionLabel?: string
+  /** Shown beside the truncation warning. */
+  onAddFilter?: () => void
 }) {
-  const view = useResultsView(result)
+  // Above the full-screen switch so entering or leaving full screen keeps search, sort and widths.
+  const grid = useResultsGrid(result)
+  const { view, setView, rows } = grid
+  const [fullScreen, setFullScreen] = useState(false)
+  const [range, setRange] = useState({ first: 0, last: 0 })
+  const [selectedCells, setSelectedCells] = useState(0)
+  const copyRef = useRef<{ copy: () => void }>(null)
+  const fullScreenButton = useRef<HTMLButtonElement>(null)
+  const wasFullScreen = useRef(false)
 
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
-  )
+  useEffect(() => {
+    if (!fullScreen) return
+    const previous = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.body.style.overflow = previous
+    }
+  }, [fullScreen])
 
-  function handleDragEnd(event: DragEndEvent) {
-    const { active, over } = event
-    if (!over || active.id === over.id) return
-    view.reorderColumn(String(active.id), String(over.id))
-  }
+  useEffect(() => {
+    if (wasFullScreen.current && !fullScreen) fullScreenButton.current?.focus()
+    wasFullScreen.current = fullScreen
+  }, [fullScreen])
 
   if (result.columns.length === 0) {
     return <p className="p-(--space-section) text-center text-sm text-muted-foreground">Query returned no columns.</p>
   }
 
-  return (
-    <div className="flex h-full flex-col">
+  const allNames = result.columns.map((c) => c.name)
+  const pinned = [...view.pinnedLeft, ...view.pinnedRight].filter((n) => allNames.includes(n) && !view.hidden.includes(n))
+  const noRows = rows.length === 0
+
+  const content = (
+    <div data-density={grid.density} className="flex h-full min-h-0 flex-col">
       <ResultsToolbar
         search={view.search}
-        onSearchChange={view.setSearch}
-        allColumns={view.allColumns}
-        hiddenColumns={view.hiddenColumns}
-        onToggleColumn={view.toggleColumnVisible}
-        isDefaultView={view.isDefaultView}
-        onReset={view.resetView}
+        onSearchChange={(search) => setView((v) => ({ ...v, search }))}
+        searchCount={result.rows.length}
+        allColumns={result.columns}
+        hiddenColumns={view.hidden}
+        onToggleColumn={(name) =>
+          setView((v) => ({
+            ...v,
+            hidden: v.hidden.includes(name) ? v.hidden.filter((n) => n !== name) : [...v.hidden, name],
+          }))
+        }
+        density={grid.density}
+        onDensityChange={(density) => setView((v) => ({ ...v, density }))}
+        wrap={view.wrap}
+        onWrapChange={(wrap) => setView((v) => ({ ...v, wrap }))}
+        onCopy={() => copyRef.current?.copy()}
+        isDefaultView={grid.isDefault}
+        onReset={grid.reset}
+        rowCount={result.rows.length}
         executionTimeMs={result.executionTimeMs}
+        fullScreen={fullScreen}
+        onToggleFullScreen={() => setFullScreen((f) => !f)}
+        fullScreenRef={fullScreenButton}
       />
 
       {result.truncated && (
-        <Alert className="mx-(--space-section) mt-2 w-auto border-warning/40 text-warning">
-          <AlertTriangle className="size-4" />
-          <AlertDescription className="text-warning">
-            This query returns more than {result.rowLimit.toLocaleString()} records. Only the first{' '}
-            {result.rowLimit.toLocaleString()} are shown. Add filters to narrow down the results.
-          </AlertDescription>
-        </Alert>
-      )}
-
-      {view.totalFiltered === 0 ? (
-        <Alert className="m-(--space-section) w-auto">
-          <AlertDescription>
-            {view.totalRaw === 0 ? 'No rows matched your filters. Try widening a condition.' : 'No rows match your search.'}
-          </AlertDescription>
-        </Alert>
-      ) : (
-        <div className="relative min-h-0 flex-1">
-          <DndContext
-            sensors={sensors}
-            collisionDetection={closestCenter}
-            onDragEnd={handleDragEnd}
-            modifiers={[restrictToHorizontalAxis, restrictToParentElement]}
-          >
-            <Table>
-              <TableHeader className="sticky top-0 z-10 bg-background">
-                <TableRow>
-                  <TableHead className="h-(--row-h) w-10 text-right whitespace-nowrap text-muted-foreground/60">#</TableHead>
-                  <SortableContext items={view.visibleColumns.map((c) => c.name)} strategy={horizontalListSortingStrategy}>
-                    {view.visibleColumns.map((col) => (
-                      <SortableHeader
-                        key={col.name}
-                        column={col}
-                        sortDirection={view.sort?.column === col.name ? view.sort.direction : null}
-                        onSort={() => view.toggleSort(col.name)}
-                      />
-                    ))}
-                  </SortableContext>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {view.pagedRows.map((row, i) => (
-                  <TableRow
-                    key={view.rowNumberOffset + i}
-                    {...(onRowClick
-                      ? {
-                          tabIndex: 0,
-                          title: rowActionLabel,
-                          className: 'cursor-pointer focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring',
-                          onClick: () => onRowClick(row),
-                          onKeyDown: (e: React.KeyboardEvent) => {
-                            if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) {
-                              e.preventDefault()
-                              onRowClick(row)
-                            }
-                          },
-                        }
-                      : {})}
-                  >
-                    <TableCell className="h-(--row-h) text-right text-(length:--text-body) text-muted-foreground/60 tabular-nums">
-                      {view.rowNumberOffset + i + 1}
-                    </TableCell>
-                    {view.visibleColumns.map((col) => (
-                      <TableCell
-                        key={col.name}
-                        className={cn('h-(--row-h) max-w-80 text-(length:--text-body)', col.dataType === 'number' && 'text-right tabular-nums')}
-                      >
-                        <CellValue value={row[col.name]} dataType={col.dataType} />
-                      </TableCell>
-                    ))}
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </DndContext>
+        <div
+          role="status"
+          className="flex flex-wrap items-center gap-2 border-b border-warning/40 bg-warning/10 px-(--space-row-x) py-1.5 text-xs text-warning"
+        >
+          <span className="size-2.5 shrink-0 bg-warning" aria-hidden />
+          <span>
+            More than {result.rowLimit.toLocaleString()} rows matched. You're seeing the first{' '}
+            {result.rowLimit.toLocaleString()}, so sorting, search and copy here cover those rows only.
+          </span>
+          {onAddFilter && (
+            <Button variant="link" size="sm" className="h-auto p-0 text-xs text-warning underline" onClick={onAddFilter}>
+              Add a filter
+            </Button>
+          )}
         </div>
       )}
 
-      <ResultsPagination
-        page={view.page}
-        pageCount={view.pageCount}
-        pageSize={view.pageSize}
-        totalFiltered={view.totalFiltered}
-        onPageChange={view.setPage}
-        onPageSizeChange={view.setPageSize}
+      {noRows ? (
+        <Alert className="m-(--space-section) w-auto">
+          <AlertDescription>
+            {grid.totalRaw === 0 ? 'No rows matched your filters. Try widening a condition.' : 'No rows match your search.'}
+          </AlertDescription>
+        </Alert>
+      ) : (
+        <div className="min-h-0 flex-1">
+          <ResultsGrid
+            grid={grid}
+            onRowClick={onRowClick}
+            rowActionLabel={rowActionLabel}
+            onVisibleRangeChange={(first, last) => setRange({ first, last })}
+            onSelectionChange={setSelectedCells}
+            copyRef={copyRef}
+          />
+        </div>
+      )}
+
+      <ResultsFooter
+        first={range.first}
+        last={range.last}
+        filtered={rows.length}
+        raw={grid.totalRaw}
+        pinned={pinned}
+        selectedCells={selectedCells}
       />
     </div>
   )
-}
 
-function SortableHeader({
-  column,
-  sortDirection,
-  onSort,
-}: {
-  column: QueryResultColumnDto
-  sortDirection: 'asc' | 'desc' | null
-  onSort: () => void
-}) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: column.name })
-  const style = { transform: CSS.Transform.toString(transform), transition }
+  if (!fullScreen) return <div className="h-full">{content}</div>
 
-  return (
-    <TableHead
-      ref={setNodeRef}
-      style={style}
-      className={cn('h-(--row-h) whitespace-nowrap', isDragging && 'relative z-20 bg-background opacity-90 shadow-md')}
+  return createPortal(
+    <div
+      className="fixed inset-0 z-50 flex flex-col bg-background"
+      onKeyDown={(e) => {
+        if (e.key !== 'Escape' || e.defaultPrevented) return
+        if ((e.target as HTMLElement).closest('[role="menu"], [role="listbox"], [role="dialog"]')) return
+        setFullScreen(false)
+      }}
     >
-      <div className="flex items-center gap-1">
-        <button
-          type="button"
-          className="cursor-grab touch-none text-muted-foreground/40 hover:text-foreground active:cursor-grabbing"
-          aria-label={`Reorder ${column.name}`}
-          {...attributes}
-          {...listeners}
-        >
-          <GripVertical className="size-3.5" />
-        </button>
-        <button type="button" onClick={onSort} className="flex items-center gap-1.5 hover:text-primary">
-          <DataTypeIcon dataType={column.dataType} />
-          {column.name}
-          {sortDirection === 'asc' && <ArrowUp className="size-3" />}
-          {sortDirection === 'desc' && <ArrowDown className="size-3" />}
-          {!sortDirection && <ChevronsUpDown className="size-3 opacity-30" />}
-        </button>
-      </div>
-    </TableHead>
+      {content}
+    </div>,
+    document.body,
   )
 }
 
-function CellValue({ value, dataType }: { value: unknown; dataType: string }) {
-  if (value === null || value === undefined) {
-    return <span className="text-muted-foreground/50 italic">null</span>
-  }
-  if (dataType === 'boolean') {
-    return value ? <Check className="size-4 text-success" /> : <XIcon className="size-4 text-muted-foreground" />
-  }
-  if (dataType === 'number' && typeof value === 'number') {
-    return <>{value.toLocaleString()}</>
-  }
-  const text = String(value)
-  return (
-    <span className="block truncate" title={text}>
-      {text}
-    </span>
-  )
-}

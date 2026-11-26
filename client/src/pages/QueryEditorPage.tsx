@@ -546,6 +546,7 @@ export function QueryEditorPage() {
                 result={runMutation.data}
                 onRowClick={gridDrill}
                 rowActionLabel={gridDrill ? 'See the rows behind this row' : undefined}
+                onAddFilter={() => setActiveTab('build')}
               />
             )}
             {!runMutation.isPending && !runMutation.data && (
