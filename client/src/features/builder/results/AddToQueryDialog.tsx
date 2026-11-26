@@ -54,7 +54,7 @@ export function AddToQueryDialog({
                 <ul className="list-disc space-y-0.5 pl-5">
                   {plan.blocked.map((b) => (
                     <li key={b.column}>
-                      {b.column}: {b.reason}
+                      {b.reason}
                     </li>
                   ))}
                 </ul>

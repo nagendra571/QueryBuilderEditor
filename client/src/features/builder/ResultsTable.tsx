@@ -34,7 +34,7 @@ export function ResultsTable({
   onAddFilter?: () => void
   /** The query as built, so the grid's filters can be planned against it. Without it there is no Add to query. */
   queryDefinition?: { columns: QueryColumn[]; filters: FilterGroup; having?: FilterGroup | null }
-  onAddToQuery?: (where: FilterCondition[], having: FilterCondition[], filterCount: number) => void
+  onAddToQuery?: (where: FilterCondition[], having: FilterCondition[], filterCount: number) => boolean
   addToQueryDisabledReason?: string
 }) {
   // Above the full-screen switch so entering or leaving full screen keeps search, sort and widths.
@@ -98,6 +98,20 @@ export function ResultsTable({
     wasFullScreen.current = fullScreen
   }, [fullScreen])
 
+  // A filter applied from the Details panel clears the selection (the rows changed); put the active cell back
+  // in the same column so the panel keeps showing something.
+  const recenterColumn = useRef<string | null>(null)
+  const fromPanel = <A extends unknown[]>(fn: (...args: A) => void) => (...args: A) => {
+    recenterColumn.current = args[0] as string
+    fn(...args)
+  }
+  useEffect(() => {
+    const column = recenterColumn.current
+    if (column === null) return
+    recenterColumn.current = null
+    const col = grid.columns.findIndex((c) => c.name === column)
+    if (col >= 0 && grid.rows.length > 0) gridRef.current?.moveTo({ row: 0, col })
+  }, [grid.filters, grid.rows, grid.columns])
   if (result.columns.length === 0) {
     return <p className="p-(--space-section) text-center text-sm text-muted-foreground">Query returned no columns.</p>
   }
@@ -105,6 +119,14 @@ export function ResultsTable({
   const allNames = result.columns.map((c) => c.name)
   const pinned = [...view.pinnedLeft, ...view.pinnedRight].filter((n) => allNames.includes(n) && !view.hidden.includes(n))
   const noRows = rows.length === 0
+  const hasSearch = view.search.trim() !== ''
+  const hasGridFilters = grid.filters.length > 0
+  const emptyMessage =
+    hasSearch && hasGridFilters
+      ? 'No rows match your search and filters.'
+      : hasGridFilters
+        ? "No rows match the grid's filters."
+        : 'No rows match your search.'
 
   const content = (
     <div data-density={grid.density} className="flex h-full min-h-0 flex-col">
@@ -181,7 +203,7 @@ export function ResultsTable({
         {noRows ? (
           <Alert className="m-(--space-section) h-fit min-w-0 flex-1">
             <AlertDescription>
-              {grid.totalRaw === 0 ? 'No rows matched your filters. Try widening a condition.' : 'No rows match your search.'}
+              {grid.totalRaw === 0 ? 'No rows matched your filters. Try widening a condition.' : emptyMessage}
             </AlertDescription>
           </Alert>
         ) : (
@@ -211,16 +233,19 @@ export function ResultsTable({
             }}
             mode={panelMode(areaWidth)}
             areaWidth={areaWidth}
-            row={<RowDetails store={store} gridRef={gridRef} onRowClick={onRowClick} rowActionLabel={rowActionLabel} onShowOnly={grid.showOnlyValue} />}
+            row={<RowDetails store={store} gridRef={gridRef} onRowClick={onRowClick} rowActionLabel={rowActionLabel} onShowOnly={fromPanel(grid.showOnlyValue)} />}
             column={
               <ColumnProfileView
                 store={store}
                 result={result}
                 rows={grid.filterRows}
                 filtered={grid.filters.length > 0}
-                onShowOnly={grid.showOnlyValue}
-                onHide={grid.hideColumnValue}
-                onRange={grid.setColumnFilter}
+                onShowOnly={fromPanel(grid.showOnlyValue)}
+                onHide={fromPanel(grid.hideColumnValue)}
+                onRange={(f) => {
+                  recenterColumn.current = f.column
+                  grid.setColumnFilter(f)
+                }}
               />
             }
           />
@@ -242,7 +267,10 @@ export function ResultsTable({
     if (!addPlan || !onAddToQuery) return
     const where = addPlan.add.filter((p) => p.clause === 'where').flatMap((p) => p.conditions)
     const having = addPlan.add.filter((p) => p.clause === 'having').flatMap((p) => p.conditions)
-    onAddToQuery(where, having, addPlan.add.length)
+    if (!onAddToQuery(where, having, addPlan.add.length)) {
+      setAddPlan(null)
+      return
+    }
     const added = addPlan.add.map((p) => p.column)
     grid.removeFilters(added)
     // With no chips left the bar unmounts, taking the "Add to query" trigger Radix would return focus to.

@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input'
 import { toNumber } from '../../visualizations/chart-data.ts'
 import type { QueryResultColumnDto } from '@/types'
 import { histogram, parseDateValue, profileKind } from './column-profile.ts'
-import { boundInputText, buildRangeFilter, rangeProblem } from './filter-input.ts'
+import { boundInputText, buildRangeFilter, canApplyRange, rangeProblem } from './filter-input.ts'
 import type { GridFilter } from './grid-filters.ts'
 import { Histogram } from './Histogram'
 
@@ -82,7 +82,7 @@ export function RangeFilter({
         <Button
           type="button"
           size="sm"
-          disabled={problem !== null}
+          disabled={problem !== null || !canApplyRange(from, to, includeEmpty)}
           onClick={() => onApply(buildRangeFilter(column.name, from, to, includeEmpty, column.dataType))}
         >
           Apply

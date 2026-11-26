@@ -261,8 +261,8 @@ export function QueryEditorPage() {
         ? 'Fill in the required parameters first.'
         : undefined
 
-  function addGridFiltersToQuery(where: FilterCondition[], having: FilterCondition[], filterCount: number) {
-    if (addToQueryBlocked) return
+  function addGridFiltersToQuery(where: FilterCondition[], having: FilterCondition[], filterCount: number): boolean {
+    if (addToQueryBlocked) return false
     const {appendFilterConditions, appendHavingConditions } = useBuilderStore.getState()
     appendFilterConditions(where)
     appendHavingConditions(having)
@@ -270,6 +270,7 @@ export function QueryEditorPage() {
     applyAndRun()
     // Counted as the dialog counted them: a range on one column is two conditions but one filter.
     toast(`Added ${filterCount} ${filterCount === 1 ? 'filter' : 'filters'} to the query`)
+    return true
   }
 
   function exportAs(format: 'csv' | 'xlsx') {

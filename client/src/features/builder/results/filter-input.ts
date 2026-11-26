@@ -36,6 +36,11 @@ export function rangeProblem(from: string, to: string, dataType: ColumnDataType)
   return null
 }
 
+/** With nothing typed and empties not kept, a range would remove the filter; Clear is the way to do that. */
+export function canApplyRange(from: string, to: string, includeEmpty: boolean): boolean {
+  return includeEmpty || from.trim() !== '' || to.trim() !== ''
+}
+
 export function buildRangeFilter(
   column: string,
   from: string,

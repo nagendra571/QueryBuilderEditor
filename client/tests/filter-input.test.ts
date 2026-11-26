@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { boundInputText, buildRangeFilter, filterFromTicks, initialTicks, parseBound, rangeProblem } from '../src/features/builder/results/filter-input.ts'
+import { boundInputText, buildRangeFilter, canApplyRange, filterFromTicks, initialTicks, parseBound, rangeProblem } from '../src/features/builder/results/filter-input.ts'
 import type { ValueOption } from '../src/features/builder/results/grid-filters.ts'
 
 const opts = (...v: (string | null)[]): ValueOption[] => v.map((value) => ({ value, label: String(value), count: 1 }))
@@ -68,4 +68,10 @@ test('an include filter that cannot see every value stays an include', () => {
   assert.deepEqual(filterFromTicks('x', o, new Set(['a', 'b', 'c', 'd']), inc), { kind: 'values', column: 'x', mode: 'include', values: ['a', 'b', 'c', 'd', 'z'] })
   const onlyA = { kind: 'values', column: 'x', mode: 'include', values: ['a'] } as const
   assert.deepEqual(filterFromTicks('x', o, new Set(['a', 'b']), onlyA, true), { kind: 'values', column: 'x', mode: 'include', values: ['a', 'b'] })
+})
+
+test('a range can be applied only with a bound or with empties kept', () => {
+  assert.equal(canApplyRange('', ' ', false), false)
+  assert.equal(canApplyRange('1', '', false), true)
+  assert.equal(canApplyRange('', '', true), true)
 })

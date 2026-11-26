@@ -1,4 +1,4 @@
-import { AGGREGATE_LABELS, aggregateResultDataType } from '../aggregate-functions.ts'
+import { aggregateResultDataType } from '../aggregate-functions.ts'
 import { profileKind } from './column-profile.ts'
 import type { FilterValue, GridFilter } from './grid-filters.ts'
 import type { ColumnDataType, FilterCondition, FilterGroup, FilterOperator, QueryColumn, QueryResultColumnDto } from '@/types'
@@ -21,14 +21,19 @@ const DAY_MS = 86_400_000
 const isEmptyCell = (v: unknown) => v === null || v === undefined || v === ''
 const isoDay = (ms: number) => new Date(ms).toISOString().slice(0, 10)
 const valueText = (v: Exclude<FilterValue, null>) => String(v)
+const mod = (t: number) => ((t % DAY_MS) + DAY_MS) % DAY_MS
+const aliasOf = (c: QueryColumn) => (c.alias?.trim() ? c.alias : c.columnName)
+// The server trims and drops empties when it splits a comma list, so those values need the JSON form.
+const needsJsonList = (texts: string[]) =>
+  texts.some((t) => t.includes(',') || t !== t.trim() || t.trim() === '' || t.startsWith('['))
 
 function mixedReason(column: string) {
   return `${column}: empty values mixed with other values can't be expressed in the query's filters`
 }
 
-function matchAnyReason(clause: 'where' | 'having') {
+function matchAnyReason(column: string, clause: 'where' | 'having') {
   const what = clause === 'where' ? 'filters' : 'totals filters'
-  return `Your query's ${what} use 'Match any'. Switch to 'Match all' in Build to add these.`
+  return `${column}: your query's ${what} use 'Match any'. Switch to 'Match all' in Build to add these.`
 }
 
 function collect(group: FilterGroup | null | undefined, into: FilterCondition[] = []): FilterCondition[] {
@@ -69,10 +74,14 @@ function build(
       }
     }
     if (real.length === 0) return { conditions: [], description: '' }
-    if (!include && hasEmpty) notes.warnings.push(`The query will also leave out empty ${filter.column} values.`)
-    if (profileKind(dataType) === 'boolean') {
-      const hasTrue = real.includes(true)
-      const hasFalse = real.includes(false)
+    const isBoolean = profileKind(dataType) === 'boolean'
+    const hasTrue = real.includes(true)
+    const hasFalse = real.includes(false)
+    // 'is not null' (both values excluded) keeps empties, so the warning would be wrong there.
+    if (!include && hasEmpty && !(isBoolean && hasTrue && hasFalse)) {
+      notes.warnings.push(`The query will also leave out empty ${filter.column} values.`)
+    }
+    if (isBoolean) {
       let operator: FilterOperator
       if (hasTrue && hasFalse) operator = include ? 'isNotNull' : 'isNull'
       else if (hasTrue) operator = include ? 'isTrue' : 'isFalse'
@@ -85,7 +94,7 @@ function build(
     if (real.length === 1) cond = make(include ? 'equals' : 'notEquals', valueText(real[0]))
     else {
       const texts = real.map(valueText)
-      const value = texts.some((t) => t.includes(',')) ? JSON.stringify(texts) : texts.join(',')
+      const value = needsJsonList(texts) ? JSON.stringify(texts) : texts.join(',')
       cond = make(include ? 'in' : 'notIn', value)
     }
     const shown = include ? listText(real) : real.map(valueText).join(', ')
@@ -97,15 +106,19 @@ function build(
   if (min === null && max === null) return { conditions: [], description: '' }
   if (profileKind(dataType) === 'date') {
     const conditions: FilterCondition[] = []
-    const midnight = (ms: number) => ms % DAY_MS === 0
-    const exact = (ms: number) => (midnight(ms) ? isoDay(ms) : new Date(ms).toISOString().slice(0, 19))
+    const midnight = (ms: number) => mod(ms) === 0
+    const exact = (ms: number) => {
+      if (midnight(ms)) return isoDay(ms)
+      const iso = new Date(ms).toISOString()
+      return ms % 1000 === 0 ? iso.slice(0, 19) : iso.slice(0, 23)
+    }
     if (min !== null) conditions.push(make('greaterOrEqual', exact(min)))
     if (max !== null) {
-      if (max % DAY_MS === DAY_MS - 1) {
+      if (mod(max) === DAY_MS - 1) {
         conditions.push(make('lessThan', isoDay((Math.floor(max / DAY_MS) + 1) * DAY_MS)))
       } else conditions.push(make('lessOrEqual', exact(max)))
     }
-    const text = (ms: number) => (midnight(ms) || ms % DAY_MS === DAY_MS - 1 ? isoDay(ms) : exact(ms).replace('T', ' '))
+    const text = (ms: number) => (midnight(ms) || mod(ms) === DAY_MS - 1 ? isoDay(ms) : exact(ms).replace('T', ' '))
     let description: string
     if (min !== null && max !== null) description = `${label} between ${text(min)} and ${text(max)}`
     else if (min !== null) description = `${label} from ${text(min)}`
@@ -133,7 +146,7 @@ export function planAddToQuery(
   const resultTypes = new Map(resultColumns.map((c) => [c.name, c.dataType]))
 
   for (const filter of filters) {
-    const matches = definition.columns.filter((c) => c.isVisible && (c.alias || c.columnName) === filter.column)
+    const matches = definition.columns.filter((c) => c.isVisible && aliasOf(c) === filter.column)
     if (matches.length !== 1) {
       plan.blocked.push({ column: filter.column, reason: `${filter.column} isn't a column of the query any more` })
       continue
@@ -143,7 +156,7 @@ export function planAddToQuery(
     const condType = clause === 'having' ? aggregateResultDataType(qc.dataType, qc.aggregate) : qc.dataType
     const group = clause === 'having' ? definition.having : definition.filters
     if (group && group.operator === 'or' && collect(group).length > 0) {
-      plan.blocked.push({ column: filter.column, reason: matchAnyReason(clause) })
+      plan.blocked.push({ column: filter.column, reason: matchAnyReason(filter.column, clause) })
       continue
     }
 
@@ -160,7 +173,7 @@ export function planAddToQuery(
     const hasEmpty = rows.some((r) => isEmptyCell(r[filter.column]))
     const hasBlank = rows.some((r) => r[filter.column] === '')
     const resultType = resultTypes.get(filter.column) ?? condType
-    const label = clause === 'having' ? `${AGGREGATE_LABELS[qc.aggregate]} of ${filter.column}` : filter.column
+    const label = filter.column
     const built = build(filter, resultType, hasEmpty, hasBlank, make, label, notes)
     if ('reason' in built) {
       plan.blocked.push({ column: filter.column, reason: built.reason })

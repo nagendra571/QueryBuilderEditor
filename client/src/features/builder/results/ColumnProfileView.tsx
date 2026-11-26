@@ -254,9 +254,9 @@ function Line({ label, value }: { label: string; value: string }) {
 
 function Bar({ fraction }: { fraction: number }) {
   return (
-    <div className="h-2 min-w-0 flex-1 bg-muted" aria-hidden>
-      <div className="h-full bg-primary/60" style={{ width: `${Math.min(1, fraction) * 100}%` }} />
-    </div>
+    <span className="block h-2 min-w-0 flex-1 bg-muted" aria-hidden>
+      <span className="block h-full bg-primary/60" style={{ width: `${Math.min(1, fraction) * 100}%` }} />
+    </span>
   )
 }
 
@@ -273,14 +273,14 @@ function Meter({
 }) {
   const fraction = total ? count / total : 0
   return (
-    <div className="flex items-center gap-2 text-xs">
+    <span className="flex items-center gap-2 text-xs">
       <span className="w-12 shrink-0 text-muted-foreground">{label}</span>
       <Bar fraction={fraction} />
       <span className="font-numeric shrink-0 text-right tabular-nums text-foreground">
         {count.toLocaleString()}
         {showPercent && ` · ${(fraction * 100).toFixed(fraction > 0 && fraction < 0.1 ? 1 : 0)}%`}
       </span>
-    </div>
+    </span>
   )
 }
 

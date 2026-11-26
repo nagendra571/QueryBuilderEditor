@@ -4,6 +4,7 @@ import { test } from 'node:test'
 import {
   HEADER_BADGE,
   HEADER_EXTRA,
+  HEADER_FILTER,
   HEADER_GAP,
   HEADER_GRIP,
   HEADER_MENU,
@@ -17,9 +18,9 @@ import {
 test('the header extra is the sum of the fixed header parts', () => {
   assert.equal(
     HEADER_EXTRA,
-    HEADER_PADDING_X + HEADER_GRIP + HEADER_BADGE + HEADER_SORT + HEADER_MENU + 3 * HEADER_GAP + HEADER_SLACK,
+    HEADER_PADDING_X + HEADER_GRIP + HEADER_BADGE + HEADER_SORT + HEADER_FILTER + HEADER_MENU + 4 * HEADER_GAP + HEADER_SLACK,
   )
-  assert.equal(HEADER_EXTRA, 116)
+  assert.equal(HEADER_EXTRA, 138)
   assert.equal(PINNED_HEADER_EXTRA, HEADER_PIN + HEADER_GAP)
 })
 

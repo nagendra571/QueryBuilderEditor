@@ -203,9 +203,13 @@ export function ResultsGrid({
   }, [idPrefix])
   useEffect(() => {
     openMenuAtActive.current = () => {
-      if (range) anchorToCell(range.focus)
+      if (!range) return
+      if (anchorToCell(range.focus)) return
+      // Scrolled out of the virtualised window: bring it back, then anchor once it has rendered.
+      reveal(range.focus)
+      requestAnimationFrame(() => requestAnimationFrame(() => anchorToCell(range.focus)))
     }
-  }, [range, anchorToCell])
+  }, [range, anchorToCell, reveal])
 
   const onContextMenuCapture = (e: React.MouseEvent) => {
     const el = (e.target as Element).closest('[data-row][data-col]') as HTMLElement | null

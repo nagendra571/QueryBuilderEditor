@@ -89,7 +89,7 @@ test('summary column goes to having with the aggregate result type', () => {
   assert.equal(p.clause, 'having')
   assert.equal(p.conditions[0].aggregate, 'sum')
   assert.equal(p.conditions[0].dataType, 'number')
-  assert.equal(p.description, 'Sum of Fee at least 500')
+  assert.equal(p.description, 'Fee at least 500')
   const cnt = planAddToQuery(
     [range('N', 1, null)],
     [rc('N', 'number')],
@@ -232,7 +232,7 @@ test("'Match any' blocks, but only a non-empty group", () => {
   assert.equal(plan.add.length, 0)
   assert.equal(
     plan.blocked[0].reason,
-    "Your query's filters use 'Match any'. Switch to 'Match all' in Build to add these.",
+    "Name: your query's filters use 'Match any'. Switch to 'Match all' in Build to add these.",
   )
   const empty = planAddToQuery([values('Name', ['A'])], nameRes, [], def(nameCols, group('or')))
   assert.equal(empty.add.length, 1)
@@ -245,7 +245,7 @@ test("'Match any' blocks, but only a non-empty group", () => {
   )
   assert.equal(
     having.blocked[0].reason,
-    "Your query's totals filters use 'Match any'. Switch to 'Match all' in Build to add these.",
+    "Fee: your query's totals filters use 'Match any'. Switch to 'Match all' in Build to add these.",
   )
 })
 
@@ -315,4 +315,72 @@ test('end of day is lessThan next day when either type says dateTime', () => {
 test('exclude description lists values with commas', () => {
   const p = planAddToQuery([values('Name', ['A', 'B'], 'exclude')], nameRes, [], def(nameCols))
   assert.equal(p.add[0].description, 'Name is not A, B')
+})
+
+test('a datetime bound keeps its milliseconds', () => {
+  const max = Date.UTC(2025, 0, 5, 10, 0, 0, 123)
+  const p = planAddToQuery(
+    [range('When', Date.UTC(2025, 0, 5, 9, 0, 0), max)],
+    [rc('When', 'date')],
+    [],
+    def([col({ columnName: 'When', dataType: 'date' })]),
+  )
+  assert.deepEqual(
+    p.add[0].conditions.map((x) => [x.operator, x.value]),
+    [
+      ['greaterOrEqual', '2025-01-05T09:00:00'],
+      ['lessOrEqual', '2025-01-05T10:00:00.123'],
+    ],
+  )
+})
+
+test('end-of-day and midnight checks hold before 1970', () => {
+  const day = Date.UTC(1969, 11, 31)
+  const p = planAddToQuery(
+    [range('When', day, day + 86_400_000 - 1)],
+    [rc('When', 'date')],
+    [],
+    def([col({ columnName: 'When', dataType: 'date' })]),
+  )
+  assert.deepEqual(
+    p.add[0].conditions.map((x) => [x.operator, x.value]),
+    [
+      ['greaterOrEqual', '1969-12-31'],
+      ['lessThan', '1970-01-01'],
+    ],
+  )
+})
+
+test('list values the server would trim or split are sent as JSON', () => {
+  const v = (vals: string[]) => planAddToQuery([values('Name', vals)], nameRes, [], def(nameCols)).add[0].conditions[0].value
+  assert.equal(v(['  Acme', 'B']), JSON.stringify(['  Acme', 'B']))
+  assert.equal(v(['A', ' ']), JSON.stringify(['A', ' ']))
+  assert.equal(v(['[x', 'B']), JSON.stringify(['[x', 'B']))
+  assert.equal(v(['A', 'B']), 'A,B')
+})
+
+test('excluding both booleans does not warn about empties', () => {
+  const p = planAddToQuery(
+    [values('Active', [true, false], 'exclude')],
+    [rc('Active', 'boolean')],
+    [{ Active: null }],
+    def([col({ columnName: 'Active', dataType: 'boolean' })]),
+  )
+  assert.equal(p.add[0].conditions[0].operator, 'isNull')
+  assert.deepEqual(p.warnings, [])
+})
+
+test('a summary column is described by its result name only', () => {
+  const p = planAddToQuery(
+    [range('Sum of FeePaid', 200, null)],
+    [rc('Sum of FeePaid', 'number')],
+    [],
+    def([col({ columnName: 'FeePaid', alias: 'Sum of FeePaid', dataType: 'number', aggregate: 'sum' })]),
+  )
+  assert.equal(p.add[0].description, 'Sum of FeePaid at least 200')
+})
+
+test('a whitespace-only alias falls back to the column name', () => {
+  const p = planAddToQuery([values('Name', ['A'])], nameRes, [], def([col({ columnName: 'Name', alias: '  ' })]))
+  assert.equal(p.add.length, 1)
 })
