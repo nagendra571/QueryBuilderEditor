@@ -451,6 +451,16 @@ change, and nothing to configure.
   or the **Copy** button copies tab-separated text with headers that pastes into Excel, also on plain http. With nothing
   selected, Copy takes all shown rows. The column menu also has sort, pin, fit, hide and **Copy column values**.
 - **Rows behind a total:** for a saved query with totals, the button in a row's number cell (or Enter) opens the rows behind it.
+- **Details panel:** the **Details** button in the toolbar opens a side panel with two tabs that follow the selected cell.
+  **Row** lists every visible field of the current row, with Previous/Next, **Copy record** and the drill button where
+  available. **Column** profiles the current column: how much of it is empty and how many different values it has; for
+  numbers the min, average, max, sum, median and a histogram; for dates the earliest, latest and a histogram; for text
+  the shortest, longest and the 10 most common values; for yes/no columns the split. Profiles cover the rows loaded in
+  the grid, and when results were cut off the panel says "Based on the first N rows". The panel docks on the right
+  (drag its edge, or use the arrow keys, to resize), slides over the grid on narrow screens, closes with the ✕ or Esc,
+  and comes along into full screen.
+- **Selection totals:** select two or more cells and the footer shows **Count** (non-empty cells) and, when the cells
+  are numbers, **Sum**, **Average**, **Min** and **Max**. Click a total to copy it.
 - **Cut-off results:** when more rows matched than the grid holds (1,000 by default, or the record limit, see "Record
   Limits"), sorting, search and copy cover only the loaded rows. Export and charts still run on the server and ignore what
   you did in the grid; **Add a filter** jumps to the Build tab.

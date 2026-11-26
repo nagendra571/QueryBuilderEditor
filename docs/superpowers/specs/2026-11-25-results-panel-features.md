@@ -26,9 +26,9 @@ is the way to get a true, query-wide answer.
 | 3 | Resize columns, auto-fit, wrap-text switch | Moving around | 1 | Done (unreleased, branch feature/results-grid) |
 | 4 | Row density: compact or comfortable | Moving around | 1 | Done (unreleased, branch feature/results-grid) |
 | 5 | Full-screen results | Moving around | 1 | Done (unreleased, branch feature/results-grid) |
-| 6 | Record panel on the side (every field of a row, next/previous) | Moving around | 2 | Planned |
-| 7 | Column profile panel (histogram, top values, min/max/average, empty share) | Understanding | 2 | Planned |
-| 8 | Selection totals in the footer (Sum, Average, Count, Min, Max) | Understanding | 2 | Planned |
+| 6 | Record panel on the side (every field of a row, next/previous) | Moving around | 2 | Done (unreleased, branch feature/results-panels) |
+| 7 | Column profile panel (histogram, top values, min/max/average, empty share) | Understanding | 2 | Done (unreleased, branch feature/results-panels) |
+| 8 | Selection totals in the footer (Sum, Average, Count, Min, Max) | Understanding | 2 | Done (unreleased, branch feature/results-panels) |
 | 9 | Optional totals row at the bottom | Understanding | 4 | Planned |
 | 10 | Per-column filters (value checklist for text, range for numbers and dates) | Finding | 3 | Planned |
 | 11 | Right-click a cell: show only this value / hide this value | Finding | 3 | Planned |
