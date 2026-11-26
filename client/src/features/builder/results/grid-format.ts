@@ -51,6 +51,24 @@ export function rulesFor(dataType: ColumnDataType): RuleOp[] {
   }
 }
 
+const numFormats = new Map<string, Intl.NumberFormat>()
+const dateFormats = new Map<string, Intl.DateTimeFormat>()
+
+// Building an Intl formatter costs far more than using one, and a grid formats thousands of cells.
+function numFmt(locale: string | undefined, o: Intl.NumberFormatOptions): Intl.NumberFormat {
+  const key = `${locale ?? ''}|${JSON.stringify(o)}`
+  let f = numFormats.get(key)
+  if (!f) numFormats.set(key, (f = new Intl.NumberFormat(locale, o)))
+  return f
+}
+
+function dateFmt(locale: string | undefined, o: Intl.DateTimeFormatOptions): Intl.DateTimeFormat {
+  const key = `${locale ?? ''}|${JSON.stringify(o)}`
+  let f = dateFormats.get(key)
+  if (!f) dateFormats.set(key, (f = new Intl.DateTimeFormat(locale, o)))
+  return f
+}
+
 // Intl throws RangeError on a malformed currency code; a bad saved format must still render a number.
 function currencyCode(f: NumberFormat): string | null {
   const code = f.currency?.trim().toUpperCase()
@@ -59,17 +77,17 @@ function currencyCode(f: NumberFormat): string | null {
 
 export function formatNumber(n: number, f: NumberFormat, locale?: string): string {
   if (f.style === 'auto') return n.toLocaleString(locale)
-  const useGrouping = f.thousands
+  const useGrouping = f.thousands ? undefined : false
   const d = f.decimals ?? undefined
   const pinned = d === undefined ? {} : { minimumFractionDigits: d, maximumFractionDigits: d }
   switch (f.style) {
     case 'compact':
-      return new Intl.NumberFormat(locale, { notation: 'compact', maximumFractionDigits: d ?? 1, useGrouping }).format(n)
+      return numFmt(locale, { notation: 'compact', maximumFractionDigits: d ?? 1, useGrouping }).format(n)
     case 'currency': {
       const currency = currencyCode(f)
       if (currency) {
         try {
-          return new Intl.NumberFormat(locale, { style: 'currency', currency, useGrouping, ...pinned }).format(n)
+          return numFmt(locale, { style: 'currency', currency, useGrouping, ...pinned }).format(n)
         } catch {
           // fall through to the plain number
         }
@@ -78,7 +96,7 @@ export function formatNumber(n: number, f: NumberFormat, locale?: string): strin
     }
     case 'percent':
       // Chart parity: 42 means 42%, so Intl's own x100 only applies when the data holds fractions.
-      return new Intl.NumberFormat(locale, {
+      return numFmt(locale, {
         style: 'percent',
         useGrouping,
         minimumFractionDigits: d ?? 0,
@@ -86,7 +104,7 @@ export function formatNumber(n: number, f: NumberFormat, locale?: string): strin
       }).format(f.fraction ? n : n / 100)
     default: {
       const places = d ?? (Number.isInteger(n) ? 0 : 2)
-      return new Intl.NumberFormat(locale, { useGrouping, minimumFractionDigits: places, maximumFractionDigits: places }).format(n)
+      return numFmt(locale, { useGrouping, minimumFractionDigits: places, maximumFractionDigits: places }).format(n)
     }
   }
 }
@@ -118,25 +136,25 @@ export function formatDate(raw: unknown, dataType: 'date' | 'dateTime', f: DateF
   let text: string
   switch (f.pattern) {
     case 'weekday':
-      text = new Intl.DateTimeFormat(locale, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric', timeZone }).format(d)
+      text = dateFmt(locale, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric', timeZone }).format(d)
       break
     case 'short':
-      text = new Intl.DateTimeFormat(locale, { day: '2-digit', month: '2-digit', year: 'numeric', timeZone }).format(d)
+      text = dateFmt(locale, { day: '2-digit', month: '2-digit', year: 'numeric', timeZone }).format(d)
       break
     case 'iso':
       text = `${y}-${pad(m)}-${pad(day)}`
       break
     case 'monthYear':
-      text = new Intl.DateTimeFormat(locale, { month: 'short', year: 'numeric', timeZone }).format(d)
+      text = dateFmt(locale, { month: 'short', year: 'numeric', timeZone }).format(d)
       break
     case 'year':
       text = String(y)
       break
     default:
-      text = new Intl.DateTimeFormat(locale, { day: 'numeric', month: 'short', year: 'numeric', timeZone }).format(d)
+      text = dateFmt(locale, { day: 'numeric', month: 'short', year: 'numeric', timeZone }).format(d)
   }
   if (f.showTime && dataType === 'dateTime') {
-    text += ` ${new Intl.DateTimeFormat(locale, { hour: '2-digit', minute: '2-digit', timeZone }).format(d)}`
+    text += ` ${dateFmt(locale, { hour: '2-digit', minute: '2-digit', timeZone }).format(d)}`
   }
   return text
 }

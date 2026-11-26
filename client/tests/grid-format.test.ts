@@ -219,3 +219,8 @@ test('isFormatted', () => {
   assert.equal(isFormatted({ scale: 'blue', rules: [] }), true)
   assert.equal(isFormatted({ rules: [rule('gt', '1')] }), true)
 })
+
+test('grouping follows the locale default, like the charts', () => {
+  assert.equal(formatNumber(1234, nf({ style: 'number' }), 'es'), new Intl.NumberFormat('es', { minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(1234))
+  assert.equal(formatNumber(1234, nf({ style: 'number', thousands: false }), 'es'), '1234')
+})
