@@ -25,6 +25,7 @@ export function ValuesFilter({
   const { options, truncated } = useMemo(() => valueOptions(rows, column, CAP), [rows, column])
   const [ticked, setTicked] = useState(() => initialTicks(options, filter))
   const [search, setSearch] = useState('')
+  const [cleared, setCleared] = useState(false)
 
   const needle = search.trim().toLowerCase()
   const visible = useMemo(
@@ -66,7 +67,10 @@ export function ValuesFilter({
         <button type="button" className="text-primary hover:underline focus-visible:underline" onClick={() => setVisible(true)}>
           Select all
         </button>
-        <button type="button" className="text-primary hover:underline focus-visible:underline" onClick={() => setVisible(false)}>
+        <button type="button" className="text-primary hover:underline focus-visible:underline" onClick={() => {
+            setCleared(true)
+            setVisible(false)
+          }}>
           Clear
         </button>
       </div>
@@ -89,7 +93,7 @@ export function ValuesFilter({
         <Button type="button" variant="outline" size="sm" onClick={onCancel}>
           Cancel
         </Button>
-        <Button type="button" size="sm" disabled={noneTicked} onClick={() => onApply(filterFromTicks(column.name, options, ticked))}>
+        <Button type="button" size="sm" disabled={noneTicked} onClick={() => onApply(filterFromTicks(column.name, options, ticked, filter, truncated, cleared))}>
           Apply
         </Button>
       </div>

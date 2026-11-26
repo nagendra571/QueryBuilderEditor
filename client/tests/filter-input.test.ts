@@ -44,3 +44,19 @@ test('apply picks include below half, exclude otherwise, none when all ticked', 
   assert.deepEqual(filterFromTicks('x', o, new Set(['a'])), { kind: 'values', column: 'x', mode: 'include', values: ['a'] })
   assert.deepEqual(filterFromTicks('x', o, new Set(['a', 'b'])), { kind: 'values', column: 'x', mode: 'exclude', values: ['c', 'd'] })
 })
+
+test('unlisted values in the existing filter are carried forward', () => {
+  const o = opts('a', 'b', 'c', 'd')
+  const ex = { kind: 'values', column: 'x', mode: 'exclude', values: ['z'] } as const
+  assert.deepEqual(filterFromTicks('x', o, new Set(['a', 'b', 'c', 'd']), ex), { kind: 'values', column: 'x', mode: 'exclude', values: ['z'] })
+  assert.deepEqual(filterFromTicks('x', o, new Set(['a', 'b', 'c']), ex), { kind: 'values', column: 'x', mode: 'exclude', values: ['d', 'z'] })
+  const inc = { kind: 'values', column: 'x', mode: 'include', values: ['a', 'z'] } as const
+  assert.deepEqual(filterFromTicks('x', o, initialTicks(o, inc), inc), { kind: 'values', column: 'x', mode: 'include', values: ['a', 'z'] })
+})
+
+test('a truncated list excludes by default and includes only after Clear', () => {
+  const o = opts('a', 'b', 'c', 'd')
+  assert.deepEqual(filterFromTicks('x', o, new Set(['a']), undefined, true), { kind: 'values', column: 'x', mode: 'exclude', values: ['b', 'c', 'd'] })
+  assert.deepEqual(filterFromTicks('x', o, new Set(['a']), undefined, true, true), { kind: 'values', column: 'x', mode: 'include', values: ['a'] })
+  assert.equal(filterFromTicks('x', o, new Set(['a', 'b', 'c', 'd']), undefined, true), null)
+})

@@ -55,10 +55,27 @@ export function initialTicks(options: ValueOption[], filter: GridFilter | undefi
   return new Set(options.filter((o) => (filter.mode === 'include') === listed.has(o.value)).map((o) => o.value))
 }
 
-/** null = every value ticked, i.e. no filter. */
-export function filterFromTicks(column: string, options: ValueOption[], ticked: Set<FilterValue>): GridFilter | null {
+/**
+ * null = every listed value ticked and nothing carried over, i.e. no filter. Values in the existing filter that are not
+ * listed (past the cap, or removed by other columns' filters) are carried forward so Apply never silently drops them.
+ */
+export function filterFromTicks(
+  column: string,
+  options: ValueOption[],
+  ticked: Set<FilterValue>,
+  existing?: GridFilter,
+  truncated = false,
+  clearedInSession = false,
+): GridFilter | null {
+  const listed = new Set(options.map((o) => o.value))
+  const unlisted = existing?.kind === 'values' ? existing.values.filter((v) => !listed.has(v)) : []
+  const carriedExclude = existing?.kind === 'values' && existing.mode === 'exclude' ? unlisted : []
+  const carriedInclude = existing?.kind === 'values' && existing.mode === 'include' ? unlisted : []
   const on = options.filter((o) => ticked.has(o.value)).map((o) => o.value)
-  if (on.length === options.length) return null
-  if (on.length < options.length / 2) return { kind: 'values', column, mode: 'include', values: on }
-  return { kind: 'values', column, mode: 'exclude', values: options.filter((o) => !ticked.has(o.value)).map((o) => o.value) }
+  if (on.length === options.length && carriedExclude.length === 0) return null
+  // With a cut-off list, "fewer than half" says nothing about the values that are not listed, so the default keeps them.
+  const include = truncated ? clearedInSession : on.length < options.length / 2
+  if (include) return { kind: 'values', column, mode: 'include', values: [...on, ...carriedInclude] }
+  const off = options.filter((o) => !ticked.has(o.value)).map((o) => o.value)
+  return { kind: 'values', column, mode: 'exclude', values: [...off, ...carriedExclude] }
 }
