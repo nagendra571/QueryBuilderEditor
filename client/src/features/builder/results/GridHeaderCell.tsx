@@ -31,7 +31,8 @@ export interface HeaderActions {
   toggleSort: () => void
   setSort: (direction: 'asc' | 'desc' | null) => void
   pin: (side: 'left' | 'right' | null) => void
-  hide: () => void
+  /** Absent when this is the only visible column. */
+  hide?: () => void
   fit: () => void
   copyColumn: () => void
   resize: (width: number) => void
@@ -145,7 +146,7 @@ export function GridHeaderCell({
           {pinned && <DropdownMenuItem onSelect={() => actions.pin(null)}>Unpin</DropdownMenuItem>}
           <DropdownMenuSeparator />
           <DropdownMenuItem onSelect={actions.fit}>Fit to content</DropdownMenuItem>
-          <DropdownMenuItem onSelect={actions.hide}>Hide column</DropdownMenuItem>
+          {actions.hide && <DropdownMenuItem onSelect={actions.hide}>Hide column</DropdownMenuItem>}
           <DropdownMenuSeparator />
           <DropdownMenuItem onSelect={actions.copyColumn}>Copy column values</DropdownMenuItem>
         </DropdownMenuContent>
@@ -164,7 +165,7 @@ export function GridHeaderCell({
           actions.fit()
         }}
         onKeyDown={onResizeKeyDown}
-        className="absolute inset-y-0 right-0 w-1.5 cursor-col-resize touch-none hover:bg-primary/40 focus-visible:bg-primary/60 focus-visible:outline-none"
+        className="absolute inset-y-0 right-0 w-1.5 cursor-col-resize touch-none hover:bg-primary/40 focus-visible:bg-primary focus-visible:outline-none"
       />
     </div>
   )

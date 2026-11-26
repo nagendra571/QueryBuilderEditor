@@ -14,6 +14,7 @@ import {
   type CellRange,
   type MoveKey,
 } from './selection.ts'
+import { restoredSelection, sameView, type GridMemory, type SelectionEntry } from './grid-memory.ts'
 import type { RowData } from './grid-table.ts'
 
 const count = (n: number, noun: string) => `${n.toLocaleString()} ${noun}${n === 1 ? '' : 's'}`
@@ -38,6 +39,7 @@ export function useGridSelection({
   reveal,
   onEnter,
   onSelectionChange,
+  memory,
 }: {
   rows: Row<RowData>[]
   columns: QueryResultColumnDto[]
@@ -49,21 +51,26 @@ export function useGridSelection({
   reveal: (pos: CellPos) => void
   onEnter?: (row: RowData) => void
   onSelectionChange?: (cells: number) => void
+  /** Outlives the grid's remount on entering or leaving full screen. */
+  memory?: GridMemory
 }) {
-  const [sel, setSel] = useState<{ resetKey: string; data: unknown; range: CellRange | null }>({
-    resetKey,
-    data,
-    range: null,
-  })
+  const [stored, setSel] = useState<SelectionEntry>(() => restoredSelection(memory, resetKey, data))
+  let sel = stored
+  // Stored as cleared, not just hidden, so the old range cannot come back when the key returns to its old value.
+  if (!sameView(stored, resetKey, data)) {
+    sel = { resetKey, data, range: null }
+    setSel(sel)
+  }
   const bounds = useMemo(() => ({ rows: rows.length, cols: columns.length }), [rows.length, columns.length])
-  const range = useMemo(
-    () => (sel.resetKey === resetKey && sel.data === data && sel.range ? clampRange(sel.range, bounds) : null),
-    [sel, resetKey, data, bounds],
-  )
+  const range = useMemo(() => (sel.range ? clampRange(sel.range, bounds) : null), [sel, bounds])
+
+  useEffect(() => {
+    memory?.saveSelection(stored)
+  }, [memory, stored])
 
   const update = useCallback(
     (fn: (current: CellRange | null) => CellRange | null) =>
-      setSel((s) => ({ resetKey, data, range: fn(s.resetKey === resetKey && s.data === data ? s.range : null) })),
+      setSel((s) => ({ resetKey, data, range: fn(sameView(s, resetKey, data) ? s.range : null) })),
     [resetKey, data],
   )
 

@@ -42,6 +42,7 @@ export function ResultsToolbar({
   wrap,
   onWrapChange,
   onCopy,
+  copyDisabled,
   isDefaultView,
   onReset,
   rowCount,
@@ -61,6 +62,7 @@ export function ResultsToolbar({
   wrap: boolean
   onWrapChange: (wrap: boolean) => void
   onCopy: () => void
+  copyDisabled: boolean
   isDefaultView: boolean
   onReset: () => void
   rowCount: number
@@ -149,7 +151,7 @@ export function ResultsToolbar({
 
       <span className="h-5 w-px bg-border" aria-hidden />
 
-      <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs" onClick={onCopy}>
+      <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs" onClick={onCopy} disabled={copyDisabled}>
         <Copy className="size-3.5" />
         Copy
       </Button>

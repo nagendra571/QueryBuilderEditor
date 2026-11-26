@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { ResultsFooter } from '@/features/builder/results/ResultsFooter'
 import { ResultsGrid } from '@/features/builder/results/ResultsGrid'
 import { ResultsToolbar } from '@/features/builder/results/ResultsToolbar'
+import { createGridMemory } from '@/features/builder/results/grid-memory'
 import { useResultsGrid } from '@/features/builder/results/useResultsGrid'
 import type { QueryResultDto } from '@/types'
 
@@ -15,7 +16,7 @@ export function ResultsTable({
   onAddFilter,
 }: {
   result: QueryResultDto
-  /** Makes each row a button that opens the rows behind it (saved, aggregated queries only). */
+  /** Adds an icon button in each row's number cell that opens the rows behind it (saved, aggregated queries only). */
   onRowClick?: (row: Record<string, unknown>) => void
   rowActionLabel?: string
   /** Shown beside the truncation warning. */
@@ -25,11 +26,16 @@ export function ResultsTable({
   const grid = useResultsGrid(result)
   const { view, setView, rows } = grid
   const [fullScreen, setFullScreen] = useState(false)
+  // Full screen remounts the grid in a portal; this carries its scroll position and selection across.
+  const [memory] = useState(createGridMemory)
   const [range, setRange] = useState({ first: 0, last: 0 })
   const [selectedCells, setSelectedCells] = useState(0)
   const copyRef = useRef<{ copy: () => void }>(null)
   const fullScreenButton = useRef<HTMLButtonElement>(null)
   const wasFullScreen = useRef(false)
+
+  // A run that returns no columns renders no grid or exit button, so it must not stay in full screen.
+  if (fullScreen && result.columns.length === 0) setFullScreen(false)
 
   useEffect(() => {
     if (!fullScreen) return
@@ -85,6 +91,7 @@ export function ResultsTable({
         wrap={view.wrap}
         onWrapChange={(wrap) => setView((v) => ({ ...v, wrap }))}
         onCopy={() => copyRef.current?.copy()}
+        copyDisabled={noRows}
         isDefaultView={grid.isDefault}
         onReset={grid.reset}
         rowCount={result.rows.length}
@@ -127,6 +134,7 @@ export function ResultsTable({
             onVisibleRangeChange={(first, last) => setRange({ first, last })}
             onSelectionChange={setSelectedCells}
             copyRef={copyRef}
+            memory={memory}
           />
         </div>
       )}

@@ -12,16 +12,13 @@ import {
 } from '@tanstack/react-table'
 import type { QueryResultColumnDto, QueryResultDto } from '@/types'
 import { useDensityStore, type Density } from '../../../state/density-store.ts'
-import { DEFAULT_COL_CAP, FIT_SAMPLE_ROWS, createCanvasMeasure, fitWidth } from './column-widths.ts'
+import { DEFAULT_COL_CAP, FIT_SAMPLE_ROWS, HEADER_FONT, cellFont, createCanvasMeasure, fitWidth } from './column-widths.ts'
 import { displayOrder, displayString } from './grid-columns.ts'
 import { buildColumnDefs, tableBehaviour, type RowData } from './grid-table.ts'
 import { carryOver, defaultView, isDefaultView, type GridView } from './grid-view.ts'
 import { HEADER_EXTRA, PINNED_HEADER_EXTRA } from './header-width.ts'
 
 export { HEADER_EXTRA, PINNED_HEADER_EXTRA }
-
-export const HEADER_FONT = '600 12px "Public Sans Variable"'
-export const CELL_FONT = '400 13px "Public Sans Variable"'
 
 function resolve<T>(updater: Updater<T>, current: T): T {
   return typeof updater === 'function' ? (updater as (old: T) => T)(current) : updater
@@ -46,6 +43,9 @@ export function useResultsGrid(result: QueryResultDto) {
 
   const names = useMemo(() => result.columns.map((c) => c.name), [result.columns])
 
+  const appDensity = useDensityStore((s) => s.density)
+  const density: Density = view.density ?? appDensity
+
   const setView = useCallback((update: (v: GridView) => GridView) => {
     setState((s) => ({ ...s, view: update(s.view) }))
   }, [])
@@ -67,7 +67,7 @@ export function useResultsGrid(result: QueryResultDto) {
 
   const defaultWidths = useMemo(() => {
     void fontsReady
-    const measure = createCanvasMeasure({ header: HEADER_FONT, cell: CELL_FONT })
+    const measure = createCanvasMeasure({ header: HEADER_FONT, cell: cellFont(density) })
     const plain: Record<string, number> = {}
     const pinned: Record<string, number> = {}
     for (const c of result.columns) {
@@ -79,7 +79,7 @@ export function useResultsGrid(result: QueryResultDto) {
       )
     }
     return { plain, pinned }
-  }, [result, fontsReady])
+  }, [result, fontsReady, density])
 
   const defaultWidthOf = useCallback(
     (name: string, pinnedLeft: string[], pinnedRight: string[]) =>
@@ -160,9 +160,6 @@ export function useResultsGrid(result: QueryResultDto) {
       .map((n) => byName.get(n))
       .filter((c): c is QueryResultColumnDto => !!c)
   }, [result.columns, names, view])
-
-  const appDensity = useDensityStore((s) => s.density)
-  const density: Density = view.density ?? appDensity
 
   const rows: Row<RowData>[] = table.getRowModel().rows
 

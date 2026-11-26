@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useId, useImperativeHandle, useMemo, useRef } from 'react'
+import { useCallback, useEffect, useId, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
-import { MAX_COL_WIDTH, MIN_COL_WIDTH, createCanvasMeasure, fitWidth } from './column-widths.ts'
+import { HEADER_FONT, MAX_COL_WIDTH, MIN_COL_WIDTH, cellFont, createCanvasMeasure, fitWidth } from './column-widths.ts'
 import { displayString } from './grid-columns.ts'
 import { ROW_NUM_WIDTH, cellId, columnWindow, layoutColumns, moveColumn, pinColumn } from './grid-layout.ts'
 import { nextSort } from './grid-view.ts'
@@ -8,7 +8,8 @@ import { GridHeaderRow } from './GridHeaderRow'
 import type { HeaderActions } from './GridHeaderCell'
 import { GridRow } from './GridRow'
 import { rowSlice, type CellPos } from './selection.ts'
-import { CELL_FONT, HEADER_EXTRA, HEADER_FONT, PINNED_HEADER_EXTRA, type useResultsGrid } from './useResultsGrid.ts'
+import { restoredScroll, type GridMemory } from './grid-memory.ts'
+import { HEADER_EXTRA, PINNED_HEADER_EXTRA, type useResultsGrid } from './useResultsGrid.ts'
 import { useGridSelection } from './useGridSelection.ts'
 import { cn } from '@/lib/utils'
 
@@ -23,6 +24,7 @@ export function ResultsGrid({
   onVisibleRangeChange,
   onSelectionChange,
   copyRef,
+  memory,
 }: {
   grid: ReturnType<typeof useResultsGrid>
   onRowClick?: (row: Record<string, unknown>) => void
@@ -32,12 +34,25 @@ export function ResultsGrid({
   /** 0 when nothing is selected, and again when the grid unmounts. */
   onSelectionChange?: (cells: number) => void
   copyRef?: React.Ref<{ copy: () => void }>
+  /** Keeps the scroll position and selection across the remount that full screen causes. */
+  memory?: GridMemory
 }) {
   const { table, view, setView, rows, columns, density } = grid
   const rowHeight = ROW_HEIGHT[density]
   const scrollRef = useRef<HTMLDivElement>(null)
-  const measureRef = useRef<ReturnType<typeof createCanvasMeasure> | null>(null)
   const idPrefix = useId().replace(/:/g, '')
+  const data = table.options.data
+
+  const resetKey = [
+    view.search,
+    view.sort ? `${view.sort.column}:${view.sort.direction}` : '',
+    view.order.join('\u0001'),
+    view.hidden.join('\u0001'),
+    view.pinnedLeft.join('\u0001'),
+    view.pinnedRight.join('\u0001'),
+  ].join('\u0002')
+
+  const [initialScroll] = useState(() => restoredScroll(memory, resetKey, data))
 
   const sizing = table.getState().columnSizing
   // Same clamp as TanStack's getSize, read from the memoised sizing state so the result is stable across scrolls.
@@ -65,6 +80,7 @@ export function ResultsGrid({
     paddingStart: rowHeight,
     scrollPaddingStart: rowHeight,
     measureElement: view.wrap ? undefined : () => rowHeight,
+    initialOffset: initialScroll.top,
   })
 
   useEffect(() => {
@@ -72,7 +88,8 @@ export function ResultsGrid({
   }, [virtualizer, rowHeight, view.wrap])
 
   const centre = useMemo(() => layouts.filter((l) => l.group === 'centre'), [layouts])
-  const virtualiseColumns = centre.length > COLUMN_VIRTUALISATION_THRESHOLD
+  // Wrapped rows are as tall as their tallest rendered cell, so a moving column window would change row heights.
+  const virtualiseColumns = !view.wrap && centre.length > COLUMN_VIRTUALISATION_THRESHOLD
   const columnVirtualizer = useVirtualizer({
     horizontal: true,
     enabled: virtualiseColumns,
@@ -82,6 +99,7 @@ export function ResultsGrid({
     // Starts the centre group at its real x, so the virtualiser's item positions equal the layout's.
     paddingStart: centre[0]?.x ?? ROW_NUM_WIDTH,
     overscan: 3,
+    initialOffset: initialScroll.left,
   })
 
   useEffect(() => {
@@ -114,24 +132,33 @@ export function ResultsGrid({
     [rowHeight],
   )
 
-  const resetKey = [
-    view.search,
-    view.sort ? `${view.sort.column}:${view.sort.direction}` : '',
-    view.order.join('\u0001'),
-    view.hidden.join('\u0001'),
-    view.pinnedLeft.join('\u0001'),
-    view.pinnedRight.join('\u0001'),
-  ].join('\u0002')
+  // The virtualisers only apply their initial offset to the axis they own, and the column one may be disabled.
+  useLayoutEffect(() => {
+    const el = scrollRef.current
+    if (!el) return
+    el.scrollTop = initialScroll.top
+    el.scrollLeft = initialScroll.left
+  }, [initialScroll])
+
+  const saveScroll = useCallback(() => {
+    const el = scrollRef.current
+    if (el) memory?.saveScroll({ resetKey, data, top: el.scrollTop, left: el.scrollLeft })
+  }, [memory, resetKey, data])
+  // Re-keyed on every view change, so the saved position is always the one the mounted grid shows.
+  useEffect(() => {
+    saveScroll()
+  }, [saveScroll])
 
   const selection = useGridSelection({
     rows,
     columns,
-    data: table.options.data,
+    data,
     resetKey,
     pageRows,
     reveal,
     onEnter: onRowClick,
     onSelectionChange,
+    memory,
   })
   const { range, copy, copyColumn } = selection
 
@@ -156,27 +183,32 @@ export function ResultsGrid({
     [setView],
   )
 
+  const measure = useMemo(() => createCanvasMeasure({ header: HEADER_FONT, cell: cellFont(density) }), [density])
+
   const fit = useCallback(
     (name: string) => {
-      measureRef.current ??= createCanvasMeasure({ header: HEADER_FONT, cell: CELL_FONT })
       const values = rows.slice(0, 200).map((r) => displayString(r.original[name]))
       const pinned = view.pinnedLeft.includes(name) || view.pinnedRight.includes(name)
-      setWidth(name, fitWidth(name, values, measureRef.current, HEADER_EXTRA + (pinned ? PINNED_HEADER_EXTRA : 0)))
+      setWidth(name, fitWidth(name, values, measure, HEADER_EXTRA + (pinned ? PINNED_HEADER_EXTRA : 0)))
     },
-    [rows, view.pinnedLeft, view.pinnedRight, setWidth],
+    [rows, view.pinnedLeft, view.pinnedRight, setWidth, measure],
   )
+
+  const canHide = columns.length > 1
 
   const actionsFor = useCallback(
     (name: string): HeaderActions => ({
       toggleSort: () => setView((v) => ({ ...v, sort: nextSort(v.sort, name) })),
       setSort: (direction) => setView((v) => ({ ...v, sort: direction ? { column: name, direction } : null })),
       pin: (side) => setView((v) => pinColumn(v, name, side)),
-      hide: () => setView((v) => (v.hidden.includes(name) ? v : { ...v, hidden: [...v.hidden, name] })),
+      hide: canHide
+        ? () => setView((v) => (v.hidden.includes(name) ? v : { ...v, hidden: [...v.hidden, name] }))
+        : undefined,
       fit: () => fit(name),
       copyColumn: () => copyColumn(name),
       resize: (width) => setWidth(name, width),
     }),
-    [setView, fit, copyColumn, setWidth],
+    [setView, fit, copyColumn, setWidth, canHide],
   )
 
   const onReorder = useCallback(
@@ -199,6 +231,7 @@ export function ResultsGrid({
       aria-multiselectable
       aria-activedescendant={focusRendered && range ? cellId(idPrefix, range.focus.row, range.focus.col) : undefined}
       onKeyDown={selection.onKeyDown}
+      onScroll={saveScroll}
       className={cn(
         'relative h-full min-h-60 overflow-auto bg-background select-none',
         'focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring',

@@ -1,11 +1,14 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import {
+  CELL_FONT_PX,
   CELL_PADDING_X,
   DEFAULT_COL_CAP,
   FIT_SAMPLE_ROWS,
   MAX_COL_WIDTH,
   MIN_COL_WIDTH,
+  cellFont,
   createCanvasMeasure,
   fitWidth,
 } from '../src/features/builder/results/column-widths.ts'
@@ -63,4 +66,18 @@ test('only the first FIT_SAMPLE_ROWS values are measured', () => {
 test('createCanvasMeasure imports under Node and falls back without a DOM', () => {
   const m = createCanvasMeasure({ header: '600 12px sans-serif', cell: '12px sans-serif' })
   assert.equal(m('abcd', 'cell'), 32)
+})
+
+test('cell widths are measured at the body size each density renders', () => {
+  assert.equal(cellFont('comfortable'), '400 14px "Public Sans Variable"')
+  assert.equal(cellFont('compact'), '400 13px "Public Sans Variable"')
+  const css = readFileSync(new URL('../src/index.css', import.meta.url), 'utf8')
+  const bodyPx = (density: string) => {
+    const block = css.slice(css.indexOf(`[data-density="${density}"]`))
+    const rem = /--text-body:\s*([\d.]+)rem/.exec(block)
+    assert.ok(rem, `no --text-body for ${density}`)
+    return Number(rem[1]) * 16
+  }
+  assert.equal(bodyPx('comfortable'), CELL_FONT_PX.comfortable)
+  assert.equal(bodyPx('compact'), CELL_FONT_PX.compact)
 })

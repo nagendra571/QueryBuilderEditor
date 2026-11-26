@@ -115,7 +115,7 @@ export const GridRow = memo(function GridRow({
         )}
         style={{ width: ROW_NUM_WIDTH }}
       >
-        <span className={cn(onAction && 'group-hover:opacity-0', onAction && focusRow && 'opacity-0')}>{index + 1}</span>
+        <span className={cn(onAction && 'group-focus-within:opacity-0 group-hover:opacity-0', onAction && focusRow && 'opacity-0')}>{index + 1}</span>
         {onAction && (
           <button
             type="button"

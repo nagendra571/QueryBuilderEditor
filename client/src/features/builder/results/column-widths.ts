@@ -1,9 +1,17 @@
+import type { Density } from '@/state/density-store'
+
 export const MIN_COL_WIDTH = 60
 export const MAX_COL_WIDTH = 480
 export const DEFAULT_COL_CAP = 320
 export const FIT_SAMPLE_ROWS = 200
 // 10px each side, matching the grid's cell padding; header affordances travel in `extra` instead.
 export const CELL_PADDING_X = 20
+
+export const HEADER_FONT = '600 12px "Public Sans Variable"'
+// Cells render at --text-body, which differs per density (index.css); measuring at the wrong size truncates
+// default widths and under-fits "Fit to content".
+export const CELL_FONT_PX = { comfortable: 14, compact: 13 } as const
+export const cellFont = (density: Density) => `400 ${CELL_FONT_PX[density]}px "Public Sans Variable"`
 
 export type MeasureText = (text: string, kind: 'header' | 'cell') => number
 
