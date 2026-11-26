@@ -97,7 +97,7 @@ export function ResultsTable({
       {result.truncated && (
         <div
           role="status"
-          className="flex flex-wrap items-center gap-2 border-b border-warning/40 bg-warning/10 px-(--space-row-x) py-1.5 text-xs text-warning"
+          className="flex flex-wrap items-center gap-2 border-b border-warning/40 bg-warning/20 px-(--space-row-x) py-1.5 text-xs text-foreground"
         >
           <span className="size-2.5 shrink-0 bg-warning" aria-hidden />
           <span>
@@ -105,7 +105,7 @@ export function ResultsTable({
             {result.rowLimit.toLocaleString()}, so sorting, search and copy here cover those rows only.
           </span>
           {onAddFilter && (
-            <Button variant="link" size="sm" className="h-auto p-0 text-xs text-warning underline" onClick={onAddFilter}>
+            <Button variant="link" size="sm" className="h-auto p-0 text-xs text-foreground underline" onClick={onAddFilter}>
               Add a filter
             </Button>
           )}
