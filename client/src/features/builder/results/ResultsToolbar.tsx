@@ -169,22 +169,20 @@ export function ResultsToolbar({
         <Meta label="Rows" value={rowCount.toLocaleString()} />
         <Meta label="Cols" value={String(visibleCount)} />
         <Meta label="Ran in" value={`${executionTimeMs.toLocaleString()} ms`} />
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              ref={fullScreenRef}
-              variant="ghost"
-              size="icon"
-              className="size-7"
-              aria-label={fullScreen ? 'Exit full screen' : 'Full screen'}
-              aria-pressed={fullScreen}
-              onClick={onToggleFullScreen}
-            >
-              {fullScreen ? <Minimize2 className="size-3.5" /> : <Maximize2 className="size-3.5" />}
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>{fullScreen ? 'Exit full screen' : 'Full screen'}</TooltipContent>
-        </Tooltip>
+        {/* No Radix Tooltip here: this button is focused programmatically on entering and leaving full screen,
+            and a tooltip opened by that focus swallowed the first Escape. */}
+        <Button
+          ref={fullScreenRef}
+          variant="ghost"
+          size="icon"
+          className="size-7"
+          aria-label={fullScreen ? 'Exit full screen' : 'Full screen'}
+          title={fullScreen ? 'Exit full screen' : 'Full screen'}
+          aria-pressed={fullScreen}
+          onClick={onToggleFullScreen}
+        >
+          {fullScreen ? <Minimize2 className="size-3.5" /> : <Maximize2 className="size-3.5" />}
+        </Button>
       </div>
     </div>
   )
