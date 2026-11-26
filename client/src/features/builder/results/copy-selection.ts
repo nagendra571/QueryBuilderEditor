@@ -26,3 +26,10 @@ export function buildCopyText(
     shown.map((r) => cols.map((c) => cellToClipboardText(r[c.name], c.dataType))),
   )
 }
+
+export function buildRecordText(row: Record<string, unknown>, columns: CopyColumn[]): string {
+  return toTsv(
+    ['Column', 'Value'],
+    columns.map((c) => [c.name, cellToClipboardText(row[c.name], c.dataType)]),
+  )
+}
