@@ -21,11 +21,11 @@ is the way to get a true, query-wide answer.
 
 | # | Feature | Group | Phase | Status |
 | --- | --- | --- | --- | --- |
-| 1 | Smooth scrolling through all loaded rows, no pages; header and row numbers stay fixed | Moving around | 1 | Planned |
-| 2 | Pin columns to the left or right | Moving around | 1 | Planned |
-| 3 | Resize columns, auto-fit, wrap-text switch | Moving around | 1 | Planned |
-| 4 | Row density: compact or comfortable | Moving around | 1 | Planned |
-| 5 | Full-screen results | Moving around | 1 | Planned |
+| 1 | Smooth scrolling through all loaded rows, no pages; header and row numbers stay fixed | Moving around | 1 | Done (unreleased, branch feature/results-grid) |
+| 2 | Pin columns to the left or right | Moving around | 1 | Done (unreleased, branch feature/results-grid) |
+| 3 | Resize columns, auto-fit, wrap-text switch | Moving around | 1 | Done (unreleased, branch feature/results-grid) |
+| 4 | Row density: compact or comfortable | Moving around | 1 | Done (unreleased, branch feature/results-grid) |
+| 5 | Full-screen results | Moving around | 1 | Done (unreleased, branch feature/results-grid) |
 | 6 | Record panel on the side (every field of a row, next/previous) | Moving around | 2 | Planned |
 | 7 | Column profile panel (histogram, top values, min/max/average, empty share) | Understanding | 2 | Planned |
 | 8 | Selection totals in the footer (Sum, Average, Count, Min, Max) | Understanding | 2 | Planned |
@@ -36,7 +36,7 @@ is the way to get a true, query-wide answer.
 | 13 | "Add to query": grid filters become builder filters, then re-run | Finding | 3 | Planned |
 | 14 | Conditional formatting (colour scales, in-cell bars, highlight rules) | Shaping | 4 | Planned |
 | 15 | Per-column number and date formats | Shaping | 4 | Planned |
-| 16 | Copy a cell, row or selection with headers, pastes cleanly into Excel | Getting data out | 1 | Planned |
+| 16 | Copy a cell, row or selection with headers, pastes cleanly into Excel | Getting data out | 1 | Done (unreleased, branch feature/results-grid) |
 | 17 | Remember the layout per saved query (order, widths, pins, hidden, formats). Touches the database: decide first | Remembering | 5 | Planned |
 | 18 | "Chart this column" from the header menu, opens the chart editor filled in | Moving on | 5 | Planned |
 

@@ -105,8 +105,9 @@ migrations, API/UI wiring, JSON options, and the authorization pipeline in one p
   typed run-time parameters (text, number, date, date range with relative dates, fixed or
   query-based dropdowns, multi-select) in a parameter bar with Apply, values bound as SQL parameters
 - Read-only generated SQL preview with syntax highlighting
-- Run queries and browse results with client-side pagination, search, column show/hide, reorder,
-  and sort
+- Run queries and work with the results in a spreadsheet-style grid: smooth scrolling, pinned and resizable
+  columns, wrap text, density, full screen, cell selection and copy that pastes into Excel, search, sort,
+  show/hide and reorder. See "Working with query results" below
 - Export results to CSV or Excel
 - Download the data behind any chart, on the query page or a dashboard tile, as CSV or Excel (only the chart's own columns,
   with the viewer's scope; audited)
@@ -163,6 +164,25 @@ migrations, API/UI wiring, JSON options, and the authorization pipeline in one p
 - Auto-registers a default data source (against its own connection string) on first run so the
   catalog is never empty out of the box
 - Compact/comfortable density modes, light/dark theme
+
+## Working with query results
+
+After **Run**, the Results tab is a grid you can work in. Nothing here changes the query, the API or the database.
+
+- **Scroll** smoothly through every loaded row (no pages); the header and row numbers stay in view.
+- **Columns:** pin left or right, resize by dragging a header edge (double-click it, or **Fit to content**; arrow keys
+  work on a focused edge), drag to reorder, hide or show, and **Wrap text** for text columns (up to 4 lines).
+  **Reset view** puts it all back. Re-running with the same columns keeps your layout.
+- **Look:** Comfortable or Compact density (this grid only) and an in-app full screen; Escape leaves it.
+- **Select and copy:** click, shift-click, drag, or use the keyboard (arrows, Shift+arrows, Ctrl/Cmd+A, Esc). Ctrl/Cmd+C
+  or the **Copy** button copies tab-separated text with headers that pastes into Excel, also on plain http. With nothing
+  selected, Copy takes all shown rows. The column menu also has sort and **Copy column values**.
+- **Rows behind a total:** for a saved query with totals, the button in a row's number cell (or Enter) opens the rows behind it.
+- **Cut-off results:** when more rows matched than the grid holds (1,000, or the record limit), sorting, search and copy
+  cover only the loaded rows. Export and charts still run on the server and ignore what you did in the grid; **Add a
+  filter** jumps to the Build tab.
+
+The layout is not remembered across visits yet.
 
 ## PostgreSQL data sources
 
@@ -604,6 +624,7 @@ Not yet built, tracked for a future version:
   turned off in the admin UI for SQL Server and PostgreSQL; hard delete is deliberately not offered)
 - Manually-written SQL as an alternative to the visual builder
 - Drill-down for dates (zoom year to quarter to month) and author-linked destinations (open a dashboard with the clicked value)
+- Results grid: remembering the layout per saved query, filters on columns, a record panel and column statistics
 
 ## Contributing
 
