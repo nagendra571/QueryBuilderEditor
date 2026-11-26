@@ -1,4 +1,5 @@
 import type { Density } from '../../../state/density-store.ts'
+import type { GridFilter } from './grid-filters.ts'
 
 export interface GridSort {
   column: string
@@ -15,6 +16,7 @@ export interface GridView {
   search: string
   density: Density | null
   wrap: boolean
+  filters: GridFilter[]
 }
 
 export function defaultView(columns: string[]): GridView {
@@ -28,6 +30,7 @@ export function defaultView(columns: string[]): GridView {
     search: '',
     density: null,
     wrap: false,
+    filters: [],
   }
 }
 
@@ -51,6 +54,7 @@ export function carryOver(prev: GridView, prevColumns: string[], nextColumns: st
     search: prev.search,
     density: prev.density,
     wrap: prev.wrap,
+    filters: prev.filters.map((f) => ({ ...f })),
   }
 }
 
@@ -64,6 +68,7 @@ export function isDefaultView(v: GridView, columns: string[]): boolean {
     !v.search.trim() &&
     v.density === null &&
     !v.wrap &&
+    v.filters.length === 0 &&
     v.order.length === columns.length &&
     v.order.every((n, i) => n === columns[i])
   )
