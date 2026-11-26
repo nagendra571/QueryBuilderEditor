@@ -27,23 +27,37 @@ export function valueKey(raw: unknown, dataType: ColumnDataType): FilterValue {
   return String(raw)
 }
 
-export function matchesFilter(raw: unknown, filter: GridFilter, dataType: ColumnDataType): boolean {
+export function compileFilter(filter: GridFilter, dataType: ColumnDataType): (raw: unknown) => boolean {
   if (filter.kind === 'values') {
-    const hit = filter.values.includes(valueKey(raw, dataType))
-    return filter.mode === 'include' ? hit : !hit
+    const keys = new Set<FilterValue>(filter.values)
+    const include = filter.mode === 'include'
+    return (raw) => keys.has(valueKey(raw, dataType)) === include
   }
-  if (raw === null || raw === undefined || raw === '') return filter.includeEmpty
-  const kind = profileKind(dataType)
-  let n: number | null
-  if (kind === 'date') n = parseDateValue(raw)
-  else {
-    const t = toNumber(raw)
-    n = typeof t === 'number' ? t : null
+  const isDate = profileKind(dataType) === 'date'
+  const { min, max, includeEmpty } = filter
+  return (raw) => {
+    if (raw === null || raw === undefined || raw === '') return includeEmpty
+    let n: number | null
+    if (isDate) n = parseDateValue(raw)
+    else {
+      const t = toNumber(raw)
+      n = typeof t === 'number' ? t : null
+    }
+    if (n === null) return false
+    if (min !== null && n < min) return false
+    if (max !== null && n > max) return false
+    return true
   }
-  if (n === null) return false
-  if (filter.min !== null && n < filter.min) return false
-  if (filter.max !== null && n > filter.max) return false
-  return true
+}
+
+const compiled = new WeakMap<GridFilter, Map<ColumnDataType, (raw: unknown) => boolean>>()
+
+export function matchesFilter(raw: unknown, filter: GridFilter, dataType: ColumnDataType): boolean {
+  let byType = compiled.get(filter)
+  if (!byType) compiled.set(filter, (byType = new Map()))
+  let fn = byType.get(dataType)
+  if (!fn) byType.set(dataType, (fn = compileFilter(filter, dataType)))
+  return fn(raw)
 }
 
 export function isEmptyFilter(f: GridFilter): boolean {
@@ -109,9 +123,8 @@ export function rowsPassing(
   const active = filters.filter((f) => f.column !== exceptColumn)
   if (active.length === 0) return rows
   const types = new Map(columns.map((c) => [c.name, c.dataType]))
-  return rows.filter((row) =>
-    active.every((f) => matchesFilter(row[f.column], f, types.get(f.column) ?? 'unknown')),
-  )
+  const tests = active.map((f) => ({ column: f.column, test: compileFilter(f, types.get(f.column) ?? 'unknown') }))
+  return rows.filter((row) => tests.every((t) => t.test(row[t.column])))
 }
 
 function boundText(n: number): string {
@@ -133,7 +146,7 @@ export function chipText(f: GridFilter, dataType: ColumnDataType): { column: str
   if (f.min !== null && f.max !== null) core = `${show(f.min)} – ${show(f.max)}`
   else if (f.min !== null) core = `≥ ${show(f.min)}`
   else if (f.max !== null) core = `≤ ${show(f.max)}`
-  else core = EMPTY_LABEL.slice(1, -1)
+  else core = 'empty'
   const text = f.includeEmpty && (f.min !== null || f.max !== null) ? `${core} + empty` : core
   return { column: f.column, text, title: text }
 }

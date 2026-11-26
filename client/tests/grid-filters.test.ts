@@ -2,6 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
   chipText,
+  compileFilter,
   filterUi,
   hideValue,
   isEmptyFilter,
@@ -160,4 +161,16 @@ test('chipText', () => {
   const d = range('d', Date.UTC(2025, 0, 1), Date.UTC(2025, 2, 31) + 86_399_999)
   assert.equal(chipText(d, 'dateTime').text, '2025-01-01 – 2025-03-31')
   assert.equal(chipText(range('d', DAY, null), 'date').text, '≥ 2025-01-01')
+})
+
+test('compileFilter handles a 1,000-value include list and filters can be reused', () => {
+  const vals = Array.from({ length: 1000 }, (_, i) => `v${i}`)
+  const f = values('a', vals)
+  const test = compileFilter(f, 'text')
+  assert.equal(test('v999'), true)
+  assert.equal(test('v1000'), false)
+  assert.equal(matchesFilter('v0', f, 'text'), true)
+  assert.equal(matchesFilter('v0', f, 'text'), true)
+  assert.equal(matchesFilter('zzz', f, 'text'), false)
+  assert.equal(matchesFilter('v0', f, 'number'), true)
 })
