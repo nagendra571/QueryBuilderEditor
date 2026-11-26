@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from 'react'
 import { rangeSize } from './selection.ts'
 import type { SelectionStore } from './selection-store.ts'
+import { SelectionTotals } from './SelectionTotals.tsx'
 import { footerRange, selectedCellsText } from './footer-text.ts'
 
 export function ResultsFooter({
@@ -26,6 +27,7 @@ export function ResultsFooter({
       {range && <span>{range}</span>}
       {pinned.length > 0 && <span>Pinned: {pinned.join(', ')}</span>}
       {selectedCells > 0 && <span>{selectedCellsText(selectedCells)}</span>}
+      <SelectionTotals store={store} />
     </div>
   )
 }
