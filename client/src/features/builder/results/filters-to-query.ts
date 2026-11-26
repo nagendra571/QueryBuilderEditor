@@ -47,6 +47,7 @@ function build(
   filter: GridFilter,
   dataType: ColumnDataType,
   hasEmpty: boolean,
+  hasBlank: boolean,
   make: (operator: FilterOperator, value: string | null) => FilterCondition,
   label: string,
   notes: { text: boolean; warnings: string[] },
@@ -57,6 +58,11 @@ function build(
     if (nulls > 0 && real.length > 0) return { reason: mixedReason(filter.column) }
     const include = filter.mode === 'include'
     if (nulls > 0) {
+      if (hasBlank) {
+        notes.warnings.push(
+          `The query treats blank text and empty values differently: blank ${filter.column} values will be ${include ? 'left out' : 'kept'}.`,
+        )
+      }
       return {
         conditions: [make(include ? 'isNull' : 'isNotNull', null)],
         description: `${label} is ${include ? '' : 'not '}empty`,
@@ -64,7 +70,17 @@ function build(
     }
     if (real.length === 0) return { conditions: [], description: '' }
     if (!include && hasEmpty) notes.warnings.push(`The query will also leave out empty ${filter.column} values.`)
-    if (include && profileKind(dataType) === 'text') notes.text = true
+    if (profileKind(dataType) === 'boolean') {
+      const hasTrue = real.includes(true)
+      const hasFalse = real.includes(false)
+      let operator: FilterOperator
+      if (hasTrue && hasFalse) operator = include ? 'isNotNull' : 'isNull'
+      else if (hasTrue) operator = include ? 'isTrue' : 'isFalse'
+      else operator = include ? 'isFalse' : 'isTrue'
+      const names = [hasTrue ? 'Yes' : null, hasFalse ? 'No' : null].filter(Boolean).join(' or ')
+      return { conditions: [make(operator, null)], description: `${label} is ${include ? '' : 'not '}${names}` }
+    }
+    if (profileKind(dataType) === 'text') notes.text = true
     let cond: FilterCondition
     if (real.length === 1) cond = make(include ? 'equals' : 'notEquals', valueText(real[0]))
     else {
@@ -72,7 +88,8 @@ function build(
       const value = texts.some((t) => t.includes(',')) ? JSON.stringify(texts) : texts.join(',')
       cond = make(include ? 'in' : 'notIn', value)
     }
-    return { conditions: [cond], description: `${label} is ${include ? '' : 'not '}${listText(real)}` }
+    const shown = include ? listText(real) : real.map(valueText).join(', ')
+    return { conditions: [cond], description: `${label} is ${include ? '' : 'not '}${shown}` }
   }
 
   if (filter.includeEmpty) return { reason: mixedReason(filter.column) }
@@ -80,15 +97,19 @@ function build(
   if (min === null && max === null) return { conditions: [], description: '' }
   if (profileKind(dataType) === 'date') {
     const conditions: FilterCondition[] = []
-    if (min !== null) conditions.push(make('greaterOrEqual', isoDay(min)))
+    const midnight = (ms: number) => ms % DAY_MS === 0
+    const exact = (ms: number) => (midnight(ms) ? isoDay(ms) : new Date(ms).toISOString().slice(0, 19))
+    if (min !== null) conditions.push(make('greaterOrEqual', exact(min)))
     if (max !== null) {
-      if (dataType === 'dateTime') conditions.push(make('lessThan', isoDay((Math.floor(max / DAY_MS) + 1) * DAY_MS)))
-      else conditions.push(make('lessOrEqual', isoDay(max)))
+      if (max % DAY_MS === DAY_MS - 1) {
+        conditions.push(make('lessThan', isoDay((Math.floor(max / DAY_MS) + 1) * DAY_MS)))
+      } else conditions.push(make('lessOrEqual', exact(max)))
     }
+    const text = (ms: number) => (midnight(ms) || ms % DAY_MS === DAY_MS - 1 ? isoDay(ms) : exact(ms).replace('T', ' '))
     let description: string
-    if (min !== null && max !== null) description = `${label} between ${isoDay(min)} and ${isoDay(max)}`
-    else if (min !== null) description = `${label} from ${isoDay(min)}`
-    else description = `${label} up to ${isoDay(max as number)}`
+    if (min !== null && max !== null) description = `${label} between ${text(min)} and ${text(max)}`
+    else if (min !== null) description = `${label} from ${text(min)}`
+    else description = `${label} up to ${text(max as number)}`
     return { conditions, description }
   }
   if (min !== null && max !== null) {
@@ -137,8 +158,10 @@ export function planAddToQuery(
       parameterName: null,
     })
     const hasEmpty = rows.some((r) => isEmptyCell(r[filter.column]))
+    const hasBlank = rows.some((r) => r[filter.column] === '')
+    const resultType = resultTypes.get(filter.column) ?? condType
     const label = clause === 'having' ? `${AGGREGATE_LABELS[qc.aggregate]} of ${filter.column}` : filter.column
-    const built = build(filter, resultTypes.get(filter.column) ?? condType, hasEmpty, make, label, notes)
+    const built = build(filter, resultType, hasEmpty, hasBlank, make, label, notes)
     if ('reason' in built) {
       plan.blocked.push({ column: filter.column, reason: built.reason })
       continue

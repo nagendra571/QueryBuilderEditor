@@ -121,6 +121,28 @@ test('values map to operators', () => {
   assert.equal(notNull.operator, 'isNotNull')
 })
 
+test('booleans use isTrue/isFalse/isNull/isNotNull', () => {
+  const bc = [col({ columnName: 'Active', dataType: 'boolean' })]
+  const br = [rc('Active', 'boolean')]
+  const op = (vals: boolean[], mode: 'include' | 'exclude', rows: Record<string, unknown>[] = []) => {
+    const p = planAddToQuery([values('Active', vals, mode)], br, rows, def(bc))
+    return { op: p.add[0].conditions[0].operator, value: p.add[0].conditions[0].value, d: p.add[0].description, w: p.warnings }
+  }
+  assert.equal(op([true], 'include').op, 'isTrue')
+  assert.equal(op([false], 'include').op, 'isFalse')
+  assert.equal(op([true, false], 'include').op, 'isNotNull')
+  assert.equal(op([true], 'exclude').op, 'isFalse')
+  assert.equal(op([false], 'exclude').op, 'isTrue')
+  assert.equal(op([true, false], 'exclude').op, 'isNull')
+  assert.equal(op([true], 'include').value, null)
+  assert.equal(op([true], 'include').d, 'Active is Yes')
+  assert.equal(op([false], 'exclude').d, 'Active is not No')
+  assert.ok(op([true], 'exclude', [{ Active: null }]).w.includes('The query will also leave out empty Active values.'))
+  assert.equal(op([true], 'exclude', [{ Active: true }]).w.length, 0)
+  const mixed = planAddToQuery([values('Active', [true, null])], br, [], def(bc))
+  assert.equal(mixed.blocked.length, 1)
+})
+
 test('booleans are written as true/false', () => {
   const plan = planAddToQuery(
     [values('Active', [true])],
@@ -128,7 +150,8 @@ test('booleans are written as true/false', () => {
     [],
     def([col({ columnName: 'Active', dataType: 'boolean' })]),
   )
-  assert.equal(plan.add[0].conditions[0].value, 'true')
+  assert.equal(plan.add[0].conditions[0].operator, 'isTrue')
+  assert.equal(plan.add[0].conditions[0].value, null)
 })
 
 test('empty values mixed with others are blocked, in both modes', () => {
@@ -243,6 +266,53 @@ test('the case note appears once for two text filters', () => {
     def(two),
   )
   assert.equal(plan.warnings.filter((w) => w === 'Matching in the query may ignore upper/lower case.').length, 1)
-  const ex = planAddToQuery([values('Name', ['A'], 'exclude')], nameRes, [], def(nameCols))
-  assert.ok(!ex.warnings.some((w) => w.includes('upper/lower')))
+  const num = planAddToQuery([range('Fee', 1, 2)], [rc('Fee', 'number')], [], def([col({ columnName: 'Fee', dataType: 'number' })]))
+  assert.ok(!num.warnings.some((w) => w.includes('upper/lower')))
+})
+
+test('blank text vs empty: warns when isNull/isNotNull and rows hold blanks', () => {
+  const rows = [{ Name: '' }, { Name: 'A' }]
+  const inc = planAddToQuery([values('Name', [null])], nameRes, rows, def(nameCols)).warnings
+  assert.ok(inc.includes('The query treats blank text and empty values differently: blank Name values will be left out.'))
+  const exc = planAddToQuery([values('Name', [null], 'exclude')], nameRes, rows, def(nameCols)).warnings
+  assert.ok(exc.includes('The query treats blank text and empty values differently: blank Name values will be kept.'))
+  const none = planAddToQuery([values('Name', [null])], nameRes, [{ Name: null }], def(nameCols)).warnings
+  assert.equal(none.length, 0)
+})
+
+test('the case note also appears for exclude on text', () => {
+  const one = planAddToQuery([values('Name', ['A'], 'exclude')], nameRes, [], def(nameCols)).warnings
+  assert.deepEqual(one, ['Matching in the query may ignore upper/lower case.'])
+  const many = planAddToQuery([values('Name', ['A', 'B'], 'exclude')], nameRes, [], def(nameCols)).warnings
+  assert.deepEqual(many, ['Matching in the query may ignore upper/lower case.'])
+})
+
+test('date bounds with a time part are written exactly', () => {
+  const dc = [col({ columnName: 'When', dataType: 'dateTime' })]
+  const c = planAddToQuery(
+    [range('When', Date.UTC(2025, 0, 3, 10), Date.UTC(2025, 0, 9, 6))],
+    [rc('When', 'dateTime')],
+    [],
+    def(dc),
+  ).add[0].conditions
+  assert.deepEqual(
+    c.map((x) => [x.operator, x.value]),
+    [
+      ['greaterOrEqual', '2025-01-03T10:00:00'],
+      ['lessOrEqual', '2025-01-09T06:00:00'],
+    ],
+  )
+})
+
+test('end of day is lessThan next day when either type says dateTime', () => {
+  const end = Date.UTC(2025, 2, 31) + 86_399_999
+  const a = planAddToQuery([range('When', null, end)], [rc('When', 'date')], [], def([col({ columnName: 'When', dataType: 'dateTime' })]))
+  assert.deepEqual([a.add[0].conditions[0].operator, a.add[0].conditions[0].value], ['lessThan', '2025-04-01'])
+  const b = planAddToQuery([range('When', null, end)], [rc('When', 'dateTime')], [], def([col({ columnName: 'When', dataType: 'date' })]))
+  assert.deepEqual([b.add[0].conditions[0].operator, b.add[0].conditions[0].value], ['lessThan', '2025-04-01'])
+})
+
+test('exclude description lists values with commas', () => {
+  const p = planAddToQuery([values('Name', ['A', 'B'], 'exclude')], nameRes, [], def(nameCols))
+  assert.equal(p.add[0].description, 'Name is not A, B')
 })
