@@ -2,7 +2,7 @@ import { useMemo, useSyncExternalStore } from 'react'
 import { Histogram } from './Histogram'
 import { profileColumn, type Bin, type ColumnProfile } from './column-profile.ts'
 import { formatTotal } from './selection-totals.ts'
-import { TYPE_BADGE } from './type-badge.ts'
+import { TypeBadge } from './TypeBadge'
 import type { SelectionStore } from './selection-store.ts'
 import type { QueryResultDto } from '@/types'
 
@@ -16,26 +16,25 @@ const HINT = <p className="p-3 text-xs text-muted-foreground">Select a cell to p
 export function ColumnProfileView({ store, result }: Props) {
   const { range, columns } = useSyncExternalStore(store.subscribe, store.get)
   const column = range ? columns[range.focus.col] : undefined
-  if (!range || !column) return HINT
+  // The store can still hold the previous run's columns for one frame after a re-run.
+  if (!range || !column || !result.columns.includes(column)) return HINT
   return <Profile result={result} column={column} />
 }
 
 function Profile({ result, column }: { result: QueryResultDto; column: QueryResultDto['columns'][number] }) {
   const profile = useMemo(() => profileColumn(result.rows, column), [result.rows, column])
   const n = result.rows.length
-  const isDateTime = column.dataType === 'dateTime'
+  const withTime = column.dataType === 'dateTime' && !(profile.kind === 'date' && profile.allMidnight)
   const fmtDate = (ms: number) =>
-    isDateTime ? new Date(ms).toISOString().replace('T', ' ').slice(0, 16) : new Date(ms).toISOString().slice(0, 10)
+    withTime ?new Date(ms).toISOString().replace('T', ' ').slice(0, 16) : new Date(ms).toISOString().slice(0, 10)
   const fmtNum = (v: number) => formatTotal(v, 4)
 
   return (
-    <div className="min-h-0 flex-1 overflow-y-auto">
-      <div className="space-y-1.5 border-b border-border px-3 py-2">
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="shrink-0 space-y-1.5 border-b border-border px-3 py-2">
         <div className="flex items-center gap-1.5">
           <span className="min-w-0 truncate text-sm font-semibold">{column.name}</span>
-          <span className="shrink-0 rounded border border-border px-1 text-[10px] leading-4">
-            {TYPE_BADGE[column.dataType]}
-          </span>
+          <TypeBadge dataType={column.dataType} />
         </div>
         {result.truncated ? (
           <>
@@ -59,7 +58,7 @@ function Profile({ result, column }: { result: QueryResultDto; column: QueryResu
         )}
       </div>
 
-      <div className="space-y-3 px-3 py-3">
+      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-3 py-3">
         <div className="space-y-1.5">
           <Meter label="Empty" count={profile.empty} total={profile.rows} showPercent />
           <Line label="Distinct" value={profile.distinct.toLocaleString()} />
@@ -114,8 +113,7 @@ function Body({
     case 'text':
       return (
         <>
-          <div className="grid grid-cols-3 gap-2">
-            <Tile label="Distinct" value={profile.distinct.toLocaleString()} />
+          <div className="grid grid-cols-2 gap-2">
             <Tile label="Shortest" value={opt(profile.shortest, (v) => v.toLocaleString())} />
             <Tile label="Longest" value={opt(profile.longest, (v) => v.toLocaleString())} />
           </div>
@@ -123,10 +121,12 @@ function Body({
             <ul className="space-y-1">
               {profile.top.map((t) => (
                 <li key={t.value} className="flex items-center gap-2 text-xs">
-                  <span className="w-24 shrink-0 truncate text-foreground" title={t.value}>
+                  <span className="min-w-0 flex-1 truncate text-foreground" title={t.value}>
                     {t.value}
                   </span>
-                  <Bar fraction={profile.rows ? t.count / profile.rows : 0} />
+                  <div className="flex w-2/5 shrink-0">
+                    <Bar fraction={profile.rows ? t.count / profile.rows : 0} />
+                  </div>
                   <span className="font-numeric w-10 shrink-0 text-right tabular-nums text-foreground">
                     {t.count.toLocaleString()}
                   </span>

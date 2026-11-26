@@ -6,7 +6,7 @@ import { buildRecordText } from './copy-selection.ts'
 import { copyText } from './copy-text.ts'
 import { displayString } from './grid-columns.ts'
 import { profileKind } from './column-profile.ts'
-import { TYPE_BADGE } from './type-badge.ts'
+import { TypeBadge } from './TypeBadge'
 import type { GridHandle } from './ResultsGrid'
 import type { SelectionStore } from './selection-store.ts'
 
@@ -32,16 +32,17 @@ export function RowDetails({ store, gridRef, onRowClick, rowActionLabel }: Props
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex flex-wrap items-center gap-1 border-b border-border px-3 py-2">
-        <span className="font-numeric mr-auto text-sm font-semibold tracking-wide tabular-nums">
+      <div className="flex shrink-0 flex-wrap items-center gap-1 border-b border-border px-3 py-2">
+        <span aria-live="polite" aria-atomic="true" className="font-numeric mr-auto text-sm font-semibold tracking-wide tabular-nums">
           ROW {(focus.row + 1).toLocaleString()} OF {rows.length.toLocaleString()}
         </span>
         <Button
           variant="outline"
           size="icon-sm"
           aria-label="Previous row"
-          disabled={focus.row <= 0}
-          onClick={() => gridRef.current?.moveTo({ row: focus.row - 1, col: focus.col })}
+          aria-disabled={focus.row <= 0 ? 'true' : undefined}
+          className={focus.row <= 0 ? 'opacity-50' : undefined}
+          onClick={() => focus.row > 0 && gridRef.current?.moveTo({ row: focus.row - 1, col: focus.col })}
         >
           <ChevronUp />
         </Button>
@@ -49,8 +50,9 @@ export function RowDetails({ store, gridRef, onRowClick, rowActionLabel }: Props
           variant="outline"
           size="icon-sm"
           aria-label="Next row"
-          disabled={focus.row >= rows.length - 1}
-          onClick={() => gridRef.current?.moveTo({ row: focus.row + 1, col: focus.col })}
+          aria-disabled={focus.row >= rows.length - 1 ? 'true' : undefined}
+          className={focus.row >= rows.length - 1 ? 'opacity-50' : undefined}
+          onClick={() => focus.row < rows.length - 1 && gridRef.current?.moveTo({ row: focus.row + 1, col: focus.col })}
         >
           <ChevronDown />
         </Button>
@@ -76,9 +78,7 @@ export function RowDetails({ store, gridRef, onRowClick, rowActionLabel }: Props
             >
               <dt className="flex items-center gap-1.5 text-xs text-muted-foreground">
                 <span className="min-w-0 truncate">{c.name}</span>
-                <span className="shrink-0 rounded border border-border px-1 text-[10px] leading-4">
-                  {TYPE_BADGE[c.dataType]}
-                </span>
+                <TypeBadge dataType={c.dataType} />
               </dt>
               <dd
                 className={`mt-0.5 text-sm text-foreground ${

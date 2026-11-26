@@ -150,7 +150,7 @@ export function ResultsTable({
             </AlertDescription>
           </Alert>
         ) : (
-          <div className="min-h-0 min-w-0 flex-1">
+          <div className="isolate min-h-0 min-w-0 flex-1">
             <ResultsGrid
               grid={grid}
               onRowClick={onRowClick}

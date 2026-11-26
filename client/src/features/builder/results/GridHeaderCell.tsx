@@ -12,7 +12,7 @@ import { cn } from '@/lib/utils'
 import type { QueryResultColumnDto } from '@/types'
 import { MAX_COL_WIDTH, MIN_COL_WIDTH } from './column-widths.ts'
 import type { ColumnLayout } from './grid-layout.ts'
-import { TYPE_BADGE } from './type-badge.ts'
+import { TypeBadge } from './TypeBadge'
 
 const KEY_STEP = 16
 const clampWidth = (w: number) => Math.min(MAX_COL_WIDTH, Math.max(MIN_COL_WIDTH, Math.round(w)))
@@ -101,9 +101,7 @@ export function GridHeaderCell({
       >
         <GripVertical className="size-3.5" />
       </button>
-      <span className="w-8 shrink-0 rounded-sm border border-border text-center font-numeric text-[10px] font-semibold text-muted-foreground">
-        {TYPE_BADGE[column.dataType]}
-      </span>
+      <TypeBadge dataType={column.dataType} className="w-8 px-0 text-center" />
       <button
         type="button"
         onClick={actions.toggleSort}

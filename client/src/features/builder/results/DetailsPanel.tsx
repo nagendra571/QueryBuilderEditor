@@ -4,13 +4,16 @@ import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { cn } from '@/lib/utils'
 import {
-  PANEL_MAX,
   PANEL_MIN,
   PANEL_STEP,
   clampPanelWidth,
   type PanelState,
   type PanelTab,
 } from './panel-layout.ts'
+
+// The tab body is a column so each view can pin its header and scroll only its own list.
+const TAB_BODY =
+  'flex min-h-0 flex-1 flex-col focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring'
 
 export function DetailsPanel({
   state,
@@ -54,11 +57,13 @@ export function DetailsPanel({
         aria-orientation="vertical"
         aria-valuenow={width}
         aria-valuemin={PANEL_MIN}
-        aria-valuemax={PANEL_MAX}
+        aria-valuemax={clampPanelWidth(Infinity, areaWidth)}
         aria-label="Resize details panel"
         tabIndex={0}
         className="absolute inset-y-0 -left-px z-10 w-1.5 cursor-col-resize touch-none hover:bg-primary/30 focus-visible:bg-primary/40 focus-visible:outline-2 focus-visible:outline-ring"
         onPointerDown={(e) => {
+          if (e.button !== 0) return
+          e.preventDefault()
           e.currentTarget.setPointerCapture(e.pointerId)
           drag.current = { startX: e.clientX, startWidth: width }
         }}
@@ -91,10 +96,10 @@ export function DetailsPanel({
             <X className="size-3.5" />
           </Button>
         </div>
-        <TabsContent value="row" className="min-h-0 overflow-y-auto">
+        <TabsContent value="row" className={TAB_BODY}>
           {row}
         </TabsContent>
-        <TabsContent value="column" className="min-h-0 overflow-y-auto">
+        <TabsContent value="column" className={TAB_BODY}>
           {column}
         </TabsContent>
       </Tabs>

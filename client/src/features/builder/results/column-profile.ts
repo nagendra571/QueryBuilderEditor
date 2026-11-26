@@ -64,6 +64,7 @@ export interface NumberProfile extends ProfileBase {
 }
 export interface DateProfile extends ProfileBase {
   kind: 'date'
+  allMidnight: boolean
   earliest: number | null
   latest: number | null
   bins: Bin[]
@@ -82,6 +83,23 @@ export interface BooleanProfile extends ProfileBase {
 }
 export type ColumnProfile = NumberProfile | DateProfile | TextProfile | BooleanProfile
 
+const HAS_TIME = /[T ]\d{2}:\d{2}/
+const HAS_ZONE = /(Z|[+-]\d{2}(:?\d{2})?)$/i
+
+// SQL Server date/datetime values arrive as text with no zone ("2025-01-01T00:00:00"); Date.parse would read them
+// in the viewer's zone, so a zoneless time part is taken as UTC, like a date-only value already is.
+export function parseDateValue(v: unknown): number | null {
+  let t: number
+  if (v instanceof Date) t = v.getTime()
+  else if (typeof v === 'string') {
+    const s = v.trim()
+    const iso = HAS_TIME.test(s) && !HAS_ZONE.test(s) ? `${s.replace(' ', 'T')}Z` : s
+    t = Date.parse(iso)
+  } else return null
+  return Number.isNaN(t) ? null : t
+}
+
+const DAY_MS = 86_400_000
 const NO_SUM = new Set(['avg', 'min', 'max', 'countDistinct'])
 
 export function profileColumn(
@@ -107,8 +125,8 @@ export function profileColumn(
         if (typeof n === 'number') nums.push(n)
         else unreadable++
       } else {
-        const t = v instanceof Date ? v.getTime() : typeof v === 'string' ? Date.parse(v) : NaN
-        if (Number.isNaN(t)) unreadable++
+        const t = parseDateValue(v)
+        if (t === null) unreadable++
         else nums.push(t)
       }
     }
@@ -120,7 +138,10 @@ export function profileColumn(
       if (min === null || n < min) min = n
       if (max === null || n > max) max = n
     }
-    if (kind === 'date') return { kind, ...base(), distinct, earliest: min, latest: max, bins }
+    if (kind === 'date') {
+      const allMidnight = nums.every((t) => ((t % DAY_MS) + DAY_MS) % DAY_MS === 0)
+      return { kind, ...base(), distinct, earliest: min, latest: max, bins, allMidnight }
+    }
     const showSum = !NO_SUM.has(column.aggregate ?? '')
     const total = nums.reduce((a, b) => a + b, 0)
     const sorted = [...nums].sort((a, b) => a - b)

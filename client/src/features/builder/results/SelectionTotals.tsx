@@ -8,8 +8,11 @@ import { formatTotal, selectionTotals } from './selection-totals.ts'
 interface Item {
   label: string
   text: string
-  raw: number
+  copy: string
 }
+
+// Copy what the footer shows, without thousands separators or float noise like 4.4399999999999995.
+const rounded = (v: number, d: number) => String(Number(v.toFixed(d)))
 
 export function SelectionTotals({ store }: { store: SelectionStore }) {
   const { range, rows, columns } = useSyncExternalStore(store.subscribe, store.get)
@@ -20,23 +23,23 @@ export function SelectionTotals({ store }: { store: SelectionStore }) {
 
   if (!range || !totals || rangeSize(range) < 2) return null
 
-  const items: Item[] = [{ label: 'Count', text: totals.count.toLocaleString(), raw: totals.count }]
+  const items: Item[] = [{ label: 'Count', text: totals.count.toLocaleString(), copy: String(totals.count) }]
   const n = totals.numeric
   if (n && !totals.skipped) {
     items.push(
-      { label: 'Sum', text: formatTotal(n.sum, n.decimals), raw: n.sum },
+      { label: 'Sum', text: formatTotal(n.sum, n.decimals), copy: rounded(n.sum, n.decimals) },
       {
         label: 'Average',
         text: formatTotal(n.avg, Math.min(4, Math.max(n.decimals, 2))),
-        raw: n.avg,
+        copy: rounded(n.avg, Math.min(4, Math.max(n.decimals, 2))),
       },
-      { label: 'Min', text: formatTotal(n.min, n.decimals), raw: n.min },
-      { label: 'Max', text: formatTotal(n.max, n.decimals), raw: n.max },
+      { label: 'Min', text: formatTotal(n.min, n.decimals), copy: rounded(n.min, n.decimals) },
+      { label: 'Max', text: formatTotal(n.max, n.decimals), copy: rounded(n.max, n.decimals) },
     )
   }
 
   const copy = (item: Item) => {
-    if (copyText(String(item.raw))) toast(`Copied ${item.label}`)
+    if (copyText(item.copy)) toast(`Copied ${item.label}`)
     else toast.error('Copy failed.')
   }
 

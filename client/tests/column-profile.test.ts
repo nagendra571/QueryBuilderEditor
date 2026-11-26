@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { histogram, profileColumn, profileKind } from '../src/features/builder/results/column-profile.ts'
+import { histogram, parseDateValue, profileColumn, profileKind } from '../src/features/builder/results/column-profile.ts'
 import type { QueryResultColumnDto } from '../src/types/index.ts'
 
 const col = (dataType: QueryResultColumnDto['dataType'], aggregate?: QueryResultColumnDto['aggregate']): QueryResultColumnDto => ({
@@ -105,4 +105,23 @@ test('boolean profile', () => {
   assert.equal(p.empty, 1)
   assert.equal(p.unreadable, 1)
   assert.equal(p.distinct, 2)
+})
+
+test('zoneless SQL Server date text is read as UTC in any viewer time zone', () => {
+  const p = profileColumn(rowsOf(['2025-01-01T00:00:00', '2025-03-01T00:00:00', '2025-02-01']), col('dateTime'))
+  assert.equal(p.kind, 'date')
+  if (p.kind !== 'date') return
+  assert.equal(p.earliest, Date.UTC(2025, 0, 1))
+  assert.equal(p.latest, Date.UTC(2025, 2, 1))
+  assert.equal(p.allMidnight, true)
+  assert.equal(p.unreadable, 0)
+})
+
+test('parseDateValue keeps explicit zones and flags non-midnight times', () => {
+  assert.equal(parseDateValue('2025-01-01T10:30:00Z'), Date.UTC(2025, 0, 1, 10, 30))
+  assert.equal(parseDateValue('2025-01-01T10:30:00+02:00'), Date.UTC(2025, 0, 1, 8, 30))
+  assert.equal(parseDateValue('2025-01-01 10:30:00'), Date.UTC(2025, 0, 1, 10, 30))
+  assert.equal(parseDateValue('nope'), null)
+  const p = profileColumn(rowsOf(['2025-01-01T00:00:00', '2025-01-01T09:15:00']), col('dateTime'))
+  assert.equal(p.kind === 'date' && p.allMidnight, false)
 })
