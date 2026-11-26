@@ -4,6 +4,7 @@ import { ListTree } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { QueryResultColumnDto } from '@/types'
 import { GridCell } from './GridCell'
+import type { CellLook, CompiledFormat, RuleColor } from './grid-format.ts'
 import { ROW_NUM_WIDTH, cellId, type ColumnLayout, type ColumnWindow } from './grid-layout.ts'
 import type { RowData } from './grid-table.ts'
 
@@ -11,6 +12,36 @@ import type { RowData } from './grid-table.ts'
 const SELECTED = 'bg-[color-mix(in_srgb,var(--primary)_10%,var(--background))]'
 // Same tone as the centre cells' `bg-muted/40` over the ground, but opaque.
 const STICKY_HOVER = 'group-hover:bg-[color-mix(in_srgb,var(--muted)_40%,var(--background))]'
+
+const HIGHLIGHT: Record<RuleColor, { token: string; pct: number }> = {
+  red: { token: '--destructive', pct: 20 },
+  amber: { token: '--warning', pct: 30 },
+  green: { token: '--success', pct: 20 },
+  blue: { token: '--primary', pct: 20 },
+}
+
+// Pinned cells are opaque, so a tint is mixed into the ground instead of left see-through.
+function lookBackground(look: CellLook | null, pinned: boolean): string | undefined {
+  if (!look) return undefined
+  let token: string
+  let pct: number
+  if (look.highlight) {
+    ;({ token, pct } = HIGHLIGHT[look.highlight])
+  } else if (look.scale) {
+    const { kind, t } = look.scale
+    if (kind === 'blue') {
+      token = '--primary'
+      pct = t * 45
+    } else if (t < 0.5) {
+      token = '--destructive'
+      pct = Math.min(45, (0.5 - t) * 90)
+    } else {
+      token = '--success'
+      pct = Math.min(45, (t - 0.5) * 90)
+    }
+  } else return undefined
+  return `color-mix(in oklab, var(${token}) ${pct}%, ${pinned ? 'var(--background)' : 'transparent'})`
+}
 
 export interface GridRowProps {
   row: Row<RowData>
@@ -22,6 +53,8 @@ export interface GridRowProps {
   columns: QueryResultColumnDto[]
   layouts: ColumnLayout[]
   colWindow: ColumnWindow
+  /** Compiled format per column, in `columns` order. */
+  formats: CompiledFormat[]
   /** This row's slice of the selection (see `rowSlice`); -1 when none. */
   selLeft: number
   selRight: number
@@ -45,6 +78,7 @@ export const GridRow = memo(function GridRow({
   columns,
   layouts,
   colWindow,
+  formats,
   selLeft,
   selRight,
   focusCol,
@@ -64,6 +98,9 @@ export const GridRow = memo(function GridRow({
     const selected = selLeft >= 0 && ci >= selLeft && ci <= selRight
     const focused = focusCol === ci
     const isNumber = col.dataType === 'number'
+    const value = row.original[col.name]
+    const look = value === null || value === undefined || typeof value === 'boolean' ? null : formats[ci].look(value)
+    const tint = selected ? undefined : lookBackground(look, pinned)
     return (
       <div
         key={col.name}
@@ -79,17 +116,18 @@ export const GridRow = memo(function GridRow({
           'flex shrink-0 items-center self-stretch overflow-hidden border-r border-b border-border/60 px-2.5 text-(length:--text-body)',
           isNumber && 'justify-end text-right font-numeric tabular-nums',
           wrap && 'py-1.5',
-          pinned && 'sticky z-10',
-          selected ? SELECTED : pinned ? cn('bg-background', STICKY_HOVER) : 'group-hover:bg-muted/40',
+          pinned ? 'sticky z-10' : 'relative',
+          selected ? SELECTED : tint ? undefined : pinned ? cn('bg-background', STICKY_HOVER) : 'group-hover:bg-muted/40',
           focused && 'outline-2 -outline-offset-2 outline-primary',
         )}
         style={{
           width: l.width,
+          ...(tint ? { backgroundColor: tint } : {}),
           ...(pinned ? { left: l.stickyLeft, right: l.stickyRight } : {}),
           ...(l.edge ? { boxShadow: `inset ${l.group === 'left' ? '-' : ''}2px 0 0 var(--foreground)` } : {}),
         }}
       >
-        <GridCell value={row.original[col.name]} dataType={col.dataType} wrap={wrap} />
+        <GridCell value={value} dataType={col.dataType} wrap={wrap} look={look ?? undefined} />
       </div>
     )
   }

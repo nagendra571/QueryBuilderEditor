@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
@@ -14,11 +14,12 @@ import { createSelectionStore } from '@/features/builder/results/selection-store
 import { initialPanel, panelMode } from '@/features/builder/results/panel-layout'
 import { useResultsGrid } from '@/features/builder/results/useResultsGrid'
 import { AddToQueryDialog } from '@/features/builder/results/AddToQueryDialog'
+import { withAggregates } from '@/features/builder/results/grid-totals'
 import { planAddToQuery, type AddToQueryPlan } from '@/features/builder/results/filters-to-query'
 import type { FilterCondition, FilterGroup, QueryColumn, QueryResultDto } from '@/types'
 
 export function ResultsTable({
-  result,
+  result: ran,
   onRowClick,
   rowActionLabel,
   onAddFilter,
@@ -37,6 +38,13 @@ export function ResultsTable({
   onAddToQuery?: (where: FilterCondition[], having: FilterCondition[], filterCount: number) => boolean
   addToQueryDisabledReason?: string
 }) {
+  // Aggregates are stamped on the columns so formats and totals know which are sums or averages; keyed on the
+  // columns so a re-render with an equal definition keeps the same result object and the grid's view.
+  const definitionColumns = queryDefinition?.columns
+  const result = useMemo(
+    () => ({ ...ran, columns: withAggregates(ran.columns, definitionColumns ? { columns: definitionColumns } : undefined) }),
+    [ran, definitionColumns],
+  )
   // Above the full-screen switch so entering or leaving full screen keeps search, sort and widths.
   const grid = useResultsGrid(result)
   const { view, setView, rows } = grid
@@ -233,13 +241,14 @@ export function ResultsTable({
             }}
             mode={panelMode(areaWidth)}
             areaWidth={areaWidth}
-            row={<RowDetails store={store} gridRef={gridRef} onRowClick={onRowClick} rowActionLabel={rowActionLabel} onShowOnly={fromPanel(grid.showOnlyValue)} />}
+            row={<RowDetails store={store} gridRef={gridRef} onRowClick={onRowClick} rowActionLabel={rowActionLabel} onShowOnly={fromPanel(grid.showOnlyValue)} textFor={(c, v) => grid.compiled(c).text(v)} />}
             column={
               <ColumnProfileView
                 store={store}
                 result={result}
                 rows={grid.filterRows}
                 filtered={grid.filters.length > 0}
+                compiled={grid.compiled}
                 onShowOnly={fromPanel(grid.showOnlyValue)}
                 onHide={fromPanel(grid.hideColumnValue)}
                 onRange={(f) => {

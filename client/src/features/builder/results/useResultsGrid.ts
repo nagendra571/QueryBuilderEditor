@@ -13,11 +13,12 @@ import {
 import type { QueryResultColumnDto, QueryResultDto } from '@/types'
 import { useDensityStore, type Density } from '../../../state/density-store.ts'
 import { DEFAULT_COL_CAP, FIT_SAMPLE_ROWS, HEADER_FONT, cellFont, createCanvasMeasure, fitWidth } from './column-widths.ts'
-import { displayOrder, displayString } from './grid-columns.ts'
+import { displayOrder } from './grid-columns.ts'
+import { compileFormat, isFormatted, type ColumnFormat, type CompiledFormat } from './grid-format.ts'
 import { buildColumnDefs, tableBehaviour, type RowData } from './grid-table.ts'
 import { removeFilter, rowsPassing, setFilter, showOnly, hideValue, valueKey, type GridFilter } from './grid-filters.ts'
 import { carryOver, defaultView, isDefaultView, type GridView } from './grid-view.ts'
-import { HEADER_EXTRA, PINNED_HEADER_EXTRA } from './header-width.ts'
+import { HEADER_EXTRA, PINNED_HEADER_EXTRA, headerExtra } from './header-width.ts'
 
 export { HEADER_EXTRA, PINNED_HEADER_EXTRA }
 
@@ -72,15 +73,18 @@ export function useResultsGrid(result: QueryResultDto) {
     const plain: Record<string, number> = {}
     const pinned: Record<string, number> = {}
     for (const c of result.columns) {
-      const values = result.rows.slice(0, FIT_SAMPLE_ROWS).map((r) => displayString(r[c.name]))
-      plain[c.name] = fitWidth(c.name, values, measure, HEADER_EXTRA, DEFAULT_COL_CAP)
+      const format = view.formats[c.name]
+      const formatted = isFormatted(format)
+      const text = compileFormat(result.rows, c, format).text
+      const values = result.rows.slice(0, FIT_SAMPLE_ROWS).map((r) => text(r[c.name]))
+      plain[c.name] = fitWidth(c.name, values, measure, headerExtra({ pinned: false, formatted }), DEFAULT_COL_CAP)
       pinned[c.name] = Math.max(
         plain[c.name],
-        fitWidth(c.name, [], measure, HEADER_EXTRA + PINNED_HEADER_EXTRA, DEFAULT_COL_CAP),
+        fitWidth(c.name, [], measure, headerExtra({ pinned: true, formatted }), DEFAULT_COL_CAP),
       )
     }
     return { plain, pinned }
-  }, [result, fontsReady, density])
+  }, [result, fontsReady, density, view.formats])
 
   const defaultWidthOf = useCallback(
     (name: string, pinnedLeft: string[], pinnedRight: string[]) =>
@@ -196,6 +200,23 @@ export function useResultsGrid(result: QueryResultDto) {
     [result.rows, result.columns, view.filters],
   )
 
+  const setColumnFormat = useCallback(
+    (column: string, next: ColumnFormat | null) =>
+      setView((v) => {
+        const formats = { ...v.formats }
+        if (next) formats[column] = next
+        else delete formats[column]
+        return { ...v, formats }
+      }),
+    [setView],
+  )
+  // Compiled over the rows that pass the column filters, so bars and colour scales span what the grid can show.
+  const compiled = useCallback(
+    (column: string): CompiledFormat =>
+      compileFormat(filterRows, { name: column, dataType: typeOf(column) }, view.formats[column]),
+    [filterRows, typeOf, view.formats],
+  )
+
   const reset = useCallback(() => setView(() => defaultView(names)), [setView, names])
 
   return {
@@ -217,5 +238,8 @@ export function useResultsGrid(result: QueryResultDto) {
     hideColumnValue,
     removeFilters,
     filterRows,
+    formats: view.formats,
+    setColumnFormat,
+    compiled,
   }
 }
