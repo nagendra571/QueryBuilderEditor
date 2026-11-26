@@ -179,6 +179,7 @@ export function ResultsTable({
               memory={memory}
               filterOpenFor={filterOpenFor}
               onFilterOpenChange={setFilterOpenFor}
+              onOpenRecord={() => setPanel((p) => ({ ...p, open: true, tab: 'row' }))}
             />
           </div>
         )}
@@ -193,8 +194,18 @@ export function ResultsTable({
             }}
             mode={panelMode(areaWidth)}
             areaWidth={areaWidth}
-            row={<RowDetails store={store} gridRef={gridRef} onRowClick={onRowClick} rowActionLabel={rowActionLabel} />}
-            column={<ColumnProfileView store={store} result={result} rows={grid.filterRows} filtered={grid.filters.length > 0} />}
+            row={<RowDetails store={store} gridRef={gridRef} onRowClick={onRowClick} rowActionLabel={rowActionLabel} onShowOnly={grid.showOnlyValue} />}
+            column={
+              <ColumnProfileView
+                store={store}
+                result={result}
+                rows={grid.filterRows}
+                filtered={grid.filters.length > 0}
+                onShowOnly={grid.showOnlyValue}
+                onHide={grid.hideColumnValue}
+                onRange={grid.setColumnFilter}
+              />
+            }
           />
         )}
       </div>

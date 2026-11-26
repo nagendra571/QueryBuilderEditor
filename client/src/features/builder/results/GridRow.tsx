@@ -69,6 +69,8 @@ export const GridRow = memo(function GridRow({
         key={col.name}
         id={cellId(idPrefix, index, ci)}
         role="gridcell"
+        data-row={index}
+        data-col={ci}
         aria-colindex={ci + 2}
         aria-selected={selected}
         onPointerDown={(e) => onPointerDown(index, ci, e)}

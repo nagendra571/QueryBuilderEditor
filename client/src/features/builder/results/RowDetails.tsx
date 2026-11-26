@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from 'react'
 import { toast } from 'sonner'
-import { Check, ChevronDown, ChevronUp, Copy, X as XIcon } from 'lucide-react'
+import { Check, ChevronDown, ChevronUp, Copy, Filter, X as XIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { buildRecordText } from './copy-selection.ts'
 import { copyText } from './copy-text.ts'
@@ -15,9 +15,10 @@ interface Props {
   gridRef: React.RefObject<GridHandle | null>
   onRowClick?: (row: Record<string, unknown>) => void
   rowActionLabel?: string
+  onShowOnly: (column: string, raw: unknown) => void
 }
 
-export function RowDetails({ store, gridRef, onRowClick, rowActionLabel }: Props) {
+export function RowDetails({ store, gridRef, onRowClick, rowActionLabel, onShowOnly }: Props) {
   const { range, rows, columns } = useSyncExternalStore(store.subscribe, store.get)
   const focus = range?.focus
   const row = focus ? rows[focus.row] : undefined
@@ -74,11 +75,20 @@ export function RowDetails({ store, gridRef, onRowClick, rowActionLabel }: Props
             <div
               key={c.name}
               aria-current={active ? 'true' : undefined}
-              className={`border-b border-border px-3 py-2 ${active ? 'bg-primary/10' : ''}`}
+              className={`group/field border-b border-border px-3 py-2 ${active ? 'bg-primary/10' : ''}`}
             >
               <dt className="flex items-center gap-1.5 text-xs text-muted-foreground">
                 <span className="min-w-0 truncate">{c.name}</span>
                 <TypeBadge dataType={c.dataType} />
+                <button
+                  type="button"
+                  aria-label="Show only this value"
+                  title="Show only this value"
+                  onClick={() => onShowOnly(c.name, value)}
+                  className="ml-auto flex size-6 shrink-0 items-center justify-center text-muted-foreground opacity-0 group-focus-within/field:opacity-100 group-hover/field:opacity-100 hover:text-foreground focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-ring"
+                >
+                  <Filter className="size-3.5" />
+                </button>
               </dt>
               <dd
                 className={`mt-0.5 text-sm text-foreground ${

@@ -7,12 +7,13 @@ import { nextSort } from './grid-view.ts'
 import { GridHeaderRow } from './GridHeaderRow'
 import type { HeaderActions } from './GridHeaderCell'
 import { GridRow } from './GridRow'
-import { rowSlice, type CellPos } from './selection.ts'
+import { rangeContains, rowSlice, type CellPos } from './selection.ts'
 import { restoredScroll, type GridMemory } from './grid-memory.ts'
 import { HEADER_EXTRA, PINNED_HEADER_EXTRA, type useResultsGrid } from './useResultsGrid.ts'
 import { useGridSelection } from './useGridSelection.ts'
 import type { SelectionStore } from './selection-store.ts'
 import { FilterPopover } from './FilterPopover'
+import { CellContextMenu } from './CellContextMenu'
 import type { QueryResultColumnDto } from '@/types'
 import { cn } from '@/lib/utils'
 
@@ -36,6 +37,7 @@ export function ResultsGrid({
   memory,
   filterOpenFor,
   onFilterOpenChange,
+  onOpenRecord,
 }: {
   grid: ReturnType<typeof useResultsGrid>
   onRowClick?: (row: Record<string, unknown>) => void
@@ -50,8 +52,10 @@ export function ResultsGrid({
   /** Column whose filter popover is open; lives in the parent so a chip can open it. */
   filterOpenFor?: string | null
   onFilterOpenChange?: (column: string | null) => void
+  /** Shows the Details panel on its Row tab. */
+  onOpenRecord?: () => void
 }) {
-  const { table, view, setView, rows, columns, density, filters, allColumns, setColumnFilter, clearColumnFilter } = grid
+  const { table, view, setView, rows, columns, density, filters, allColumns, setColumnFilter, clearColumnFilter, showOnlyValue, hideColumnValue } = grid
   const rowHeight = ROW_HEIGHT[density]
   const scrollRef = useRef<HTMLDivElement>(null)
   const idPrefix = useId().replace(/:/g, '')
@@ -164,6 +168,10 @@ export function ResultsGrid({
     saveScroll()
   }, [saveScroll])
 
+  const [menuCell, setMenuCell] = useState<CellPos | null>(null)
+  const openMenuAtActive = useRef<() => void>(() => {})
+  const onContextMenuKey = useCallback(() => openMenuAtActive.current(), [])
+
   const selection = useGridSelection({
     rows,
     columns,
@@ -172,9 +180,53 @@ export function ResultsGrid({
     pageRows,
     reveal,
     onEnter: onRowClick,
+    onContextMenuKey,
     memory,
   })
-  const { range, copy, copyColumn, moveTo } = selection
+  const { range, copy, copyCell, copyColumn, moveTo } = selection
+
+  // One menu for the whole body: the cell is found from the event target, so cells carry no menu of their own.
+  const anchorToCell = useCallback((pos: CellPos): boolean => {
+    const el = document.getElementById(cellId(idPrefix, pos.row, pos.col))
+    if (!el) return false
+    const r = el.getBoundingClientRect()
+    el.dispatchEvent(
+      new MouseEvent('contextmenu', {
+        bubbles: true,
+        cancelable: true,
+        clientX: r.left + Math.min(r.width / 2, 40),
+        clientY: r.bottom - 4,
+      }),
+    )
+    return true
+  }, [idPrefix])
+  useEffect(() => {
+    openMenuAtActive.current = () => {
+      if (range) anchorToCell(range.focus)
+    }
+  }, [range, anchorToCell])
+
+  const onContextMenuCapture = (e: React.MouseEvent) => {
+    const el = (e.target as Element).closest('[data-row][data-col]') as HTMLElement | null
+    if (!el) {
+      // Shift+F10 or the menu key arrives with the grid as target; re-aim it at the active cell.
+      if (e.nativeEvent.isTrusted && range && e.target === e.currentTarget && anchorToCell(range.focus)) {
+        e.preventDefault()
+        e.stopPropagation()
+        return
+      }
+      // Header and row numbers keep the browser's own menu.
+      e.stopPropagation()
+      setMenuCell(null)
+      return
+    }
+    const pos = { row: Number(el.dataset.row), col: Number(el.dataset.col) }
+    if (!range || !rangeContains(range, pos)) moveTo(pos)
+    setMenuCell(pos)
+  }
+  const menuColumn = menuCell ? columns[menuCell.col] : undefined
+  const menuRow = menuCell ? rows[menuCell.row] : undefined
+  const menuValue = menuColumn && menuRow ? menuRow.original[menuColumn.name] : undefined
 
   useImperativeHandle(
     gridRef,
@@ -271,6 +323,14 @@ export function ResultsGrid({
     (layouts[range.focus.col]?.group !== 'centre' || colWindow.centre.includes(range.focus.col))
 
   return (
+    <CellContextMenu
+      value={menuValue}
+      hasTarget={!!menuColumn && !!menuRow}
+      onShowOnly={() => menuColumn && showOnlyValue(menuColumn.name, menuValue)}
+      onHide={() => menuColumn && hideColumnValue(menuColumn.name, menuValue)}
+      onCopyCell={() => menuCell && copyCell(menuCell)}
+      onOpenRecord={onOpenRecord}
+    >
     <div
       ref={scrollRef}
       role="grid"
@@ -281,6 +341,7 @@ export function ResultsGrid({
       aria-multiselectable
       aria-activedescendant={focusRendered && range ? cellId(idPrefix, range.focus.row, range.focus.col) : undefined}
       onKeyDown={selection.onKeyDown}
+      onContextMenuCapture={onContextMenuCapture}
       onScroll={saveScroll}
       className={cn(
         'relative h-full min-h-60 overflow-auto bg-background select-none',
@@ -328,5 +389,6 @@ export function ResultsGrid({
         })}
       </div>
     </div>
+    </CellContextMenu>
   )
 }

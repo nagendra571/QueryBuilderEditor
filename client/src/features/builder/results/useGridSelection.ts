@@ -38,6 +38,7 @@ export function useGridSelection({
   pageRows,
   reveal,
   onEnter,
+  onContextMenuKey,
   memory,
 }: {
   rows: Row<RowData>[]
@@ -49,6 +50,8 @@ export function useGridSelection({
   pageRows: () => number
   reveal: (pos: CellPos) => void
   onEnter?: (row: RowData) => void
+  /** Shift+F10 or the ContextMenu key on the grid. */
+  onContextMenuKey?: () => void
   /** Outlives the grid's remount on entering or leaving full screen. */
   memory?: GridMemory
 }) {
@@ -93,6 +96,19 @@ export function useGridSelection({
     }
     toast.success(range ? `Copied ${count(rangeSize(range), 'cell')}` : `Copied ${count(rows.length, 'row')}`)
   }, [columns, rows, range])
+
+  const copyCell = useCallback(
+    (pos: CellPos) => {
+      const text = buildCopyText(
+        columns,
+        rows.map((r) => r.original),
+        { top: pos.row, bottom: pos.row, left: pos.col, right: pos.col },
+      )
+      if (copyText(text)) toast.success('Copied 1 cell')
+      else toast.error('Copy failed. Select cells and press Ctrl+C.')
+    },
+    [columns, rows],
+  )
 
   const copyColumn = useCallback(
     (name: string) => {
@@ -148,6 +164,13 @@ export function useGridSelection({
       const mod = e.ctrlKey || e.metaKey
       const key = e.key.toLowerCase()
 
+      if (e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10')) {
+        if (onContextMenuKey) {
+          e.preventDefault()
+          onContextMenuKey()
+        }
+        return
+      }
       if (mod && key === 'a') {
         e.preventDefault()
         update(() => selectAll(bounds))
@@ -187,8 +210,8 @@ export function useGridSelection({
       update(() => ({ anchor, focus: next }))
       reveal(next)
     },
-    [bounds, range, rows, copy, update, onEnter, pageRows, reveal],
+    [bounds, range, rows, copy, update, onEnter, onContextMenuKey, pageRows, reveal],
   )
 
-  return { range, copy, copyColumn, moveTo, onKeyDown, onCellPointerDown, onCellPointerEnter }
+  return { range, copy, copyCell, copyColumn, moveTo, onKeyDown, onCellPointerDown, onCellPointerEnter }
 }
