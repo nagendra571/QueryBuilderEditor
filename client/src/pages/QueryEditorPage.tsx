@@ -42,7 +42,7 @@ import { useDeleteVisualization, useSaveVisualization, useVisualizations, visual
 import { savedQueriesApi } from '@/lib/api'
 import { ApiError } from '@/lib/api-client'
 import { cn } from '@/lib/utils'
-import type { ParameterType, QueryResultDto, RunQueryRequest, VisualizationDto } from '@/types'
+import type { FilterCondition, ParameterType, QueryResultDto, RunQueryRequest, VisualizationDto } from '@/types'
 import { downloadBlob } from '@/lib/download'
 
 const ALL_PARAMETER_TYPES: ParameterType[] = ['text', 'number', 'date', 'dateTime', 'dateRange', 'dateTimeRange', 'list', 'queryList', 'boolean']
@@ -130,13 +130,15 @@ export function QueryEditorPage() {
   }, [urlKey, urlReadyFor, scope])
 
   const previewMutation = useMutation({
-    mutationFn: () => savedQueriesApi.previewSql({ ...buildRunRequest(dataSourceId!, definition, queryId), parameterValues: parameterValues }),
+    // The store, not the render closure: Add to query appends and runs before this component re-renders.
+    mutationFn: () =>
+      savedQueriesApi.previewSql({ ...buildRunRequest(dataSourceId!, useBuilderStore.getState().definition, queryId), parameterValues: parameterValues }),
     onError: (error) => toast.error(error instanceof ApiError ? error.message : 'Could not build SQL preview.'),
   })
 
   const runMutation = useMutation({
     mutationFn: (runValues: ParameterValues) =>
-      savedQueriesApi.run({ ...buildRunRequest(dataSourceId!, definition, queryId), parameterValues: runValues }),
+      savedQueriesApi.run({ ...buildRunRequest(dataSourceId!, useBuilderStore.getState().definition, queryId), parameterValues: runValues }),
     onSuccess: () => {
       setActiveTab('results')
       if (queryId) queryClient.invalidateQueries({ queryKey: ['audit', queryId] })
@@ -155,7 +157,7 @@ export function QueryEditorPage() {
     mutationFn: async ({ format, exportValues }: { format: 'csv' | 'xlsx'; exportValues: ParameterValues }) => {
       const blob = await savedQueriesApi.export({
         dataSourceId: dataSourceId!,
-        definition,
+        definition: useBuilderStore.getState().definition,
         parameterValues: exportValues,
         format,
         fileName: name || 'query-results',
@@ -247,6 +249,16 @@ export function QueryEditorPage() {
     if (missing.length > 0) return
     setAppliedValues(parameterValues)
     runMutation.mutate(parameterValues)
+  }
+
+  function addGridFiltersToQuery(where: FilterCondition[], having: FilterCondition[], filterCount: number) {
+    const { appendFilterConditions, appendHavingConditions } = useBuilderStore.getState()
+    appendFilterConditions(where)
+    appendHavingConditions(having)
+    // mutationFn reads the store, so this run carries the conditions just appended.
+    applyAndRun()
+    // Counted as the dialog counted them: a range on one column is two conditions but one filter.
+    toast(`Added ${filterCount} ${filterCount === 1 ? 'filter' : 'filters'} to the query`)
   }
 
   function exportAs(format: 'csv' | 'xlsx') {
@@ -550,6 +562,9 @@ export function QueryEditorPage() {
                   onRowClick={gridDrill}
                   rowActionLabel={gridDrill ? 'See the rows behind this row' : undefined}
                   onAddFilter={() => setActiveTab('build')}
+                  queryDefinition={definition}
+                  addToQueryDisabledReason={runMutation.isPending ? 'Wait for the run to finish' : undefined}
+                  onAddToQuery={addGridFiltersToQuery}
                 />
                 {runMutation.isPending && (
                   <div role="status" className="absolute inset-0 z-30 flex items-center justify-center bg-background/60">

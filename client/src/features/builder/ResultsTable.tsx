@@ -13,13 +13,18 @@ import { createGridMemory } from '@/features/builder/results/grid-memory'
 import { createSelectionStore } from '@/features/builder/results/selection-store'
 import { initialPanel, panelMode } from '@/features/builder/results/panel-layout'
 import { useResultsGrid } from '@/features/builder/results/useResultsGrid'
-import type { QueryResultDto } from '@/types'
+import { AddToQueryDialog } from '@/features/builder/results/AddToQueryDialog'
+import { planAddToQuery, type AddToQueryPlan } from '@/features/builder/results/filters-to-query'
+import type { FilterCondition, FilterGroup, QueryColumn, QueryResultDto } from '@/types'
 
 export function ResultsTable({
   result,
   onRowClick,
   rowActionLabel,
   onAddFilter,
+  queryDefinition,
+  onAddToQuery,
+  addToQueryDisabledReason,
 }: {
   result: QueryResultDto
   /** Adds an icon button in each row's number cell that opens the rows behind it (saved, aggregated queries only). */
@@ -27,6 +32,10 @@ export function ResultsTable({
   rowActionLabel?: string
   /** Shown beside the truncation warning. */
   onAddFilter?: () => void
+  /** The query as built, so the grid's filters can be planned against it. Without it there is no Add to query. */
+  queryDefinition?: { columns: QueryColumn[]; filters: FilterGroup; having?: FilterGroup | null }
+  onAddToQuery?: (where: FilterCondition[], having: FilterCondition[], filterCount: number) => void
+  addToQueryDisabledReason?: string
 }) {
   // Above the full-screen switch so entering or leaving full screen keeps search, sort and widths.
   const grid = useResultsGrid(result)
@@ -40,6 +49,7 @@ export function ResultsTable({
   const gridRef = useRef<GridHandle>(null)
   // Here, not in the grid, so a filter chip can open a column's popover.
   const [filterOpenFor, setFilterOpenFor] = useState<string | null>(null)
+  const [addPlan, setAddPlan] = useState<AddToQueryPlan | null>(null)
   const fullScreenButton = useRef<HTMLButtonElement>(null)
   const detailsButton = useRef<HTMLButtonElement>(null)
   const wasFullScreen = useRef(false)
@@ -154,6 +164,12 @@ export function ResultsTable({
         onOpen={setFilterOpenFor}
         onRemove={grid.clearColumnFilter}
         onClearAll={grid.clearFilters}
+        onAddToQuery={
+          queryDefinition && onAddToQuery
+            ? () => setAddPlan(planAddToQuery(grid.filters, result.columns, result.rows, queryDefinition))
+            : undefined
+        }
+        addDisabledReason={addToQueryDisabledReason}
         onEmptied={() => {
           if (gridRef.current) gridRef.current.focus()
           else document.querySelector<HTMLInputElement>('input[aria-label="Search rows"]')?.focus()
@@ -221,11 +237,29 @@ export function ResultsTable({
     </div>
   )
 
-  if (!fullScreen) return <div className="h-full">{content}</div>
+  const confirmAdd = () => {
+    if (!addPlan || !onAddToQuery) return
+    const where = addPlan.add.filter((p) => p.clause === 'where').flatMap((p) => p.conditions)
+    const having = addPlan.add.filter((p) => p.clause === 'having').flatMap((p) => p.conditions)
+    onAddToQuery(where, having, addPlan.add.length)
+    grid.removeFilters(addPlan.add.map((p) => p.column))
+    setAddPlan(null)
+  }
+  const dialog = <AddToQueryDialog plan={addPlan} onConfirm={confirmAdd} onCancel={() => setAddPlan(null)} />
+
+  if (!fullScreen) {
+    return (
+      <div className="h-full">
+        {content}
+        {dialog}
+      </div>
+    )
+  }
 
   return createPortal(
     <div className="fixed inset-0 z-50 flex flex-col bg-background">
       {content}
+      {dialog}
     </div>,
     document.body,
   )
