@@ -1,9 +1,16 @@
 import type { Density } from '../../../state/density-store.ts'
 import type { GridFilter } from './grid-filters.ts'
+import type { ColumnFormat } from './grid-format.ts'
+import type { TotalFn } from './grid-totals.ts'
 
 export interface GridSort {
   column: string
   direction: 'asc' | 'desc'
+}
+
+export interface GridTotals {
+  on: boolean
+  fns: Record<string, TotalFn>
 }
 
 export interface GridView {
@@ -17,6 +24,8 @@ export interface GridView {
   density: Density | null
   wrap: boolean
   filters: GridFilter[]
+  formats: Record<string, ColumnFormat>
+  totals: GridTotals
 }
 
 export function defaultView(columns: string[]): GridView {
@@ -31,6 +40,8 @@ export function defaultView(columns: string[]): GridView {
     density: null,
     wrap: false,
     filters: [],
+    formats: {},
+    totals: { on: false, fns: {} },
   }
 }
 
@@ -55,6 +66,18 @@ export function carryOver(prev: GridView, prevColumns: string[], nextColumns: st
     density: prev.density,
     wrap: prev.wrap,
     filters: prev.filters.map((f) => ({ ...f })),
+    formats: Object.fromEntries(
+      Object.entries(prev.formats).map(([name, f]) => [
+        name,
+        {
+          ...f,
+          ...(f.number ? { number: { ...f.number } } : {}),
+          ...(f.date ? { date: { ...f.date } } : {}),
+          rules: f.rules.map((r) => ({ ...r })),
+        },
+      ]),
+    ),
+    totals: { on: prev.totals.on, fns: { ...prev.totals.fns } },
   }
 }
 
@@ -69,6 +92,8 @@ export function isDefaultView(v: GridView, columns: string[]): boolean {
     v.density === null &&
     !v.wrap &&
     v.filters.length === 0 &&
+    Object.keys(v.formats).length === 0 &&
+    !v.totals.on &&
     v.order.length === columns.length &&
     v.order.every((n, i) => n === columns[i])
   )

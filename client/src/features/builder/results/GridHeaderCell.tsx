@@ -29,6 +29,10 @@ export interface HeaderActions {
   copyColumn: () => void
   resize: (width: number) => void
   filter: { active: boolean; open: () => void; clear: () => void }
+  /** Shows the blue mark; true when the column has a number/date format, bars, scale or highlight rules. */
+  formatted: boolean
+  /** Opens the formatting panel for this column. The menu item is hidden when absent. */
+  format?: () => void
 }
 
 export function GridHeaderCell({
@@ -127,6 +131,7 @@ export function GridHeaderCell({
         {sortDirection === 'desc' && <ArrowDown className="size-3 shrink-0" />}
         {!sortDirection && <ChevronsUpDown className="size-3 shrink-0 opacity-30" />}
       </button>
+      {actions.formatted && <span className="size-1.5 shrink-0 rounded-full bg-primary" role="img" aria-label="Formatted" title="Formatted" />}
       <PopoverTrigger asChild>
         <button
           type="button"
@@ -171,6 +176,7 @@ export function GridHeaderCell({
             Filter…
           </DropdownMenuItem>
           {actions.filter.active && <DropdownMenuItem onSelect={actions.filter.clear}>Clear filter</DropdownMenuItem>}
+          {actions.format && <DropdownMenuItem onSelect={actions.format}>Format…</DropdownMenuItem>}
           <DropdownMenuSeparator />
           {layout.group !== 'left' && <DropdownMenuItem onSelect={() => actions.pin('left')}>Pin to left</DropdownMenuItem>}
           {layout.group !== 'right' && <DropdownMenuItem onSelect={() => actions.pin('right')}>Pin to right</DropdownMenuItem>}

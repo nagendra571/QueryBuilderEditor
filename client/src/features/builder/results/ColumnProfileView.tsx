@@ -3,10 +3,11 @@ import { Histogram } from './Histogram'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { binFilter, hideText, showOnlyText } from './filter-actions.ts'
 import type { GridFilter } from './grid-filters.ts'
-import { profileColumn, type Bin, type ColumnProfile } from './column-profile.ts'
+import { parseDateValue, profileColumn, type Bin, type ColumnProfile } from './column-profile.ts'
 import { formatTotal } from './selection-totals.ts'
 import { TypeBadge } from './TypeBadge'
 import type { SelectionStore } from './selection-store.ts'
+import type { ColumnFormat, CompiledFormat } from './grid-format.ts'
 import type { QueryResultDto } from '@/types'
 
 interface Props {
@@ -14,6 +15,9 @@ interface Props {
   result: QueryResultDto
   rows: Record<string, unknown>[]
   filtered: boolean
+  /** The column's compiled format, for the min, max, average and similar figures. */
+  compiled: (column: string) => CompiledFormat
+  formats: Record<string, ColumnFormat>
   onShowOnly: (column: string, raw: unknown) => void
   onHide: (column: string, raw: unknown) => void
   onRange: (filter: GridFilter) => void
@@ -27,12 +31,12 @@ interface Actions {
 
 const HINT = <p className="p-3 text-xs text-muted-foreground">Select a cell to profile its column.</p>
 
-export function ColumnProfileView({ store, result, rows, filtered, onShowOnly, onHide, onRange }: Props) {
+export function ColumnProfileView({ store, result, rows, filtered, compiled, formats, onShowOnly, onHide, onRange }: Props) {
   const { range, columns } = useSyncExternalStore(store.subscribe, store.get)
   const column = range ? columns[range.focus.col] : undefined
   // The store can still hold the previous run's columns for one frame after a re-run.
   if (!range || !column || !result.columns.includes(column)) return HINT
-  return <Profile result={result} column={column} rows={rows} filtered={filtered} actions={{ onShowOnly, onHide, onRange }} />
+  return <Profile result={result} column={column} rows={rows} filtered={filtered} format={compiled(column.name)} columnFormat={formats[column.name]} actions={{ onShowOnly, onHide, onRange }} />
 }
 
 function Profile({
@@ -40,8 +44,12 @@ function Profile({
   column,
   rows,
   filtered,
+  format,
+  columnFormat,
   actions,
 }: {
+  format: CompiledFormat
+  columnFormat: ColumnFormat | undefined
   actions: Actions
   result: QueryResultDto
   column: QueryResultDto['columns'][number]
@@ -55,6 +63,28 @@ function Profile({
   const fmtDate = (ms: number) =>
     withTime ?new Date(ms).toISOString().replace('T', ' ').slice(0, 16) : new Date(ms).toISOString().slice(0, 10)
   const fmtNum = (v: number) => formatTotal(v, 4)
+  // Tiles follow the column's format; bin bounds stay on the plain functions above.
+  // Bars, scales and rules leave the numbers as they were; only a number or date format changes the tiles.
+  const tileNum = columnFormat?.number && columnFormat.number.style !== 'auto' ? format.text : fmtNum
+  const dateFormatted = !!columnFormat?.date && columnFormat.date.pattern !== 'auto'
+  // One row pass per profile, not per render: this view re-renders on every arrow key.
+  const dateRaws = useMemo(() => {
+    if (!dateFormatted || profile.kind !== 'date') return null
+    const found = new Map<number, unknown>()
+    for (const r of rows) {
+      if (found.size === 2 || (found.size === 1 && profile.earliest === profile.latest)) break
+      const ms = parseDateValue(r[column.name])
+      if ((ms === profile.earliest || ms === profile.latest) && ms !== null && !found.has(ms)) found.set(ms, r[column.name])
+    }
+    return found
+  }, [dateFormatted, profile, rows, column.name])
+  // The original value is formatted, not the UTC day, so a zoned value reads the same as in its cell.
+  const tileDate = dateRaws
+    ? (ms: number) => {
+        const raw = dateRaws.get(ms)
+        return raw === undefined ? fmtDate(ms) : format.text(raw)
+      }
+    : fmtDate
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -102,6 +132,8 @@ function Profile({
           name={column.name}
           fmtNum={fmtNum}
           fmtDate={fmtDate}
+          tileNum={tileNum}
+          tileDate={tileDate}
           column={column}
           actions={actions}
         />
@@ -115,6 +147,8 @@ function Body({
   name,
   fmtNum,
   fmtDate,
+  tileNum,
+  tileDate,
   column,
   actions,
 }: {
@@ -124,17 +158,19 @@ function Body({
   name: string
   fmtNum: (n: number) => string
   fmtDate: (ms: number) => string
+  tileNum: (n: number) => string
+  tileDate: (ms: number) => string
 }) {
   switch (profile.kind) {
     case 'number':
       return (
         <>
           <div className="grid grid-cols-3 gap-2">
-            <Tile label="Min" value={opt(profile.min, fmtNum)} />
-            <Tile label="Average" value={opt(profile.mean, fmtNum)} />
-            <Tile label="Max" value={opt(profile.max, fmtNum)} />
-            {profile.showSum && <Tile label="Sum" value={opt(profile.sum, fmtNum)} />}
-            <Tile label="Median" value={opt(profile.median, fmtNum)} />
+            <Tile label="Min" value={opt(profile.min, tileNum)} />
+            <Tile label="Average" value={opt(profile.mean, tileNum)} />
+            <Tile label="Max" value={opt(profile.max, tileNum)} />
+            {profile.showSum && <Tile label="Sum" value={opt(profile.sum, tileNum)} />}
+            <Tile label="Median" value={opt(profile.median, tileNum)} />
           </div>
           <Hist bins={profile.bins} name={name} fmt={fmtNum} onBar={(b) => actions.onRange(binFilter(name, column.dataType, b))} />
         </>
@@ -143,8 +179,8 @@ function Body({
       return (
         <>
           <div className="grid grid-cols-2 gap-2">
-            <Tile label="Earliest" value={opt(profile.earliest, fmtDate)} />
-            <Tile label="Latest" value={opt(profile.latest, fmtDate)} />
+            <Tile label="Earliest" value={opt(profile.earliest, tileDate)} />
+            <Tile label="Latest" value={opt(profile.latest, tileDate)} />
           </div>
           <Hist bins={profile.bins} name={name} fmt={fmtDate} onBar={(b) => actions.onRange(binFilter(name, column.dataType, b))} />
         </>

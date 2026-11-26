@@ -4,7 +4,7 @@ export const PANEL_MAX = 560
 export const PANEL_STEP = 16
 export const OVERLAY_BELOW = 900
 
-export type PanelTab = 'row' | 'column'
+export type PanelTab = 'row' | 'column' | 'format'
 export interface PanelState {
   open: boolean
   tab: PanelTab

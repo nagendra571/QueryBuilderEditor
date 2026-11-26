@@ -1,15 +1,17 @@
 import { useCallback, useEffect, useId, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { HEADER_FONT, MAX_COL_WIDTH, MIN_COL_WIDTH, cellFont, createCanvasMeasure, fitWidth } from './column-widths.ts'
-import { displayString } from './grid-columns.ts'
+import { isFormatted } from './grid-format.ts'
 import { ROW_NUM_WIDTH, cellId, columnWindow, layoutColumns, moveColumn, pinColumn } from './grid-layout.ts'
 import { nextSort } from './grid-view.ts'
 import { GridHeaderRow } from './GridHeaderRow'
 import type { HeaderActions } from './GridHeaderCell'
 import { GridRow } from './GridRow'
+import { TotalsRow } from './TotalsRow'
 import { rangeContains, rowSlice, type CellPos } from './selection.ts'
 import { restoredScroll, type GridMemory } from './grid-memory.ts'
-import { HEADER_EXTRA, PINNED_HEADER_EXTRA, type useResultsGrid } from './useResultsGrid.ts'
+import { headerExtra } from './header-width.ts'
+import type { useResultsGrid } from './useResultsGrid.ts'
 import { useGridSelection } from './useGridSelection.ts'
 import type { SelectionStore } from './selection-store.ts'
 import { FilterPopover } from './FilterPopover'
@@ -38,6 +40,7 @@ export function ResultsGrid({
   filterOpenFor,
   onFilterOpenChange,
   onOpenRecord,
+  onFormat,
 }: {
   grid: ReturnType<typeof useResultsGrid>
   onRowClick?: (row: Record<string, unknown>) => void
@@ -54,8 +57,10 @@ export function ResultsGrid({
   onFilterOpenChange?: (column: string | null) => void
   /** Shows the Details panel on its Row tab. */
   onOpenRecord?: () => void
+  /** Opens the formatting panel for a column; without it the header menu has no Format… item. */
+  onFormat?: (column: string) => void
 }) {
-  const { table, view, setView, rows, columns, density, filters, allColumns, setColumnFilter, clearColumnFilter, showOnlyValue, hideColumnValue } = grid
+  const { table, view, setView, rows, columns, density, filters, allColumns, formats, compiled, setColumnFilter, clearColumnFilter, showOnlyValue, hideColumnValue, setTotalFn } = grid
   const rowHeight = ROW_HEIGHT[density]
   const scrollRef = useRef<HTMLDivElement>(null)
   const idPrefix = useId().replace(/:/g, '')
@@ -98,6 +103,8 @@ export function ResultsGrid({
     overscan: 10,
     paddingStart: rowHeight,
     scrollPaddingStart: rowHeight,
+    // The sticky totals row covers the bottom of the viewport, so keyboard moves must stop above it.
+    scrollPaddingEnd: view.totals.on ? rowHeight : 0,
     measureElement: view.wrap ? undefined : () => rowHeight,
     initialOffset: initialScroll.top,
   })
@@ -147,8 +154,12 @@ export function ResultsGrid({
   )
 
   const pageRows = useCallback(
-    () => Math.max(1, Math.floor((scrollRef.current?.clientHeight ?? rowHeight * 10) / rowHeight) - 1),
-    [rowHeight],
+    () =>
+      Math.max(
+        1,
+        Math.floor(((scrollRef.current?.clientHeight ?? rowHeight * 10) - (view.totals.on ? rowHeight : 0)) / rowHeight) - 1,
+      ),
+    [rowHeight, view.totals.on],
   )
 
   // The virtualisers only apply their initial offset to the axis they own, and the column one may be disabled.
@@ -235,6 +246,7 @@ export function ResultsGrid({
     [copy, moveTo],
   )
 
+  const focusGrid = useCallback(() => scrollRef.current?.focus({ preventScroll: true }), [])
   const displayed = useMemo(() => rows.map((r) => r.original), [rows])
   useEffect(() => {
     store?.publish({ rows: displayed, columns })
@@ -267,14 +279,16 @@ export function ResultsGrid({
 
   const fit = useCallback(
     (name: string) => {
-      const values = rows.slice(0, 200).map((r) => displayString(r.original[name]))
+      const text = compiled(name).text
+      const values = rows.slice(0, 200).map((r) => text(r.original[name]))
       const pinned = view.pinnedLeft.includes(name) || view.pinnedRight.includes(name)
-      setWidth(name, fitWidth(name, values, measure, HEADER_EXTRA + (pinned ? PINNED_HEADER_EXTRA : 0)))
+      setWidth(name, fitWidth(name, values, measure, headerExtra({ pinned, formatted: isFormatted(formats[name]) })))
     },
-    [rows, view.pinnedLeft, view.pinnedRight, setWidth, measure],
+    [rows, view.pinnedLeft, view.pinnedRight, setWidth, measure, compiled, formats],
   )
 
   const canHide = columns.length > 1
+  const cellFormats = useMemo(() => columns.map((c) => compiled(c.name)), [columns, compiled])
 
   const actionsFor = useCallback(
     (name: string): HeaderActions => ({
@@ -292,8 +306,10 @@ export function ResultsGrid({
         open: () => onFilterOpenChange?.(name),
         clear: () => clearColumnFilter(name),
       },
+      formatted: isFormatted(formats[name]),
+      format: onFormat ? () => onFormat(name) : undefined,
     }),
-    [setView, fit, copyColumn, setWidth, canHide, filters, onFilterOpenChange, clearColumnFilter],
+    [setView, fit, copyColumn, setWidth, canHide, filters, onFilterOpenChange, clearColumnFilter, formats, onFormat],
   )
 
   const onColumnFilterOpen = useCallback(
@@ -345,7 +361,7 @@ export function ResultsGrid({
       role="grid"
       tabIndex={0}
       aria-label="Query results"
-      aria-rowcount={rows.length + 1}
+      aria-rowcount={rows.length + 1 + (view.totals.on ? 1 : 0)}
       aria-colcount={columns.length + 1}
       aria-multiselectable
       aria-activedescendant={focusRendered && range ? cellId(idPrefix, range.focus.row, range.focus.col) : undefined}
@@ -384,6 +400,7 @@ export function ResultsGrid({
               columns={columns}
               layouts={layouts}
               colWindow={colWindow}
+              formats={cellFormats}
               selLeft={slice.selLeft}
               selRight={slice.selRight}
               focusCol={slice.focusCol}
@@ -397,6 +414,21 @@ export function ResultsGrid({
           )
         })}
       </div>
+      {view.totals.on && (
+        <TotalsRow
+          rows={displayed}
+          columns={columns}
+          layouts={layouts}
+          colWindow={colWindow}
+          formats={cellFormats}
+          fns={view.totals.fns}
+          height={rowHeight}
+          width={sizerWidth}
+          rowCount={rows.length}
+          onChange={setTotalFn}
+          onFocusGrid={focusGrid}
+        />
+      )}
     </div>
     </CellContextMenu>
   )

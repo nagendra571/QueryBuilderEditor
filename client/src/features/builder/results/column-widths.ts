@@ -45,3 +45,27 @@ export function createCanvasMeasure(font: { header: string; cell: string }): Mea
     return ctx.measureText(text).width
   }
 }
+
+export interface DefaultWidth {
+  plain: number
+  pinned: number
+}
+
+const widthCache = new WeakMap<readonly object[], Map<string, { key: string; width: DefaultWidth }>>()
+
+/** A column's default widths, re-measured only when the rows, its type or `key` (density, fonts, text format) change. */
+export function cachedWidth(
+  rows: readonly object[],
+  column: { name: string; dataType: string },
+  key: string,
+  measure: () => DefaultWidth,
+): DefaultWidth {
+  let byName = widthCache.get(rows)
+  if (!byName) widthCache.set(rows, (byName = new Map()))
+  const fullKey = `${column.dataType}|${key}`
+  const hit = byName.get(column.name)
+  if (hit && hit.key === fullKey) return hit.width
+  const width = measure()
+  byName.set(column.name, { key: fullKey, width })
+  return width
+}

@@ -44,6 +44,8 @@ export function ResultsToolbar({
   detailsOpen,
   onToggleDetails,
   detailsRef,
+  totalsOn,
+  onTotalsChange,
   onCopy,
   copyDisabled,
   isDefaultView,
@@ -67,6 +69,8 @@ export function ResultsToolbar({
   detailsOpen: boolean
   onToggleDetails: () => void
   detailsRef?: React.Ref<HTMLButtonElement>
+  totalsOn: boolean
+  onTotalsChange: (on: boolean) => void
   onCopy: () => void
   copyDisabled: boolean
   isDefaultView: boolean
@@ -153,6 +157,17 @@ export function ResultsToolbar({
       >
         <WrapText className="size-3.5" />
         Wrap text
+      </Button>
+
+      <Button
+        variant={totalsOn ? 'secondary' : 'outline'}
+        size="sm"
+        className="h-7 gap-1.5 text-xs"
+        aria-pressed={totalsOn}
+        onClick={() => onTotalsChange(!totalsOn)}
+      >
+        <span aria-hidden className="font-numeric text-sm leading-none">Σ</span>
+        Totals
       </Button>
 
       <Button

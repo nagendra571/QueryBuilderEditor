@@ -36,8 +36,26 @@ integration ergonomics (single-call registration, embedded SPA, DBA-friendly mig
 
 ## Where we left off (update this at the end of each session)
 
-**2026-11-26 (later): RESULTS PANEL phase 3 (grid filters) BUILT on branch `feature/results-filters` (local commits only, NOT
-pushed, NOT released). START HERE.** Phase 2 merged to `main` via PR #12 (`68441cb`), unreleased. Spec
+**2026-11-26 (latest): RESULTS PANEL phase 4 (formats, highlights, bars, scales, totals row) BUILT on branch
+`feature/results-formatting`, pushed for a PR, NOT released. START HERE.** Phase 3 merged via PR #13 (`d1581bb`). User chose
+session-only settings and option B (a **Format** tab in the Details panel). Spec `docs/superpowers/specs/2026-11-26-results-formatting-design.md`
+(+ "Settled after the builder check"), mockup `docs/superpowers/specs/assets/2026-11-26-results-formatting-mockup.html`, plan
+`docs/superpowers/plans/2026-11-26-results-formatting.md`. Tracker #9, #14, #15 "Done (unreleased)". Built (client-only):
+`grid-format.ts` (number formats matching charts' `format.ts`; date patterns via Intl in the viewer's locale, zoneless text
+formatted in UTC, zoned in the viewer's zone; rules ≤5, first match wins, red/amber/green/blue; bars from zero with negatives;
+blue / red-green scales with median midpoint; stats cached per rows+column; Intl formatters cached), `grid-totals.ts`
+(sum/avg/count/distinct/min/max/earliest/latest/none; only real numbers count; no Sum for avg/min/max/countDistinct columns via
+`withAggregates` from the live definition; raw totals cached per rows), `GridView.formats`/`totals`, `FormatPanel`/`RuleEditor`,
+sticky `TotalsRow` (buttons tabIndex -1, menu returns focus to the grid, Escape passes through), header dot + "Format…", Row tab /
+profile / auto-fit use formatted text; copy, sort, filters, search, export stay raw. Bundle `index-zGKpJwld.js`; client 440/440
+(also TZ=Asia/Kolkata, America/New_York). Verified: per-task reviews + Opus final review "with fixes" (10 fixes incl. 100k-row
+responsiveness) re-reviewed; Playwright acceptance (2,500-row and 100,000-row temporary views; rule keystroke ~10–20 ms work at
+100k, scroll ~21 ms/frame); user checked it in the browser. Temporary views dropped, allowlist back to 56, record limit null.
+Parked minors: `0x10`/`1e3` accepted as plain numbers in rules; totals recompute once per sort; aria-disabled ‹ › still show hover;
+tinted cells lose the row-hover tint. Next: user decides release (Editor 2.3.0 suggested for phases 1–4; needs full server suites),
+then phase 5 (#17 remember layout per saved query — touches the DB, decide first; #18 chart this column).
+
+**2026-11-26 (later): RESULTS PANEL phase 3 (grid filters) — merged to `main` via PR #13 (`d1581bb`), unreleased.** Phase 2 merged to `main` via PR #12 (`68441cb`), unreleased. Spec
 `docs/superpowers/specs/2026-11-26-results-filters-design.md` (user chose option A: grid filters work on the loaded rows; "Add to
 query" turns them into builder filters and re-runs), mockup `docs/superpowers/specs/assets/2026-11-26-results-filters-mockup.html`,
 plan `docs/superpowers/plans/2026-11-26-results-filters.md`. Tracker #10–13 "Done (unreleased)". Built (client-only): `GridFilter[]`

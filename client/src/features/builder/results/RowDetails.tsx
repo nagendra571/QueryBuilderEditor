@@ -4,7 +4,6 @@ import { Check, ChevronDown, ChevronUp, Copy, Filter, X as XIcon } from 'lucide-
 import { Button } from '@/components/ui/button'
 import { buildRecordText } from './copy-selection.ts'
 import { copyText } from './copy-text.ts'
-import { displayString } from './grid-columns.ts'
 import { profileKind } from './column-profile.ts'
 import { TypeBadge } from './TypeBadge'
 import type { GridHandle } from './ResultsGrid'
@@ -16,9 +15,11 @@ interface Props {
   onRowClick?: (row: Record<string, unknown>) => void
   rowActionLabel?: string
   onShowOnly: (column: string, raw: unknown) => void
+  /** The grid's displayed text for a value, so the panel follows the column formats. */
+  textFor: (column: string, value: unknown) => string
 }
 
-export function RowDetails({ store, gridRef, onRowClick, rowActionLabel, onShowOnly }: Props) {
+export function RowDetails({ store, gridRef, onRowClick, rowActionLabel, onShowOnly, textFor }: Props) {
   const { range, rows, columns } = useSyncExternalStore(store.subscribe, store.get)
   const focus = range?.focus
   const row = focus ? rows[focus.row] : undefined
@@ -95,7 +96,7 @@ export function RowDetails({ store, gridRef, onRowClick, rowActionLabel, onShowO
                   isNumber ? 'font-numeric text-right tabular-nums' : 'whitespace-pre-wrap break-words'
                 }`}
               >
-                <DetailValue value={value} />
+                <DetailValue value={value} text={textFor(c.name, value)} />
               </dd>
             </div>
           )
@@ -105,7 +106,7 @@ export function RowDetails({ store, gridRef, onRowClick, rowActionLabel, onShowO
   )
 }
 
-function DetailValue({ value }: { value: unknown }) {
+function DetailValue({ value, text }: { value: unknown; text: string }) {
   if (value === null || value === undefined || value === '') {
     return <span className="text-muted-foreground italic">empty</span>
   }
@@ -116,5 +117,5 @@ function DetailValue({ value }: { value: unknown }) {
       <XIcon className="inline size-4 text-muted-foreground" aria-label="false" />
     )
   }
-  return <>{displayString(value)}</>
+  return <>{text}</>
 }

@@ -474,11 +474,24 @@ change, and nothing to configure.
   "is not", upper/lower case, existing conditions on the same column) and lists anything that can't be added: empty
   values mixed with other values, ranges that include empty values, and queries whose filters use "Match any". It is
   unavailable while a run is in progress, when required parameters are missing, or on a disabled query.
+- **Formats, highlights and bars:** the Details panel's **Format** tab (or **Format…** in a column's header menu) sets how
+  the current column looks. Numbers: Automatic, Number, Compact, Currency (three-letter code) or Percent, with decimals and
+  a thousands separator (the same formats charts use). Dates: several date styles in your browser's language, plus
+  **Show time** for date-time columns. Number columns can show **bars in cells** (sized from zero; negatives grow left)
+  and a **colour scale** (white to blue, or red to green). **Highlight rules** (up to 5 per column, the first match wins)
+  tint cells red, amber, green or blue: greater than / less than / between / equals for numbers, is / contains / is empty
+  for text, before / after / between for dates. A blue dot in the header marks a formatted column. Formatting changes only
+  how values look: copy, sorting, filters, search and export use the raw values, and the tooltip shows the raw value.
+- **Totals row:** **Totals** in the toolbar adds a row fixed at the bottom of the grid. Click a totals cell (or use the
+  Format tab) to pick Sum, Average, Count, Min, Max, Earliest, Latest, Distinct or none; number columns start on Sum
+  (none for columns that are already averages, minimums, maximums or distinct counts), dates on Latest, others on Count.
+  Totals follow the grid's search and filters; when results were cut off a note says "Totals cover the first N loaded
+  rows".
 - **Cut-off results:** when more rows matched than the grid holds (1,000 by default, or the record limit, see "Record
   Limits"), sorting, search and copy cover only the loaded rows. Export and charts still run on the server and ignore what
   you did in the grid; **Add a filter** jumps to the Build tab.
 
-The layout is not remembered across visits yet.
+The layout, formats and totals are not remembered across visits yet.
 
 ## Visualizations
 

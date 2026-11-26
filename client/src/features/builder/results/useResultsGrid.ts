@@ -12,14 +12,24 @@ import {
 } from '@tanstack/react-table'
 import type { QueryResultColumnDto, QueryResultDto } from '@/types'
 import { useDensityStore, type Density } from '../../../state/density-store.ts'
-import { DEFAULT_COL_CAP, FIT_SAMPLE_ROWS, HEADER_FONT, cellFont, createCanvasMeasure, fitWidth } from './column-widths.ts'
-import { displayOrder, displayString } from './grid-columns.ts'
+import {
+  DEFAULT_COL_CAP,
+  FIT_SAMPLE_ROWS,
+  HEADER_FONT,
+  cachedWidth,
+  cellFont,
+  createCanvasMeasure,
+  fitWidth,
+  type MeasureText,
+} from './column-widths.ts'
+import { displayOrder } from './grid-columns.ts'
+import { compileFormat, formatText, isFormatted, widthKey, type ColumnFormat, type CompiledFormat } from './grid-format.ts'
+import type { TotalFn } from './grid-totals.ts'
 import { buildColumnDefs, tableBehaviour, type RowData } from './grid-table.ts'
 import { removeFilter, rowsPassing, setFilter, showOnly, hideValue, valueKey, type GridFilter } from './grid-filters.ts'
 import { carryOver, defaultView, isDefaultView, type GridView } from './grid-view.ts'
-import { HEADER_EXTRA, PINNED_HEADER_EXTRA } from './header-width.ts'
+import { headerExtra } from './header-width.ts'
 
-export { HEADER_EXTRA, PINNED_HEADER_EXTRA }
 
 function resolve<T>(updater: Updater<T>, current: T): T {
   return typeof updater === 'function' ? (updater as (old: T) => T)(current) : updater
@@ -66,21 +76,31 @@ export function useResultsGrid(result: QueryResultDto) {
     }
   }, [fontsReady])
 
+  // Per column, so a rule, bar or scale edit (which can't change text) measures nothing, and a number-format edit
+  // measures only its own column.
   const defaultWidths = useMemo(() => {
-    void fontsReady
-    const measure = createCanvasMeasure({ header: HEADER_FONT, cell: cellFont(density) })
+    let measure: MeasureText | null = null
     const plain: Record<string, number> = {}
     const pinned: Record<string, number> = {}
     for (const c of result.columns) {
-      const values = result.rows.slice(0, FIT_SAMPLE_ROWS).map((r) => displayString(r[c.name]))
-      plain[c.name] = fitWidth(c.name, values, measure, HEADER_EXTRA, DEFAULT_COL_CAP)
-      pinned[c.name] = Math.max(
-        plain[c.name],
-        fitWidth(c.name, [], measure, HEADER_EXTRA + PINNED_HEADER_EXTRA, DEFAULT_COL_CAP),
-      )
+      const format = view.formats[c.name]
+      const key = `${density}|${fontsReady}|${widthKey(format)}`
+      const entry = cachedWidth(result.rows, c, key, () => {
+        measure ??= createCanvasMeasure({ header: HEADER_FONT, cell: cellFont(density) })
+        const formatted = isFormatted(format)
+        const text = formatText(c, format)
+        const values = result.rows.slice(0, FIT_SAMPLE_ROWS).map((r) => text(r[c.name]))
+        const p = fitWidth(c.name, values, measure, headerExtra({ pinned: false, formatted }), DEFAULT_COL_CAP)
+        return {
+          plain: p,
+          pinned: Math.max(p, fitWidth(c.name, [], measure, headerExtra({ pinned: true, formatted }), DEFAULT_COL_CAP)),
+        }
+      })
+      plain[c.name] = entry.plain
+      pinned[c.name] = entry.pinned
     }
     return { plain, pinned }
-  }, [result, fontsReady, density])
+  }, [result, fontsReady, density, view.formats])
 
   const defaultWidthOf = useCallback(
     (name: string, pinnedLeft: string[], pinnedRight: string[]) =>
@@ -158,12 +178,14 @@ export function useResultsGrid(result: QueryResultDto) {
     getSortedRowModel: getSortedRowModel(),
   })
 
+  const { order, hidden, pinnedLeft, pinnedRight } = view
+  // Narrow on purpose: format edits and width drags must not rebuild the cell formats, totals input or store columns.
   const columns = useMemo(() => {
     const byName = new Map(result.columns.map((c) => [c.name, c]))
-    return displayOrder(view, names)
+    return displayOrder({ order, hidden, pinnedLeft, pinnedRight }, names)
       .map((n) => byName.get(n))
       .filter((c): c is QueryResultColumnDto => !!c)
-  }, [result.columns, names, view])
+  }, [result.columns, names, order, hidden, pinnedLeft, pinnedRight])
 
   const rows: Row<RowData>[] = table.getRowModel().rows
 
@@ -196,6 +218,31 @@ export function useResultsGrid(result: QueryResultDto) {
     [result.rows, result.columns, view.filters],
   )
 
+  const setColumnFormat = useCallback(
+    (column: string, next: ColumnFormat | null) =>
+      setView((v) => {
+        const formats = { ...v.formats }
+        if (next) formats[column] = next
+        else delete formats[column]
+        return { ...v, formats }
+      }),
+    [setView],
+  )
+  const setTotals = useCallback(
+    (on: boolean) => setView((v) => ({ ...v, totals: { ...v.totals, on } })),
+    [setView],
+  )
+  const setTotalFn = useCallback(
+    (column: string, fn: TotalFn) => setView((v) => ({ ...v, totals: { ...v.totals, fns: { ...v.totals.fns, [column]: fn } } })),
+    [setView],
+  )
+  // Compiled over the rows that pass the column filters, so bars and colour scales span what the grid can show.
+  const compiled = useCallback(
+    (column: string): CompiledFormat =>
+      compileFormat(filterRows, { name: column, dataType: typeOf(column) }, view.formats[column]),
+    [filterRows, typeOf, view.formats],
+  )
+
   const reset = useCallback(() => setView(() => defaultView(names)), [setView, names])
 
   return {
@@ -217,5 +264,10 @@ export function useResultsGrid(result: QueryResultDto) {
     hideColumnValue,
     removeFilters,
     filterRows,
+    formats: view.formats,
+    setColumnFormat,
+    setTotals,
+    setTotalFn,
+    compiled,
   }
 }

@@ -18,3 +18,10 @@ export const HEADER_EXTRA =
 
 /** Added when the column is pinned: the pin glyph and the gap before it. */
 export const PINNED_HEADER_EXTRA = HEADER_PIN + HEADER_GAP
+
+/** The dot that marks a formatted column: size-1.5 plus the gap before it. */
+export const FORMAT_MARK_WIDTH = 6 + HEADER_GAP
+
+export function headerExtra({ pinned, formatted }: { pinned: boolean; formatted: boolean }): number {
+  return HEADER_EXTRA + (pinned ? PINNED_HEADER_EXTRA : 0) + (formatted ? FORMAT_MARK_WIDTH : 0)
+}
