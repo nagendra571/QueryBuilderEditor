@@ -461,6 +461,19 @@ change, and nothing to configure.
   and comes along into full screen.
 - **Selection totals:** select two or more cells and the footer shows **Count** (non-empty cells) and, when the cells
   are numbers, **Sum**, **Average**, **Min** and **Max**. Click a total to copy it.
+- **Filter the grid:** click the funnel mark in a column header. Text and Yes/No columns show a checklist of values with
+  counts; number and date columns show From/To boxes with a small histogram, and an **Include empty values** option.
+  Right-click a cell (or press Shift+F10) for **Show only "X"**, **Hide "X"**, **Copy cell** and **Open record**. In the
+  Details panel, click a top value or a histogram bar, or the filter icon next to a field.
+- **Filter chips:** active filters appear above the grid. Click a chip to change it, use its ✕ (or Delete) to remove it, or
+  **Clear all**. Filters keep applying to hidden columns (the chip says "(hidden)"). Grid filters work on the rows loaded
+  in the grid; when results were cut off the bar says "Filtering the first N rows". The footer totals, Copy and the
+  column profile all follow the filters.
+- **Add to query:** turns the chips into the query's own filters (Totals filters for summary columns) and runs it again.
+  A confirm step lists what will be added, warns where the query may behave differently (empty values left out by
+  "is not", upper/lower case, existing conditions on the same column) and lists anything that can't be added: empty
+  values mixed with other values, ranges that include empty values, and queries whose filters use "Match any". It is
+  unavailable while a run is in progress, when required parameters are missing, or on a disabled query.
 - **Cut-off results:** when more rows matched than the grid holds (1,000 by default, or the record limit, see "Record
   Limits"), sorting, search and copy cover only the loaded rows. Export and charts still run on the server and ignore what
   you did in the grid; **Add a filter** jumps to the Build tab.

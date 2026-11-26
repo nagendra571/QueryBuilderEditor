@@ -187,8 +187,8 @@ type FilterValue = string | number | boolean | null   // null = (empty)
 
 ### Add to query (#13)
 
-- **Interface.** `ResultsTable` gets an optional `onAddToQuery?: (conditions: { where: FilterCondition[]; having:
-  FilterCondition[] }) => void`. The grid needs to know the builder columns, so it also gets `queryColumns?:
+- **Interface.** `ResultsTable` gets an optional `onAddToQuery?: (where: FilterCondition[], having:
+  FilterCondition[], filterCount: number) => boolean` (returns false when blocked, so the grid keeps its filters). The grid needs to know the builder columns, so it also gets `queryColumns?:
   QueryColumn[]` (the current definition's columns) to map each result column name back to `{tableAlias, columnName,
   dataType, aggregate}`.
 - **Conversion** (pure `toBuilderConditions(filters, queryColumns, resultColumns)`). Each filter becomes one or more flat
@@ -207,6 +207,8 @@ type FilterValue = string | number | boolean | null   // null = (empty)
   - **Value formats:**
     - The `in`/`notIn` value is comma-separated (readable in the builder) unless some value contains a comma, in which case
       it is a JSON array.
+    - in/notIn uses a JSON array also when a value has leading/trailing spaces, is blank, or starts with "[" (the server
+      trims comma lists).
     - Numbers are written plainly; booleans as `true`/`false`; dates as `YYYY-MM-DD`, or `YYYY-MM-DDTHH:mm:ss` when there is
       a time.
   - Each condition has `isParameterized: false`.

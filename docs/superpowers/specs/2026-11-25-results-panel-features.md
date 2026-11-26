@@ -30,10 +30,10 @@ is the way to get a true, query-wide answer.
 | 7 | Column profile panel (histogram, top values, min/max/average, empty share) | Understanding | 2 | Done (unreleased, branch feature/results-panels) |
 | 8 | Selection totals in the footer (Sum, Average, Count, Min, Max) | Understanding | 2 | Done (unreleased, branch feature/results-panels) |
 | 9 | Optional totals row at the bottom | Understanding | 4 | Planned |
-| 10 | Per-column filters (value checklist for text, range for numbers and dates) | Finding | 3 | Planned |
-| 11 | Right-click a cell: show only this value / hide this value | Finding | 3 | Planned |
-| 12 | Active filters as removable chips above the grid | Finding | 3 | Planned |
-| 13 | "Add to query": grid filters become builder filters, then re-run | Finding | 3 | Planned |
+| 10 | Per-column filters (value checklist for text, range for numbers and dates) | Finding | 3 | Done (unreleased, branch feature/results-filters) |
+| 11 | Right-click a cell: show only this value / hide this value | Finding | 3 | Done (unreleased, branch feature/results-filters) |
+| 12 | Active filters as removable chips above the grid | Finding | 3 | Done (unreleased, branch feature/results-filters) |
+| 13 | "Add to query": grid filters become builder filters, then re-run | Finding | 3 | Done (unreleased, branch feature/results-filters) |
 | 14 | Conditional formatting (colour scales, in-cell bars, highlight rules) | Shaping | 4 | Planned |
 | 15 | Per-column number and date formats | Shaping | 4 | Planned |
 | 16 | Copy a cell, row or selection with headers, pastes cleanly into Excel | Getting data out | 1 | Done (unreleased, branch feature/results-grid) |
