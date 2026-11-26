@@ -40,6 +40,8 @@ export interface TotalsRowProps {
   width: number
   rowCount: number
   onChange: (column: string, fn: TotalFn) => void
+  /** Where focus goes when a menu closes: the totals buttons are not tab stops. */
+  onFocusGrid: () => void
 }
 
 // Lives after the virtual sizer in the scroll container, so its height is part of the scrollable content and the
@@ -55,6 +57,7 @@ export const TotalsRow = memo(function TotalsRow({
   width,
   rowCount,
   onChange,
+  onFocusGrid,
 }: TotalsRowProps) {
   const effective = useMemo(() => columns.map((c) => fns[c.name] ?? defaultTotal(c)), [columns, fns])
   const values = useMemo(
@@ -90,7 +93,9 @@ export const TotalsRow = memo(function TotalsRow({
               type="button"
               tabIndex={-1}
               aria-haspopup="menu"
-              aria-label={`Total for ${col.name}: ${CHOICE_NAME[fn]}`}
+              aria-label={
+                fn === 'none' ? `${col.name} total: none. Change total` : `${col.name} total: ${CHOICE_NAME[fn]} ${values[ci]}. Change total`
+              }
               className={cn(
                 'group/total flex h-full min-w-0 flex-1 items-center gap-1.5 px-2.5 hover:bg-foreground/5 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring',
                 isNumber && 'justify-end',
@@ -110,7 +115,14 @@ export const TotalsRow = memo(function TotalsRow({
               )}
             </button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="min-w-40">
+          <DropdownMenuContent
+            align="start"
+            className="min-w-40"
+            onCloseAutoFocus={(e) => {
+              e.preventDefault()
+              onFocusGrid()
+            }}
+          >
             <DropdownMenuRadioGroup value={fn} onValueChange={(v) => onChange(col.name, v as TotalFn)}>
               {choices.map((c) => (
                 <DropdownMenuRadioItem key={c} value={c} className="text-xs">
@@ -126,10 +138,13 @@ export const TotalsRow = memo(function TotalsRow({
 
   return (
     // Keys pressed here (and in the portalled menu, whose events bubble through React) must not drive the grid.
+    // Escape still passes so full screen can exit.
     <div
       role="row"
       aria-rowindex={rowCount + 2}
-      onKeyDown={(e) => e.stopPropagation()}
+      onKeyDown={(e) => {
+        if (e.key !== 'Escape') e.stopPropagation()
+      }}
       className={cn('sticky bottom-0 z-20 flex border-t-2 border-foreground', STICKY_BG)}
       style={{ width, minWidth: '100%', height }}
     >

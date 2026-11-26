@@ -154,8 +154,12 @@ export function ResultsGrid({
   )
 
   const pageRows = useCallback(
-    () => Math.max(1, Math.floor((scrollRef.current?.clientHeight ?? rowHeight * 10) / rowHeight) - 1),
-    [rowHeight],
+    () =>
+      Math.max(
+        1,
+        Math.floor(((scrollRef.current?.clientHeight ?? rowHeight * 10) - (view.totals.on ? rowHeight : 0)) / rowHeight) - 1,
+      ),
+    [rowHeight, view.totals.on],
   )
 
   // The virtualisers only apply their initial offset to the axis they own, and the column one may be disabled.
@@ -242,6 +246,7 @@ export function ResultsGrid({
     [copy, moveTo],
   )
 
+  const focusGrid = useCallback(() => scrollRef.current?.focus({ preventScroll: true }), [])
   const displayed = useMemo(() => rows.map((r) => r.original), [rows])
   useEffect(() => {
     store?.publish({ rows: displayed, columns })
@@ -421,6 +426,7 @@ export function ResultsGrid({
           width={sizerWidth}
           rowCount={rows.length}
           onChange={setTotalFn}
+          onFocusGrid={focusGrid}
         />
       )}
     </div>
