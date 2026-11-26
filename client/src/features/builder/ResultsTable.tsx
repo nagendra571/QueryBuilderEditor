@@ -2,11 +2,13 @@ import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
+import { DetailsPanel } from '@/features/builder/results/DetailsPanel'
 import { ResultsFooter } from '@/features/builder/results/ResultsFooter'
 import { ResultsGrid, type GridHandle } from '@/features/builder/results/ResultsGrid'
 import { ResultsToolbar } from '@/features/builder/results/ResultsToolbar'
 import { createGridMemory } from '@/features/builder/results/grid-memory'
 import { createSelectionStore } from '@/features/builder/results/selection-store'
+import { initialPanel, panelMode } from '@/features/builder/results/panel-layout'
 import { useResultsGrid } from '@/features/builder/results/useResultsGrid'
 import type { QueryResultDto } from '@/types'
 
@@ -34,7 +36,21 @@ export function ResultsTable({
   const [store] = useState(createSelectionStore)
   const gridRef = useRef<GridHandle>(null)
   const fullScreenButton = useRef<HTMLButtonElement>(null)
+  const detailsButton = useRef<HTMLButtonElement>(null)
   const wasFullScreen = useRef(false)
+  // Lives here, not in the grid, so it survives full screen and re-runs; Reset view leaves it alone.
+  const [panel, setPanel] = useState(initialPanel)
+  const [areaWidth, setAreaWidth] = useState(0)
+  const bandObserver = useRef<ResizeObserver | null>(null)
+  // A callback ref: the band remounts when full screen toggles.
+  const bandRef = (el: HTMLDivElement | null) => {
+    bandObserver.current?.disconnect()
+    bandObserver.current = null
+    if (!el) return
+    setAreaWidth(el.clientWidth)
+    bandObserver.current = new ResizeObserver(() => setAreaWidth(el.clientWidth))
+    bandObserver.current.observe(el)
+  }
 
   // A run that returns no columns renders no grid or exit button, so it must not stay in full screen.
   if (fullScreen && result.columns.length === 0) setFullScreen(false)
@@ -92,6 +108,9 @@ export function ResultsTable({
         onDensityChange={(density) => setView((v) => ({ ...v, density }))}
         wrap={view.wrap}
         onWrapChange={(wrap) => setView((v) => ({ ...v, wrap }))}
+        detailsOpen={panel.open}
+        onToggleDetails={() => setPanel((p) => ({ ...p, open: !p.open }))}
+        detailsRef={detailsButton}
         onCopy={() => gridRef.current?.copy()}
         copyDisabled={noRows}
         isDefaultView={grid.isDefault}
@@ -121,25 +140,42 @@ export function ResultsTable({
         </div>
       )}
 
-      {noRows ? (
-        <Alert className="m-(--space-section) w-auto">
-          <AlertDescription>
-            {grid.totalRaw === 0 ? 'No rows matched your filters. Try widening a condition.' : 'No rows match your search.'}
-          </AlertDescription>
-        </Alert>
-      ) : (
-        <div className="min-h-0 flex-1">
-          <ResultsGrid
-            grid={grid}
-            onRowClick={onRowClick}
-            rowActionLabel={rowActionLabel}
-            onVisibleRangeChange={(first, last) => setRange({ first, last })}
-            store={store}
-            gridRef={gridRef}
-            memory={memory}
+      <div ref={bandRef} className="relative flex min-h-0 flex-1">
+        {noRows ? (
+          <Alert className="m-(--space-section) h-fit min-w-0 flex-1">
+            <AlertDescription>
+              {grid.totalRaw === 0 ? 'No rows matched your filters. Try widening a condition.' : 'No rows match your search.'}
+            </AlertDescription>
+          </Alert>
+        ) : (
+          <div className="min-h-0 min-w-0 flex-1">
+            <ResultsGrid
+              grid={grid}
+              onRowClick={onRowClick}
+              rowActionLabel={rowActionLabel}
+              onVisibleRangeChange={(first, last) => setRange({ first, last })}
+              store={store}
+              gridRef={gridRef}
+              memory={memory}
+            />
+          </div>
+        )}
+        {panel.open && (
+          <DetailsPanel
+            state={panel}
+            onChange={setPanel}
+            onClose={() => {
+              setPanel((p) => ({ ...p, open: false }))
+              if (store.get().range) gridRef.current?.focus()
+              else detailsButton.current?.focus()
+            }}
+            mode={panelMode(areaWidth)}
+            areaWidth={areaWidth}
+            row={<p className="p-3 text-xs text-muted-foreground">Select a cell to see its row.</p>}
+            column={<p className="p-3 text-xs text-muted-foreground">Select a cell to profile its column.</p>}
           />
-        </div>
-      )}
+        )}
+      </div>
 
       <ResultsFooter
         first={range.first}
