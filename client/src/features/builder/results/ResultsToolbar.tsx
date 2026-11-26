@@ -1,4 +1,4 @@
-import { Columns3, Copy, Maximize2, Minimize2, RotateCcw, Search, WrapText } from 'lucide-react'
+import { Columns3, Copy, Maximize2, Minimize2, PanelRight, RotateCcw, Search, WrapText } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -41,6 +41,9 @@ export function ResultsToolbar({
   onDensityChange,
   wrap,
   onWrapChange,
+  detailsOpen,
+  onToggleDetails,
+  detailsRef,
   onCopy,
   copyDisabled,
   isDefaultView,
@@ -61,6 +64,9 @@ export function ResultsToolbar({
   onDensityChange: (d: Density) => void
   wrap: boolean
   onWrapChange: (wrap: boolean) => void
+  detailsOpen: boolean
+  onToggleDetails: () => void
+  detailsRef?: React.Ref<HTMLButtonElement>
   onCopy: () => void
   copyDisabled: boolean
   isDefaultView: boolean
@@ -147,6 +153,18 @@ export function ResultsToolbar({
       >
         <WrapText className="size-3.5" />
         Wrap text
+      </Button>
+
+      <Button
+        ref={detailsRef}
+        variant={detailsOpen ? 'secondary' : 'outline'}
+        size="sm"
+        className="h-7 gap-1.5 text-xs"
+        aria-pressed={detailsOpen}
+        onClick={onToggleDetails}
+      >
+        <PanelRight className="size-3.5" />
+        Details
       </Button>
 
       <span className="h-5 w-px bg-border" aria-hidden />

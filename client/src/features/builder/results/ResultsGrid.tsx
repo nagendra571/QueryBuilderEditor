@@ -11,7 +11,14 @@ import { rowSlice, type CellPos } from './selection.ts'
 import { restoredScroll, type GridMemory } from './grid-memory.ts'
 import { HEADER_EXTRA, PINNED_HEADER_EXTRA, type useResultsGrid } from './useResultsGrid.ts'
 import { useGridSelection } from './useGridSelection.ts'
+import type { SelectionStore } from './selection-store.ts'
 import { cn } from '@/lib/utils'
+
+export interface GridHandle {
+  copy(): void
+  moveTo(pos: CellPos): void
+  focus(): void
+}
 
 const ROW_HEIGHT = { comfortable: 44, compact: 32 } as const
 // Below this many centre columns every cell is rendered; above it only the ones in view (plus overscan).
@@ -22,8 +29,8 @@ export function ResultsGrid({
   onRowClick,
   rowActionLabel,
   onVisibleRangeChange,
-  onSelectionChange,
-  copyRef,
+  store,
+  gridRef,
   memory,
 }: {
   grid: ReturnType<typeof useResultsGrid>
@@ -31,9 +38,9 @@ export function ResultsGrid({
   rowActionLabel?: string
   /** 1-based display rows in view, for the footer. */
   onVisibleRangeChange?: (first: number, last: number) => void
-  /** 0 when nothing is selected, and again when the grid unmounts. */
-  onSelectionChange?: (cells: number) => void
-  copyRef?: React.Ref<{ copy: () => void }>
+  /** Receives the selection, displayed rows and visible columns; reset to no selection when the grid unmounts. */
+  store?: SelectionStore
+  gridRef?: React.Ref<GridHandle>
   /** Keeps the scroll position and selection across the remount that full screen causes. */
   memory?: GridMemory
 }) {
@@ -157,12 +164,24 @@ export function ResultsGrid({
     pageRows,
     reveal,
     onEnter: onRowClick,
-    onSelectionChange,
     memory,
   })
-  const { range, copy, copyColumn } = selection
+  const { range, copy, copyColumn, moveTo } = selection
 
-  useImperativeHandle(copyRef, () => ({ copy }), [copy])
+  useImperativeHandle(
+    gridRef,
+    () => ({ copy, moveTo, focus: () => scrollRef.current?.focus({ preventScroll: true }) }),
+    [copy, moveTo],
+  )
+
+  const displayed = useMemo(() => rows.map((r) => r.original), [rows])
+  useEffect(() => {
+    store?.publish({ rows: displayed, columns })
+  }, [store, displayed, columns])
+  useEffect(() => {
+    store?.publish({ range })
+  }, [store, range])
+  useEffect(() => () => store?.publish({ range: null }), [store])
 
   const items = virtualizer.getVirtualItems()
   const offset = virtualizer.scrollOffset ?? 0

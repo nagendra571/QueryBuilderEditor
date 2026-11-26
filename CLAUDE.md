@@ -36,6 +36,24 @@ integration ergonomics (single-call registration, embedded SPA, DBA-friendly mig
 
 ## Where we left off (update this at the end of each session)
 
+**2026-11-26: RESULTS PANEL phase 2 (details panel + profiles + selection totals) BUILT on branch `feature/results-panels`
+(local commits only, NOT pushed, NOT released). START HERE.** Phase 1 was merged to `main` via PR #11 (`64a2240`), unreleased.
+Spec `docs/superpowers/specs/2026-11-26-results-details-panel-design.md` (user chose option A "Inspector that follows you" and
+profile data option C: loaded rows now, "Calculate for all rows" server option later), mockup
+`docs/superpowers/specs/assets/2026-11-26-results-details-panel-mockup.html`, plan `docs/superpowers/plans/2026-11-26-results-details-panel.md`.
+Tracker items #6–8 now "Done (unreleased)". Built (client-only): `results/selection-store.ts` (grid publishes range/rows/columns;
+panel + footer read via `useSyncExternalStore`; `range === null` is the only "nothing selected" signal), `GridHandle {copy, moveTo, focus}`,
+`DetailsPanel` (docked 340px, 280–560 and ≤50% of band, overlay below 900px band width, `isolate` on the grid wrapper so its
+sticky header can't paint over the overlay, Esc closes + focus back), `RowDetails`, `ColumnProfileView` + `Histogram`
+(`column-profile.ts`; zoneless date-time text parsed as UTC; midnight-only dateTime shown as dates), `SelectionTotals`
+(`selection-totals.ts`; copies values rounded to shown decimals). Bundle `index-bQ9KQ3jy.js`; client 341/341 (also under
+TZ=Asia/Kolkata and America/New_York). Verified: Opus final review "with fixes" → fixed and re-reviewed; Playwright acceptance
+on the sample app (temporary views/allowlist removed again, allowlist back to 56), http copy via routed `qb.test`, both themes,
+arrow-key cost unchanged with the panel open (~2 frames). Parked: totals still scan every cell above 1,000,000 selected cells;
+no per-name profile cache; panel drag not rAF-throttled; overlay can cover the active cell; non-ISO date text counts as unreadable;
+aria-disabled Prev/Next still show hover feedback. Note: this Playwright profile is zoomed (innerWidth = viewport × 1.25), so
+"narrow" tests need viewport ≈ 800. Next: user decides PR (+ release, Editor 2.3.0 suggested for phases 1+2), then phase 3 (filters #10–13).
+
 **2026-11-25: RESULTS PANEL phase 1 ("foundation") BUILT on branch `feature/results-grid` (local commits only, NOT pushed,
 NOT released, no version bump). START HERE.** Why: the user wants the Results tab to be a place business users work in before
 charting. Feature list + status tracker: `docs/superpowers/specs/2026-11-25-results-panel-features.md` (24 items, 5 phases;

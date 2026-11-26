@@ -9,20 +9,10 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { cn } from '@/lib/utils'
-import type { ColumnDataType, QueryResultColumnDto } from '@/types'
+import type { QueryResultColumnDto } from '@/types'
 import { MAX_COL_WIDTH, MIN_COL_WIDTH } from './column-widths.ts'
 import type { ColumnLayout } from './grid-layout.ts'
-
-const BADGE: Record<ColumnDataType, string> = {
-  text: 'ABC',
-  number: '123',
-  date: 'DATE',
-  // A dateTime is usually a date with a midnight time, so TIME read as a time-of-day column.
-  dateTime: 'DATE',
-  boolean: 'Y/N',
-  guid: 'ID',
-  unknown: '?',
-}
+import { TypeBadge } from './TypeBadge'
 
 const KEY_STEP = 16
 const clampWidth = (w: number) => Math.min(MAX_COL_WIDTH, Math.max(MIN_COL_WIDTH, Math.round(w)))
@@ -111,9 +101,7 @@ export function GridHeaderCell({
       >
         <GripVertical className="size-3.5" />
       </button>
-      <span className="w-8 shrink-0 rounded-sm border border-border text-center font-numeric text-[10px] font-semibold text-muted-foreground">
-        {BADGE[column.dataType]}
-      </span>
+      <TypeBadge dataType={column.dataType} className="w-8 px-0 text-center" />
       <button
         type="button"
         onClick={actions.toggleSort}

@@ -38,7 +38,6 @@ export function useGridSelection({
   pageRows,
   reveal,
   onEnter,
-  onSelectionChange,
   memory,
 }: {
   rows: Row<RowData>[]
@@ -50,7 +49,6 @@ export function useGridSelection({
   pageRows: () => number
   reveal: (pos: CellPos) => void
   onEnter?: (row: RowData) => void
-  onSelectionChange?: (cells: number) => void
   /** Outlives the grid's remount on entering or leaving full screen. */
   memory?: GridMemory
 }) {
@@ -72,25 +70,6 @@ export function useGridSelection({
     (fn: (current: CellRange | null) => CellRange | null) =>
       setSel((s) => ({ resetKey, data, range: fn(sameView(s, resetKey, data) ? s.range : null) })),
     [resetKey, data],
-  )
-
-  const size = range ? rangeSize(range) : 0
-  const lastReported = useRef(0)
-  const reportRef = useRef(onSelectionChange)
-  useEffect(() => {
-    reportRef.current = onSelectionChange
-  }, [onSelectionChange])
-  useEffect(() => {
-    if (lastReported.current === size) return
-    lastReported.current = size
-    onSelectionChange?.(size)
-  }, [size, onSelectionChange])
-  // The grid remounts on full screen and unmounts on an empty search; the footer must not keep the old count.
-  useEffect(
-    () => () => {
-      if (lastReported.current !== 0) reportRef.current?.(0)
-    },
-    [],
   )
 
   const dragging = useRef(false)
@@ -126,6 +105,19 @@ export function useGridSelection({
       toast.success(`Copied ${count(rows.length, 'value')}`)
     },
     [columns, rows],
+  )
+
+  const moveTo = useCallback(
+    (pos: CellPos) => {
+      if (bounds.rows === 0 || bounds.cols === 0) return
+      const next = {
+        row: Math.max(0, Math.min(pos.row, bounds.rows - 1)),
+        col: Math.max(0, Math.min(pos.col, bounds.cols - 1)),
+      }
+      update(() => ({ anchor: next, focus: next }))
+      reveal(next)
+    },
+    [bounds, update, reveal],
   )
 
   const onCellPointerDown = useCallback(
@@ -198,5 +190,5 @@ export function useGridSelection({
     [bounds, range, rows, copy, update, onEnter, pageRows, reveal],
   )
 
-  return { range, copy, copyColumn, onKeyDown, onCellPointerDown, onCellPointerEnter }
+  return { range, copy, copyColumn, moveTo, onKeyDown, onCellPointerDown, onCellPointerEnter }
 }

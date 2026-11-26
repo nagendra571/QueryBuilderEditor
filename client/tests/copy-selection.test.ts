@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { buildCopyText } from '../src/features/builder/results/copy-selection.ts'
+import { toTsv } from '../src/features/builder/results/clipboard-tsv.ts'
+import { buildCopyText, buildRecordText } from '../src/features/builder/results/copy-selection.ts'
 
 const cols = [
   { name: 'Id', dataType: 'number' },
@@ -32,4 +33,18 @@ test('a single column copies header plus values, quoting tabs', () => {
 test('a range past the data is clipped', () => {
   const text = buildCopyText([...cols], rows, { top: 2, bottom: 9, left: 0, right: 0 })
   assert.equal(text, 'Id\r\n3')
+})
+
+test('a record copies as Column/Value lines', () => {
+  const rec = [
+    { name: 'Name', dataType: 'text' },
+    { name: 'Fee', dataType: 'number' },
+    { name: 'Active', dataType: 'boolean' },
+    { name: 'Note', dataType: 'text' },
+  ] as const
+  const text = buildRecordText({ Name: 'A	B', Fee: 12.5, Active: true, Note: null }, [...rec])
+  assert.equal(
+    text,
+    toTsv(['Column', 'Value'], [['Name', 'A	B'], ['Fee', '12.5'], ['Active', 'TRUE'], ['Note', '']]),
+  )
 })
