@@ -15,6 +15,7 @@ import { useDensityStore, type Density } from '../../../state/density-store.ts'
 import { DEFAULT_COL_CAP, FIT_SAMPLE_ROWS, HEADER_FONT, cellFont, createCanvasMeasure, fitWidth } from './column-widths.ts'
 import { displayOrder } from './grid-columns.ts'
 import { compileFormat, isFormatted, type ColumnFormat, type CompiledFormat } from './grid-format.ts'
+import type { TotalFn } from './grid-totals.ts'
 import { buildColumnDefs, tableBehaviour, type RowData } from './grid-table.ts'
 import { removeFilter, rowsPassing, setFilter, showOnly, hideValue, valueKey, type GridFilter } from './grid-filters.ts'
 import { carryOver, defaultView, isDefaultView, type GridView } from './grid-view.ts'
@@ -209,6 +210,10 @@ export function useResultsGrid(result: QueryResultDto) {
       }),
     [setView],
   )
+  const setTotalFn = useCallback(
+    (column: string, fn: TotalFn) => setView((v) => ({ ...v, totals: { ...v.totals, fns: { ...v.totals.fns, [column]: fn } } })),
+    [setView],
+  )
   // Compiled over the rows that pass the column filters, so bars and colour scales span what the grid can show.
   const compiled = useCallback(
     (column: string): CompiledFormat =>
@@ -239,6 +244,7 @@ export function useResultsGrid(result: QueryResultDto) {
     filterRows,
     formats: view.formats,
     setColumnFormat,
+    setTotalFn,
     compiled,
   }
 }

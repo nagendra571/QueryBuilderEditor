@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { ColumnProfileView } from '@/features/builder/results/ColumnProfileView'
+import { FormatTab } from '@/features/builder/results/FormatPanel'
 import { DetailsPanel } from '@/features/builder/results/DetailsPanel'
 import { RowDetails } from '@/features/builder/results/RowDetails'
 import { FilterChips } from '@/features/builder/results/FilterChips'
@@ -227,6 +228,11 @@ export function ResultsTable({
               filterOpenFor={filterOpenFor}
               onFilterOpenChange={setFilterOpenFor}
               onOpenRecord={() => setPanel((p) => ({ ...p, open: true, tab: 'row' }))}
+              onFormat={(name) => {
+                setPanel((p) => ({ ...p, open: true, tab: 'format' }))
+                const col = grid.columns.findIndex((c) => c.name === name)
+                if (col >= 0) gridRef.current?.moveTo({ row: store.get().range?.focus.row ?? 0, col })
+              }}
             />
           </div>
         )}
@@ -256,6 +262,18 @@ export function ResultsTable({
                   recenterColumn.current = f.column
                   grid.setColumnFilter(f)
                 }}
+              />
+            }
+            format={
+              <FormatTab
+                store={store}
+                columns={result.columns}
+                rows={grid.filterRows}
+                formats={grid.formats}
+                totals={view.totals}
+                onChange={grid.setColumnFormat}
+                onTotalChange={grid.setTotalFn}
+                onMove={(pos) => gridRef.current?.moveTo(pos)}
               />
             }
           />

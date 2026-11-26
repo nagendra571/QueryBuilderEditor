@@ -23,6 +23,7 @@ export function DetailsPanel({
   areaWidth,
   row,
   column,
+  format,
 }: {
   state: PanelState
   onChange: (s: PanelState) => void
@@ -31,6 +32,7 @@ export function DetailsPanel({
   areaWidth: number
   row: React.ReactNode
   column: React.ReactNode
+  format: React.ReactNode
 }) {
   const drag = useRef<{ startX: number; startWidth: number } | null>(null)
   const width = clampPanelWidth(state.width, areaWidth)
@@ -91,6 +93,9 @@ export function DetailsPanel({
             <TabsTrigger value="column" className="px-2">
               Column
             </TabsTrigger>
+            <TabsTrigger value="format" className="px-2">
+              Format
+            </TabsTrigger>
           </TabsList>
           <Button variant="ghost" size="icon" className="size-7" aria-label="Close details" onClick={onClose}>
             <X className="size-3.5" />
@@ -101,6 +106,9 @@ export function DetailsPanel({
         </TabsContent>
         <TabsContent value="column" className={TAB_BODY}>
           {column}
+        </TabsContent>
+        <TabsContent value="format" className={TAB_BODY}>
+          {format}
         </TabsContent>
       </Tabs>
     </section>
