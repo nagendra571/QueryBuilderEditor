@@ -16,7 +16,10 @@ export function Histogram({ bins, label, formatBound, onBarClick }: Props) {
   if (onBarClick) {
     return (
       <div role="group" aria-label={label} className="flex h-16 items-end gap-px border-b border-border">
-        {bins.map((b, i) => (
+        {bins.map((b, i) =>
+          b.count === 0 ? (
+            <div key={i} title={tip(b)} className="h-full min-w-px flex-1" />
+          ) : (
           <button
             key={i}
             type="button"
@@ -27,7 +30,8 @@ export function Histogram({ bins, label, formatBound, onBarClick }: Props) {
           >
             <span className="block w-full bg-primary/60 hover:bg-primary" style={{ height: height(b) }} />
           </button>
-        ))}
+          ),
+        )}
       </div>
     )
   }

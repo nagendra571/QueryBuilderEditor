@@ -6,18 +6,19 @@ interface Props {
   /** Raw value of the cell the menu was opened on; null until a cell has been targeted. */
   value: unknown
   hasTarget: boolean
+  onClose: () => void
   onShowOnly: () => void
   onHide: () => void
   onCopyCell: () => void
   onOpenRecord?: () => void
 }
 
-export function CellContextMenu({ children, value, hasTarget, onShowOnly, onHide, onCopyCell, onOpenRecord }: Props) {
+export function CellContextMenu({ children, value, hasTarget, onClose, onShowOnly, onHide, onCopyCell, onOpenRecord }: Props) {
   return (
-    <ContextMenu>
+    <ContextMenu onOpenChange={(open) => !open && onClose()}>
       <ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
       {hasTarget && (
-        <ContextMenuContent>
+        <ContextMenuContent onContextMenu={(e) => e.preventDefault()}>
           <ContextMenuItem onSelect={onShowOnly}>{showOnlyText(value)}</ContextMenuItem>
           <ContextMenuItem onSelect={onHide}>{hideText(value)}</ContextMenuItem>
           <ContextMenuSeparator />

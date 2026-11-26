@@ -168,7 +168,8 @@ export function ResultsGrid({
     saveScroll()
   }, [saveScroll])
 
-  const [menuCell, setMenuCell] = useState<CellPos | null>(null)
+  // The value is snapshotted at open, so a closing menu never shows another row's text.
+  const [menu, setMenu] = useState<{ cell: CellPos; value: unknown } | null>(null)
   const openMenuAtActive = useRef<() => void>(() => {})
   const onContextMenuKey = useCallback(() => openMenuAtActive.current(), [])
 
@@ -209,24 +210,20 @@ export function ResultsGrid({
   const onContextMenuCapture = (e: React.MouseEvent) => {
     const el = (e.target as Element).closest('[data-row][data-col]') as HTMLElement | null
     if (!el) {
-      // Shift+F10 or the menu key arrives with the grid as target; re-aim it at the active cell.
-      if (e.nativeEvent.isTrusted && range && e.target === e.currentTarget && anchorToCell(range.focus)) {
-        e.preventDefault()
-        e.stopPropagation()
-        return
-      }
+      // The browser's own keyboard contextmenu lands on the grid late; the keydown path already opened ours.
+      if (e.target === e.currentTarget) e.preventDefault()
       // Header and row numbers keep the browser's own menu.
       e.stopPropagation()
-      setMenuCell(null)
+      setMenu(null)
       return
     }
     const pos = { row: Number(el.dataset.row), col: Number(el.dataset.col) }
     if (!range || !rangeContains(range, pos)) moveTo(pos)
-    setMenuCell(pos)
+    setMenu({ cell: pos, value: rows[pos.row]?.original[columns[pos.col]?.name] })
   }
+  const menuCell = menu?.cell ?? null
   const menuColumn = menuCell ? columns[menuCell.col] : undefined
-  const menuRow = menuCell ? rows[menuCell.row] : undefined
-  const menuValue = menuColumn && menuRow ? menuRow.original[menuColumn.name] : undefined
+  const menuValue = menu?.value
 
   useImperativeHandle(
     gridRef,
@@ -325,11 +322,19 @@ export function ResultsGrid({
   return (
     <CellContextMenu
       value={menuValue}
-      hasTarget={!!menuColumn && !!menuRow}
+      hasTarget={!!menuColumn}
+      onClose={() => setMenu(null)}
       onShowOnly={() => menuColumn && showOnlyValue(menuColumn.name, menuValue)}
       onHide={() => menuColumn && hideColumnValue(menuColumn.name, menuValue)}
       onCopyCell={() => menuCell && copyCell(menuCell)}
-      onOpenRecord={onOpenRecord}
+      onOpenRecord={
+        onOpenRecord &&
+        (() => {
+          // A right-click inside a kept selection leaves focus elsewhere, and the panel shows the focus row.
+          if (menuCell) moveTo(menuCell)
+          onOpenRecord()
+        })
+      }
     >
     <div
       ref={scrollRef}
