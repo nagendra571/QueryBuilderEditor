@@ -9,21 +9,34 @@ import type { QueryResultDto } from '@/types'
 interface Props {
   store: SelectionStore
   result: QueryResultDto
+  rows: Record<string, unknown>[]
+  filtered: boolean
 }
 
 const HINT = <p className="p-3 text-xs text-muted-foreground">Select a cell to profile its column.</p>
 
-export function ColumnProfileView({ store, result }: Props) {
+export function ColumnProfileView({ store, result, rows, filtered }: Props) {
   const { range, columns } = useSyncExternalStore(store.subscribe, store.get)
   const column = range ? columns[range.focus.col] : undefined
   // The store can still hold the previous run's columns for one frame after a re-run.
   if (!range || !column || !result.columns.includes(column)) return HINT
-  return <Profile result={result} column={column} />
+  return <Profile result={result} column={column} rows={rows} filtered={filtered} />
 }
 
-function Profile({ result, column }: { result: QueryResultDto; column: QueryResultDto['columns'][number] }) {
-  const profile = useMemo(() => profileColumn(result.rows, column), [result.rows, column])
-  const n = result.rows.length
+function Profile({
+  result,
+  column,
+  rows,
+  filtered,
+}: {
+  result: QueryResultDto
+  column: QueryResultDto['columns'][number]
+  rows: Record<string, unknown>[]
+  filtered: boolean
+}) {
+  const profile = useMemo(() => profileColumn(rows, column), [rows, column])
+  const n = rows.length
+  const m = result.rows.length
   const withTime = column.dataType === 'dateTime' && !(profile.kind === 'date' && profile.allMidnight)
   const fmtDate = (ms: number) =>
     withTime ?new Date(ms).toISOString().replace('T', ' ').slice(0, 16) : new Date(ms).toISOString().slice(0, 10)
@@ -43,7 +56,11 @@ function Profile({ result, column }: { result: QueryResultDto; column: QueryResu
               className="flex items-center gap-2 border border-warning/40 bg-warning/20 px-2 py-1.5 text-xs text-foreground"
             >
               <span className="size-2.5 shrink-0 bg-warning" aria-hidden />
-              <span>Based on the first {n.toLocaleString()} rows. The query has more.</span>
+              <span>
+                {filtered
+                  ? `Based on ${n.toLocaleString()} filtered rows of the first ${m.toLocaleString()}. The query has more.`
+                  : `Based on the first ${n.toLocaleString()} rows. The query has more.`}
+              </span>
             </div>
             <button
               type="button"
@@ -54,7 +71,9 @@ function Profile({ result, column }: { result: QueryResultDto; column: QueryResu
             </button>
           </>
         ) : (
-          <p className="text-xs text-muted-foreground">Based on all {n.toLocaleString()} rows</p>
+          <p className="text-xs text-muted-foreground">
+            {filtered ? `Based on ${n.toLocaleString()} filtered rows` : `Based on all ${n.toLocaleString()} rows`}
+          </p>
         )}
       </div>
 

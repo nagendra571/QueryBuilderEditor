@@ -174,7 +174,7 @@ export function ResultsTable({
             mode={panelMode(areaWidth)}
             areaWidth={areaWidth}
             row={<RowDetails store={store} gridRef={gridRef} onRowClick={onRowClick} rowActionLabel={rowActionLabel} />}
-            column={<ColumnProfileView store={store} result={result} />}
+            column={<ColumnProfileView store={store} result={result} rows={grid.filterRows} filtered={grid.filters.length > 0} />}
           />
         )}
       </div>

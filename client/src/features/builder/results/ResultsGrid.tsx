@@ -56,6 +56,7 @@ export function ResultsGrid({
     view.order.join('\u0001'),
     view.hidden.join('\u0001'),
     view.pinnedLeft.join('\u0001'),
+    JSON.stringify(view.filters),
     view.pinnedRight.join('\u0001'),
   ].join('\u0002')
 
