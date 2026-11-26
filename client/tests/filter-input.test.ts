@@ -1,0 +1,77 @@
+import test from 'node:test'
+import assert from 'node:assert/strict'
+import { boundInputText, buildRangeFilter, canApplyRange, filterFromTicks, initialTicks, parseBound, rangeProblem } from '../src/features/builder/results/filter-input.ts'
+import type { ValueOption } from '../src/features/builder/results/grid-filters.ts'
+
+const opts = (...v: (string | null)[]): ValueOption[] => v.map((value) => ({ value, label: String(value), count: 1 }))
+
+test('numbers parse, blanks are open ends, junk is invalid', () => {
+  assert.deepEqual(parseBound('', 'number', false), { ok: true, value: null })
+  assert.deepEqual(parseBound(' 2.5 ', 'number', false), { ok: true, value: 2.5 })
+  assert.equal(parseBound('abc', 'number', false).ok, false)
+})
+
+test('dateTime To includes the whole day; date To is midnight', () => {
+  assert.deepEqual(parseBound('2026-03-05', 'dateTime', true), { ok: true, value: Date.UTC(2026, 2, 5) + 86_399_999 })
+  assert.deepEqual(parseBound('2026-03-05', 'dateTime', false), { ok: true, value: Date.UTC(2026, 2, 5) })
+  assert.deepEqual(parseBound('2026-03-05', 'date', true), { ok: true, value: Date.UTC(2026, 2, 5) })
+})
+
+test('range problems', () => {
+  assert.equal(rangeProblem('5', '1', 'number'), 'order')
+  assert.equal(rangeProblem('x', '', 'number'), 'invalid')
+  assert.equal(rangeProblem('1', '', 'number'), null)
+  assert.equal(buildRangeFilter('c', 'x', '', false, 'number'), null)
+  assert.deepEqual(buildRangeFilter('c', '1', '', true, 'number'), { kind: 'range', column: 'c', min: 1, max: null, includeEmpty: true })
+})
+
+test('bound text round-trips', () => {
+  assert.equal(boundInputText(Date.UTC(2026, 2, 5), 'date'), '2026-03-05')
+  assert.equal(boundInputText(7, 'number'), '7')
+  assert.equal(boundInputText(null, 'number'), '')
+})
+
+test('ticks start from the existing filter', () => {
+  const o = opts('a', 'b', 'c', 'd')
+  assert.equal(initialTicks(o, undefined).size, 4)
+  assert.deepEqual([...initialTicks(o, { kind: 'values', column: 'x', mode: 'include', values: ['a'] })], ['a'])
+  assert.deepEqual([...initialTicks(o, { kind: 'values', column: 'x', mode: 'exclude', values: ['a'] })], ['b', 'c', 'd'])
+})
+
+test('apply picks include below half, exclude otherwise, none when all ticked', () => {
+  const o = opts('a', 'b', 'c', 'd')
+  assert.equal(filterFromTicks('x', o, new Set(['a', 'b', 'c', 'd'])), null)
+  assert.deepEqual(filterFromTicks('x', o, new Set(['a'])), { kind: 'values', column: 'x', mode: 'include', values: ['a'] })
+  assert.deepEqual(filterFromTicks('x', o, new Set(['a', 'b'])), { kind: 'values', column: 'x', mode: 'exclude', values: ['c', 'd'] })
+})
+
+test('unlisted values in the existing filter are carried forward', () => {
+  const o = opts('a', 'b', 'c', 'd')
+  const ex = { kind: 'values', column: 'x', mode: 'exclude', values: ['z'] } as const
+  assert.deepEqual(filterFromTicks('x', o, new Set(['a', 'b', 'c', 'd']), ex), { kind: 'values', column: 'x', mode: 'exclude', values: ['z'] })
+  assert.deepEqual(filterFromTicks('x', o, new Set(['a', 'b', 'c']), ex), { kind: 'values', column: 'x', mode: 'exclude', values: ['d', 'z'] })
+  const inc = { kind: 'values', column: 'x', mode: 'include', values: ['a', 'z'] } as const
+  assert.deepEqual(filterFromTicks('x', o, initialTicks(o, inc), inc), { kind: 'values', column: 'x', mode: 'include', values: ['a', 'z'] })
+})
+
+test('a truncated list excludes by default and includes only after Clear', () => {
+  const o = opts('a', 'b', 'c', 'd')
+  assert.deepEqual(filterFromTicks('x', o, new Set(['a']), undefined, true), { kind: 'values', column: 'x', mode: 'exclude', values: ['b', 'c', 'd'] })
+  assert.deepEqual(filterFromTicks('x', o, new Set(['a']), undefined, true, true), { kind: 'values', column: 'x', mode: 'include', values: ['a'] })
+  assert.equal(filterFromTicks('x', o, new Set(['a', 'b', 'c', 'd']), undefined, true), null)
+})
+
+test('an include filter that cannot see every value stays an include', () => {
+  const o = opts('a', 'b', 'c', 'd')
+  const inc = { kind: 'values', column: 'x', mode: 'include', values: ['a', 'z'] } as const
+  assert.deepEqual(filterFromTicks('x', o, new Set(['a', 'b', 'c']), inc), { kind: 'values', column: 'x', mode: 'include', values: ['a', 'b', 'c', 'z'] })
+  assert.deepEqual(filterFromTicks('x', o, new Set(['a', 'b', 'c', 'd']), inc), { kind: 'values', column: 'x', mode: 'include', values: ['a', 'b', 'c', 'd', 'z'] })
+  const onlyA = { kind: 'values', column: 'x', mode: 'include', values: ['a'] } as const
+  assert.deepEqual(filterFromTicks('x', o, new Set(['a', 'b']), onlyA, true), { kind: 'values', column: 'x', mode: 'include', values: ['a', 'b'] })
+})
+
+test('a range can be applied only with a bound or with empties kept', () => {
+  assert.equal(canApplyRange('', ' ', false), false)
+  assert.equal(canApplyRange('1', '', false), true)
+  assert.equal(canApplyRange('', '', true), true)
+})

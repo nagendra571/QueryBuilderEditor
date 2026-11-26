@@ -1,6 +1,7 @@
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { ArrowDown, ArrowUp, ChevronsUpDown, GripVertical, MoreVertical, Pin } from 'lucide-react'
+import { useRef } from 'react'
+import { ArrowDown, ArrowUp, ChevronsUpDown, Filter, GripVertical, MoreVertical, Pin } from 'lucide-react'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -8,6 +9,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { Popover, PopoverAnchor, PopoverTrigger } from '@/components/ui/popover'
 import { cn } from '@/lib/utils'
 import type { QueryResultColumnDto } from '@/types'
 import { MAX_COL_WIDTH, MIN_COL_WIDTH } from './column-widths.ts'
@@ -26,6 +28,7 @@ export interface HeaderActions {
   fit: () => void
   copyColumn: () => void
   resize: (width: number) => void
+  filter: { active: boolean; open: () => void; clear: () => void }
 }
 
 export function GridHeaderCell({
@@ -34,15 +37,24 @@ export function GridHeaderCell({
   colIndex,
   sortDirection,
   actions,
+  filterOpen,
+  onFilterOpenChange,
+  filterContent,
 }: {
   column: QueryResultColumnDto
   layout: ColumnLayout
   colIndex: number
   sortDirection: 'asc' | 'desc' | null
   actions: HeaderActions
+  filterOpen: boolean
+  onFilterOpenChange: (open: boolean) => void
+  /** Rendered only while open. */
+  filterContent: React.ReactNode
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: column.name })
   const pinned = layout.group !== 'centre'
+  // Opening the popover from the menu waits for the menu's own focus return, which would otherwise dismiss it.
+  const openFilterAfterMenu = useRef(false)
 
   const style: React.CSSProperties = {
     width: layout.width,
@@ -81,6 +93,8 @@ export function GridHeaderCell({
   }
 
   return (
+    <Popover open={filterOpen} onOpenChange={onFilterOpenChange}>
+    <PopoverAnchor asChild>
     <div
       ref={setNodeRef}
       role="columnheader"
@@ -113,6 +127,18 @@ export function GridHeaderCell({
         {sortDirection === 'desc' && <ArrowDown className="size-3 shrink-0" />}
         {!sortDirection && <ChevronsUpDown className="size-3 shrink-0 opacity-30" />}
       </button>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          aria-label={actions.filter.active ? `Filter ${column.name} (active)` : `Filter ${column.name}`}
+          className={cn(
+            'flex size-[18px] shrink-0 items-center justify-center rounded-sm hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring',
+            actions.filter.active ? 'text-primary' : 'text-muted-foreground/60',
+          )}
+        >
+          <Filter className={cn('size-3.5', actions.filter.active && 'fill-current')} />
+        </button>
+      </PopoverTrigger>
       {pinned && <Pin className="size-3 shrink-0 text-muted-foreground" aria-label="Pinned" />}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
@@ -124,10 +150,27 @@ export function GridHeaderCell({
             <MoreVertical className="size-3.5" />
           </button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="start">
+        <DropdownMenuContent
+          align="start"
+          onCloseAutoFocus={(e) => {
+            if (!openFilterAfterMenu.current) return
+            openFilterAfterMenu.current = false
+            e.preventDefault()
+            actions.filter.open()
+          }}
+        >
           <DropdownMenuItem onSelect={() => actions.setSort('asc')}>Sort ascending</DropdownMenuItem>
           <DropdownMenuItem onSelect={() => actions.setSort('desc')}>Sort descending</DropdownMenuItem>
           {sortDirection && <DropdownMenuItem onSelect={() => actions.setSort(null)}>Clear sort</DropdownMenuItem>}
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            onSelect={() => {
+              openFilterAfterMenu.current = true
+            }}
+          >
+            Filter…
+          </DropdownMenuItem>
+          {actions.filter.active && <DropdownMenuItem onSelect={actions.filter.clear}>Clear filter</DropdownMenuItem>}
           <DropdownMenuSeparator />
           {layout.group !== 'left' && <DropdownMenuItem onSelect={() => actions.pin('left')}>Pin to left</DropdownMenuItem>}
           {layout.group !== 'right' && <DropdownMenuItem onSelect={() => actions.pin('right')}>Pin to right</DropdownMenuItem>}
@@ -156,5 +199,8 @@ export function GridHeaderCell({
         className="absolute inset-y-0 right-0 w-1.5 cursor-col-resize touch-none hover:bg-primary/40 focus-visible:bg-primary focus-visible:outline-none"
       />
     </div>
+    </PopoverAnchor>
+    {filterOpen && filterContent}
+    </Popover>
   )
 }

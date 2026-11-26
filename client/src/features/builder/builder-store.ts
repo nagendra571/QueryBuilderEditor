@@ -132,6 +132,9 @@ interface BuilderState {
   setFilterLogicalOperator: (operator: 'and' | 'or') => void
   toggleFilterParameterized: (index: number) => void
 
+  appendFilterConditions: (conditions: FilterCondition[]) => void
+  appendHavingConditions: (conditions: FilterCondition[]) => void
+
   addHavingCondition: () => void
   updateHavingCondition: (index: number, patch: Partial<FilterCondition>) => void
   removeHavingCondition: (index: number) => void
@@ -360,6 +363,31 @@ export const useBuilderStore = create<BuilderState>((set) => ({
             ),
           },
         },
+        isDirty: true,
+      }
+    }),
+
+  appendFilterConditions: (conditions) =>
+    set((state) => {
+      if (conditions.length === 0) return state
+      return {
+        definition: reconcileParameters({
+          ...state.definition,
+          filters: { ...state.definition.filters, conditions: [...state.definition.filters.conditions, ...conditions] },
+        }),
+        isDirty: true,
+      }
+    }),
+
+  appendHavingConditions: (conditions) =>
+    set((state) => {
+      if (conditions.length === 0) return state
+      const having = state.definition.having ?? emptyFilterGroup()
+      return {
+        definition: reconcileParameters({
+          ...state.definition,
+          having: { ...having, conditions: [...having.conditions, ...conditions] },
+        }),
         isDirty: true,
       }
     }),

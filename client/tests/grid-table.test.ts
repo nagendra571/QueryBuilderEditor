@@ -65,3 +65,13 @@ test('search skips hidden columns but keeps visible matches', () => {
   assert.equal(run(rows, { search: ' B ', hidden: ['hid'] }).length, 1)
   assert.equal(run(rows, { search: '   ' }).length, 4)
 })
+
+test('column filterFn delegates to matchesFilter', () => {
+  const defs = buildColumnDefs(columns as never)
+  const fn = defs[0].filterFn as (row: unknown, id: string, f: unknown) => boolean
+  assert.equal(typeof fn, 'function')
+  const row = { getValue: () => '12.50' }
+  const f = { kind: 'range', column: 'n', min: 10, max: 20, includeEmpty: false }
+  assert.equal(fn(row, 'n', f), true)
+  assert.equal(fn(row, 'n', { ...f, min: 13, max: 20 }), false)
+})

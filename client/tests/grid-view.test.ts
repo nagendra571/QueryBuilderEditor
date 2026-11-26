@@ -21,6 +21,7 @@ function customised(): GridView {
     search: 'x',
     density: 'compact' as GridView['density'],
     wrap: true,
+    filters: [{ kind: 'values', column: 'A', mode: 'include', values: ['x'] }],
   }
 }
 
@@ -35,7 +36,19 @@ test('defaultView lists columns in order with nothing else set', () => {
     search: '',
     density: null,
     wrap: false,
+    filters: [],
   })
+})
+
+test('carryOver keeps filters on the same column set and drops them otherwise', () => {
+  const v = customised()
+  assert.deepEqual(carryOver(v, cols, ['C', 'B', 'A']).filters, v.filters)
+  assert.deepEqual(carryOver(v, cols, ['A', 'B']).filters, [])
+})
+
+test('isDefaultView is false with filters', () => {
+  const v = { ...defaultView(cols), filters: [{ kind: 'range' as const, column: 'A', min: 1, max: null, includeEmpty: false }] }
+  assert.equal(isDefaultView(v, cols), false)
 })
 
 test('carryOver keeps everything when the same names come back in another order', () => {
