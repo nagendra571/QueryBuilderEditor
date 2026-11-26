@@ -99,7 +99,7 @@ export const GridRow = memo(function GridRow({
     const focused = focusCol === ci
     const isNumber = col.dataType === 'number'
     const value = row.original[col.name]
-    const look = value === null || value === undefined || typeof value === 'boolean' ? null : formats[ci].look(value)
+    const look = typeof value === 'boolean' ? null : formats[ci].look(value)
     const tint = selected ? undefined : lookBackground(look, pinned)
     return (
       <div

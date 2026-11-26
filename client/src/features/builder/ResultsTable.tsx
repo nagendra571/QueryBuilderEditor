@@ -249,6 +249,7 @@ export function ResultsTable({
                 rows={grid.filterRows}
                 filtered={grid.filters.length > 0}
                 compiled={grid.compiled}
+                formats={grid.formats}
                 onShowOnly={fromPanel(grid.showOnlyValue)}
                 onHide={fromPanel(grid.hideColumnValue)}
                 onRange={(f) => {

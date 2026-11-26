@@ -7,7 +7,8 @@ import { profileColumn, type Bin, type ColumnProfile } from './column-profile.ts
 import { formatTotal } from './selection-totals.ts'
 import { TypeBadge } from './TypeBadge'
 import type { SelectionStore } from './selection-store.ts'
-import type { CompiledFormat } from './grid-format.ts'
+import { parseDateValue } from './column-profile.ts'
+import type { ColumnFormat, CompiledFormat } from './grid-format.ts'
 import type { QueryResultDto } from '@/types'
 
 interface Props {
@@ -17,6 +18,7 @@ interface Props {
   filtered: boolean
   /** The column's compiled format, for the min, max, average and similar figures. */
   compiled: (column: string) => CompiledFormat
+  formats: Record<string, ColumnFormat>
   onShowOnly: (column: string, raw: unknown) => void
   onHide: (column: string, raw: unknown) => void
   onRange: (filter: GridFilter) => void
@@ -30,12 +32,12 @@ interface Actions {
 
 const HINT = <p className="p-3 text-xs text-muted-foreground">Select a cell to profile its column.</p>
 
-export function ColumnProfileView({ store, result, rows, filtered, compiled, onShowOnly, onHide, onRange }: Props) {
+export function ColumnProfileView({ store, result, rows, filtered, compiled, formats, onShowOnly, onHide, onRange }: Props) {
   const { range, columns } = useSyncExternalStore(store.subscribe, store.get)
   const column = range ? columns[range.focus.col] : undefined
   // The store can still hold the previous run's columns for one frame after a re-run.
   if (!range || !column || !result.columns.includes(column)) return HINT
-  return <Profile result={result} column={column} rows={rows} filtered={filtered} format={compiled(column.name)} actions={{ onShowOnly, onHide, onRange }} />
+  return <Profile result={result} column={column} rows={rows} filtered={filtered} format={compiled(column.name)} columnFormat={formats[column.name]} actions={{ onShowOnly, onHide, onRange }} />
 }
 
 function Profile({
@@ -44,9 +46,11 @@ function Profile({
   rows,
   filtered,
   format,
+  columnFormat,
   actions,
 }: {
   format: CompiledFormat
+  columnFormat: ColumnFormat | undefined
   actions: Actions
   result: QueryResultDto
   column: QueryResultDto['columns'][number]
@@ -61,8 +65,16 @@ function Profile({
     withTime ?new Date(ms).toISOString().replace('T', ' ').slice(0, 16) : new Date(ms).toISOString().slice(0, 10)
   const fmtNum = (v: number) => formatTotal(v, 4)
   // Tiles follow the column's format; bin bounds stay on the plain functions above.
-  const tileNum = format.formatted ? format.text : fmtNum
-  const tileDate = format.formatted ? (ms: number) => format.text(fmtDate(ms)) : fmtDate
+  // Bars, scales and rules leave the numbers as they were; only a number or date format changes the tiles.
+  const tileNum = columnFormat?.number && columnFormat.number.style !== 'auto' ? format.text : fmtNum
+  // The original value is formatted, not the UTC day, so a zoned value reads the same as in its cell.
+  const tileDate =
+    columnFormat?.date && columnFormat.date.pattern !== 'auto'
+      ? (ms: number) => {
+          const raw = rows.find((r) => parseDateValue(r[column.name]) === ms)?.[column.name]
+          return raw === undefined ? fmtDate(ms) : format.text(raw)
+        }
+      : fmtDate
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">

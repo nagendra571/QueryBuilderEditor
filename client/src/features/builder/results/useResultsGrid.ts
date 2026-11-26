@@ -18,9 +18,8 @@ import { compileFormat, isFormatted, type ColumnFormat, type CompiledFormat } fr
 import { buildColumnDefs, tableBehaviour, type RowData } from './grid-table.ts'
 import { removeFilter, rowsPassing, setFilter, showOnly, hideValue, valueKey, type GridFilter } from './grid-filters.ts'
 import { carryOver, defaultView, isDefaultView, type GridView } from './grid-view.ts'
-import { HEADER_EXTRA, PINNED_HEADER_EXTRA, headerExtra } from './header-width.ts'
+import { headerExtra } from './header-width.ts'
 
-export { HEADER_EXTRA, PINNED_HEADER_EXTRA }
 
 function resolve<T>(updater: Updater<T>, current: T): T {
   return typeof updater === 'function' ? (updater as (old: T) => T)(current) : updater
