@@ -1,3 +1,4 @@
+import { useRef } from 'react'
 import { X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { chipText, type GridFilter } from '@/features/builder/results/grid-filters'
@@ -14,6 +15,7 @@ export function FilterChips({
   onClearAll,
   onAddToQuery,
   addDisabledReason,
+  onEmptied,
 }: {
   filters: GridFilter[]
   columns: QueryResultColumnDto[]
@@ -25,11 +27,24 @@ export function FilterChips({
   onClearAll: () => void
   onAddToQuery?: () => void
   addDisabledReason?: string
+  /** Called after the last chip goes, so focus has somewhere to land once this bar unmounts. */
+  onEmptied?: () => void
 }) {
+  const bar = useRef<HTMLDivElement>(null)
   if (filters.length === 0) return null
+
+  // Removing unmounts the focused element, which would drop focus to body.
+  const remove = (column: string) => {
+    const mains = Array.from(bar.current?.querySelectorAll<HTMLButtonElement>('[data-chip-main]') ?? [])
+    const i = mains.findIndex((b) => b.dataset.chipMain === column)
+    const next = mains[i + 1] ?? mains[i - 1]
+    if (next) next.focus()
+    else onEmptied?.()
+    onRemove(column)
+  }
   return (
-    <div className="flex flex-wrap items-center gap-2 border-b border-border px-(--space-row-x) py-1.5 text-xs">
-      <span className="tracking-widest text-muted-foreground uppercase">FILTERS</span>
+    <div ref={bar} className="flex flex-wrap items-center gap-2 border-b border-border px-(--space-row-x) py-1.5 text-xs">
+      <span className="font-numeric text-[11px] font-semibold tracking-wider text-muted-foreground uppercase">FILTERS</span>
       {filters.map((f) => {
         const dataType = columns.find((c) => c.name === f.column)?.dataType ?? 'unknown'
         const { column, text, title } = chipText(f, dataType)
@@ -41,6 +56,7 @@ export function FilterChips({
           >
             <button
               type="button"
+              data-chip-main={column}
               title={isHidden ? `${title} (hidden)` : title}
               className="flex max-w-xs items-center gap-1 px-2 py-1 focus-visible:outline-2 focus-visible:outline-ring"
               onClick={() => {
@@ -49,7 +65,7 @@ export function FilterChips({
               onKeyDown={(e) => {
                 if (e.key === 'Delete' || e.key === 'Backspace') {
                   e.preventDefault()
-                  onRemove(column)
+                  remove(column)
                 }
               }}
             >
@@ -63,7 +79,7 @@ export function FilterChips({
               type="button"
               aria-label={`Remove filter on ${column}`}
               className="px-1.5 py-1 hover:bg-primary/20 focus-visible:outline-2 focus-visible:outline-ring"
-              onClick={() => onRemove(column)}
+              onClick={() => remove(column)}
             >
               <X className="size-3" aria-hidden />
             </button>
@@ -77,7 +93,10 @@ export function FilterChips({
         </span>
       )}
       <span className="ml-auto flex items-center gap-2">
-        <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={onClearAll}>
+        <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => {
+            onEmptied?.()
+            onClearAll()
+          }}>
           Clear all
         </Button>
         {onAddToQuery && (

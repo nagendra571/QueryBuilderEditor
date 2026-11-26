@@ -154,6 +154,10 @@ export function ResultsTable({
         onOpen={setFilterOpenFor}
         onRemove={grid.clearColumnFilter}
         onClearAll={grid.clearFilters}
+        onEmptied={() => {
+          if (gridRef.current) gridRef.current.focus()
+          else document.querySelector<HTMLInputElement>('input[aria-label="Search rows"]')?.focus()
+        }}
       />
 
       <div ref={bandRef} className="relative flex min-h-0 flex-1">
