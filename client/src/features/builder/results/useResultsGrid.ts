@@ -18,7 +18,7 @@ import { buildColumnDefs, tableBehaviour, type RowData } from './grid-table.ts'
 import { carryOver, defaultView, isDefaultView, type GridView } from './grid-view.ts'
 
 // Header padding 20 + type badge ~36 + sort mark ~16 + menu button ~24.
-const HEADER_EXTRA = 96
+export const HEADER_EXTRA = 96
 
 function resolve<T>(updater: Updater<T>, current: T): T {
   return typeof updater === 'function' ? (updater as (old: T) => T)(current) : updater
