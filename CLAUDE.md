@@ -36,6 +36,25 @@ integration ergonomics (single-call registration, embedded SPA, DBA-friendly mig
 
 ## Where we left off (update this at the end of each session)
 
+**2026-11-25: RESULTS PANEL phase 1 ("foundation") BUILT on branch `feature/results-grid` (local commits only, NOT pushed,
+NOT released, no version bump). START HERE.** Why: the user wants the Results tab to be a place business users work in before
+charting. Feature list + status tracker: `docs/superpowers/specs/2026-11-25-results-panel-features.md` (24 items, 5 phases;
+#1–5 and #16 now "Done (unreleased)"). Phase 1 spec `docs/superpowers/specs/2026-11-25-results-grid-foundation-design.md`,
+mockup `docs/superpowers/specs/assets/2026-11-25-results-grid-mockup.html` (user chose option A "Ledger"), plan
+`docs/superpowers/plans/2026-11-25-results-grid-foundation.md`. Built: `@tanstack/react-table` 8.21.3 + `@tanstack/react-virtual`
+3.14.28 (MIT, exact versions; user approved the deps); virtual rows (+ centre-column virtualisation above 16 columns, off while
+wrapping), pin left/right, resize/fit/keyboard resize, wrap (text only, 4 lines), grid-only density, in-app full screen (portal,
+`#root` inert, Toaster portalled to body, one Escape exits, scroll + selection kept), cell selection + Ctrl+C/Copy as TSV via
+`copy` event + `execCommand` (works on http), header menu, re-run keeps layout (QueryEditorPage keeps the last result while a
+run is pending), drill button in the row-number cell + Enter. Client-only: no API/schema change. Code in
+`client/src/features/builder/results/` (pure logic files have node tests; client 315/315). Verified: Playwright acceptance on the
+sample app (2,500-row view, 64-column view, http via a routed `http://qb.test`, both themes, 64 cols ~26 ms/scroll frame); Opus
+whole-branch review "with fixes" → all fixed and re-reviewed. Known/parked: a selection can reappear after clearing a no-match
+search; wrap + full-screen toggle may restore scroll a few rows off; changing density re-fits unsized columns; dates still show
+raw ISO text (formats are phase 4). All temporary acceptance state was removed. Next: user decides merge/PR and release
+(Editor 2.3.0 suggested; release needs the full server suites per the release workflow), then phase 2 (record panel, column
+profile, selection totals). The CSV/JSON data-source brainstorm below is paused, not abandoned.
+
 **2026-11-19..25: NEW FEATURE IN BRAINSTORMING — CSV and JSON data sources. START HERE.** Nothing built, no branch, no
 spec yet (brainstorming skill in progress; next steps: get the user's "why", lay out approaches, short/full design doc in
 `docs/superpowers/specs/`, approval, then writing-plans). The user's ask: add CSV and JSON as data source types beside SQL
