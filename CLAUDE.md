@@ -36,6 +36,25 @@ integration ergonomics (single-call registration, embedded SPA, DBA-friendly mig
 
 ## Where we left off (update this at the end of each session)
 
+**2026-11-26 (later): RESULTS PANEL phase 3 (grid filters) BUILT on branch `feature/results-filters` (local commits only, NOT
+pushed, NOT released). START HERE.** Phase 2 merged to `main` via PR #12 (`68441cb`), unreleased. Spec
+`docs/superpowers/specs/2026-11-26-results-filters-design.md` (user chose option A: grid filters work on the loaded rows; "Add to
+query" turns them into builder filters and re-runs), mockup `docs/superpowers/specs/assets/2026-11-26-results-filters-mockup.html`,
+plan `docs/superpowers/plans/2026-11-26-results-filters.md`. Tracker #10–13 "Done (unreleased)". Built (client-only): `GridFilter[]`
+in `GridView.filters` (carry-over/full screen/Reset), `grid-filters.ts` (matching with compiled, WeakMap-cached matchers; cascading
+value lists capped at 1,000; chip text), `filter-input.ts` (checklist → include/exclude, carries values not in the list, truncated
+lists default to exclude), header filter mark + popovers (values/range), chips bar, right-click `CellContextMenu` (one Radix
+ContextMenu root, Shift+F10 via a synthetic event), Details-panel filter actions (panel filters keep the active column),
+`filters-to-query.ts` (`planAddToQuery`: WHERE vs HAVING by aggregate, isTrue/isFalse for booleans, JSON in-lists when values have
+commas/edge spaces, exact ms date bounds, blocked/warned cases), `AddToQueryDialog`, builder-store `appendFilterConditions` /
+`appendHavingConditions`; QueryEditorPage run/export/preview now read `useBuilderStore.getState().definition` (stale-closure fix).
+Bundle `index-RUqVBcWO.js`; client 399/399 (also TZ=Asia/Kolkata). Verified: Opus final review "with fixes" → 14 fixes, re-reviewed;
+Playwright acceptance (values/range/right-click/panel filters, chips, Add to query on WHERE and HAVING with request bodies checked,
+Esc order in full screen, dark theme); temporary views/allowlist removed again (allowlist 56). Parked: a chip clicked while filters
+hide every row makes its popover open by itself once rows return (one-line fix offered); long Postgres numeric text can't be
+matched by Show only in the query; histogram bars share boundaries. Next: user decides PR (+ release, Editor 2.3.0 suggested for
+phases 1–3), then phase 4 (#9 totals row, #14 conditional formatting, #15 number/date formats).
+
 **2026-11-26: RESULTS PANEL phase 2 (details panel + profiles + selection totals) BUILT on branch `feature/results-panels`
 (local commits only, NOT pushed, NOT released). START HERE.** Phase 1 was merged to `main` via PR #11 (`64a2240`), unreleased.
 Spec `docs/superpowers/specs/2026-11-26-results-details-panel-design.md` (user chose option A "Inspector that follows you" and
