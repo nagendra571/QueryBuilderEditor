@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { ColumnProfileView } from '@/features/builder/results/ColumnProfileView'
 import { DetailsPanel } from '@/features/builder/results/DetailsPanel'
 import { RowDetails } from '@/features/builder/results/RowDetails'
+import { FilterChips } from '@/features/builder/results/FilterChips'
 import { ResultsFooter } from '@/features/builder/results/ResultsFooter'
 import { ResultsGrid, type GridHandle } from '@/features/builder/results/ResultsGrid'
 import { ResultsToolbar } from '@/features/builder/results/ResultsToolbar'
@@ -143,6 +144,17 @@ export function ResultsTable({
           )}
         </div>
       )}
+
+      <FilterChips
+        filters={grid.filters}
+        columns={grid.allColumns}
+        hidden={view.hidden}
+        truncated={result.truncated}
+        loadedRows={result.rows.length}
+        onOpen={setFilterOpenFor}
+        onRemove={grid.clearColumnFilter}
+        onClearAll={grid.clearFilters}
+      />
 
       <div ref={bandRef} className="relative flex min-h-0 flex-1">
         {noRows ? (
