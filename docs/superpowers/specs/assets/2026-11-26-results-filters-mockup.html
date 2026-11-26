@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Results grid: filters</title>
+<style>
+  :root{--ground:#eef1ec;--ink:#1e2a38;--white:#fff;--blue:#2f6db5;--wash:#dde7f3;--deep:#173c66;--tint:#e2e7e0;--mbg:#e6eae4;--muted:#52605b;--edge:#c9d1c7;--input:#8c9891;--yellow:#f2c94c;--yink:#3b2c00;
+    --sans:"Public Sans Variable","Public Sans",ui-sans-serif,system-ui,sans-serif;--num:"Barlow Condensed","Arial Narrow",ui-sans-serif,sans-serif}
+  *{box-sizing:border-box} body{margin:0;background:var(--ground);color:var(--ink);font:14px/1.45 var(--sans);padding:24px 28px 60px}
+  h1{font-size:22px;margin:0 0 4px} .lede{color:var(--muted);margin:0 0 18px;max-width:980px}
+  h2{font-size:15px;margin:26px 0 8px}
+  .panel{background:var(--white);border:1px solid var(--edge);border-radius:4px;overflow:hidden;position:relative}
+  .toolbar{display:flex;align-items:center;gap:6px;padding:7px 10px;border-bottom:1px solid var(--edge)}
+  .search{width:200px;height:28px;border:1px solid var(--input);border-radius:4px;padding:0 8px;color:var(--muted);font-size:12px;display:flex;align-items:center}
+  .btn{height:28px;display:inline-flex;align-items:center;gap:5px;padding:0 9px;border:1px solid var(--edge);border-radius:4px;font-size:12px;font-weight:500;background:var(--ground);white-space:nowrap}
+  .btn.primary{background:var(--blue);border-color:var(--blue);color:#fff}
+  .btn.ghost{border-color:transparent;background:transparent;color:var(--muted)}
+  .meta{margin-left:auto;font:500 13px var(--num);color:var(--muted)}
+  .warn{display:flex;gap:8px;align-items:center;background:#fbf1cf;border-bottom:1px solid #ecd98f;padding:5px 10px;font-size:12px}
+  .warn i{width:9px;height:9px;background:var(--yellow);flex:none}
+  .chips{display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:6px 10px;border-bottom:1px solid var(--edge);background:#f8faf7}
+  .chips .lbl{font:600 11px var(--num);letter-spacing:.08em;color:var(--muted);text-transform:uppercase;margin-right:2px}
+  .chip{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 4px 0 8px;border:1px solid #b9cbe4;background:var(--wash);color:var(--deep);border-radius:3px;font-size:12px}
+  .chip b{font-weight:600}.chip .n{font-family:var(--num);font-size:13px}
+  .chip .x{width:18px;height:18px;display:inline-flex;align-items:center;justify-content:center;border-radius:2px;color:var(--deep)}
+  .chips .scope{font:500 12px var(--num);color:var(--yink);background:#fbf1cf;border:1px solid #ecd98f;border-radius:3px;padding:1px 6px}
+  .chips .right{margin-left:auto;display:flex;gap:6px;align-items:center}
+  table{border-collapse:separate;border-spacing:0;font-size:13px;width:100%}
+  th,td{height:34px;padding:0 10px;white-space:nowrap;text-align:left;border-right:1px solid #e4e9e2;border-bottom:1px solid #e4e9e2}
+  thead th{background:#f6f8f5;border-bottom:1px solid var(--ink);font-size:12px;font-weight:600}
+  .num{text-align:right;font-family:var(--num);font-size:14px}
+  .rn{width:42px;text-align:right;color:#8a968f;font:500 12px var(--num);background:var(--ground)}
+  .ty{font:600 10px var(--num);color:var(--muted);border:1px solid var(--edge);border-radius:2px;padding:0 3px;margin-right:6px}
+  .fn{display:inline-flex;width:20px;height:20px;align-items:center;justify-content:center;border-radius:3px;margin-left:6px;color:#8a968f;font-size:12px;vertical-align:middle}
+  .fn.on{background:var(--blue);color:#fff}
+  .focus{outline:2px solid var(--blue);outline-offset:-2px;background:var(--wash)}
+  .foot{display:flex;gap:14px;padding:6px 12px;border-top:1px solid var(--edge);background:var(--ground);font:500 13px var(--num);color:var(--muted)}
+  .pop{position:absolute;background:#fff;border:1px solid var(--edge);border-radius:4px;box-shadow:0 8px 24px -8px rgb(30 42 56/.35);font-size:12px;z-index:5}
+  .pop h5{margin:0;padding:8px 10px 6px;font-size:12px;display:flex;gap:6px;align-items:center;border-bottom:1px solid var(--edge)}
+  .pop .in{margin:8px 10px;height:26px;border:1px solid var(--input);border-radius:3px;padding:0 8px;display:flex;align-items:center;color:var(--muted)}
+  .pop .tools{display:flex;gap:10px;padding:0 10px 4px;color:var(--blue);font-weight:500}
+  .pop .list{max-height:170px;overflow:hidden;padding:2px 0}
+  .pop .it{display:grid;grid-template-columns:16px 1fr 40px;gap:8px;align-items:center;padding:3px 10px}
+  .pop .it .c{font-family:var(--num);font-size:13px;color:var(--muted);text-align:right}
+  .box{width:13px;height:13px;border:1.5px solid var(--input);border-radius:2px;display:inline-block}.box.on{background:var(--blue);border-color:var(--blue);position:relative}
+  .box.on::after{content:"";position:absolute;left:3px;top:0;width:4px;height:8px;border:solid #fff;border-width:0 2px 2px 0;transform:rotate(45deg)}
+  .pop .actions{display:flex;justify-content:flex-end;gap:6px;padding:8px 10px;border-top:1px solid var(--edge)}
+  .pop .empty{font-style:italic;color:#7d8a83}
+  .range{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:8px 10px}
+  .range label{font:600 10px var(--num);letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+  .range .in{margin:2px 0 0;font-family:var(--num);font-size:14px;color:var(--ink)}
+  .hist{display:flex;align-items:flex-end;gap:2px;height:46px;margin:2px 10px 0;border-bottom:1px solid var(--ink)}
+  .hist i{flex:1;background:#c3d3e8}.hist i.in{background:var(--blue)}
+  .menu{position:absolute;width:230px;background:#fff;border:1px solid var(--edge);border-radius:4px;box-shadow:0 8px 24px -8px rgb(30 42 56/.35);padding:4px;font-size:12px;z-index:6}
+  .menu div{padding:5px 8px;border-radius:3px;display:flex;justify-content:space-between}.menu .hl{background:var(--mbg);font-weight:600}.menu hr{border:0;border-top:1px solid var(--edge);margin:4px 0}.menu kbd{font:500 11px var(--num);color:var(--muted)}
+  .callouts{display:grid;grid-template-columns:repeat(2,1fr);gap:8px 22px;font-size:12.5px;margin-top:12px;color:#33413b;max-width:1180px}
+  .callouts b{color:var(--ink)}
+  .row2{display:grid;grid-template-columns:1fr 340px;gap:20px;align-items:start}
+  .side{background:#fff;border:1px solid var(--edge);border-radius:4px;padding:10px 12px;font-size:12px}
+  .top{display:grid;grid-template-columns:1fr 90px 40px;gap:5px 8px;align-items:center}
+  .top .v{padding:2px 4px;border-radius:2px}.top .v.hov{background:var(--wash);color:var(--deep);text-decoration:underline}
+  .bar{height:8px;background:var(--blue);opacity:.6;border-radius:1px}
+  .tip{font:500 11px var(--num);color:var(--muted);margin-top:8px}
+</style>
+</head>
+<body>
+<h1>Results grid, phase 3: filters</h1>
+<p class="lede">Option A: grid filters work on the loaded rows, instantly. Active filters show as chips. When the result was cut off, the chip bar says so and "Add to query" turns the chips into real builder filters and re-runs.</p>
+
+<h2>1. Chips bar, header filter mark, and a text filter open</h2>
+<div class="panel" style="height:470px">
+  <div class="toolbar">
+    <div class="search">⌕ Search 1,000 rows…</div><span class="btn">▥ Columns 8/8</span><span class="btn">Comfortable</span><span class="btn">Wrap text</span><span class="btn">Details</span><span class="btn">Copy</span>
+    <span class="meta">ROWS 1,000 · COLS 8 · RAN IN 184 ms</span>
+  </div>
+  <div class="warn"><i></i>More than 1,000 rows matched. You're seeing the first 1,000, so sorting, search, filters and copy here cover those rows only. <u>Add a filter</u></div>
+  <div class="chips">
+    <span class="lbl">Filters</span>
+    <span class="chip"><b>ProgramName</b> is Cloud Basics, Finance 101 <span class="x">✕</span></span>
+    <span class="chip"><b>FeePaid</b> <span class="n">100 – 500</span> <span class="x">✕</span></span>
+    <span class="chip"><b>Notes</b> is not empty <span class="x">✕</span></span>
+    <span class="scope">Filtering the first 1,000 rows</span>
+    <span class="right"><span class="btn ghost">Clear all</span><span class="btn primary">Add to query</span></span>
+  </div>
+  <table>
+    <thead><tr><th class="rn">#</th><th><span class="ty">ABC</span>StudentName<span class="fn">⏷</span></th><th><span class="ty">ABC</span>ProgramName<span class="fn on">⏷</span></th><th><span class="ty">DATE</span>EnrolledOn<span class="fn">⏷</span></th><th class="num"><span class="ty">123</span>FeePaid<span class="fn on">⏷</span></th><th><span class="ty">ABC</span>Notes<span class="fn on">⏷</span></th></tr></thead>
+    <tbody>
+      <tr><td class="rn">1</td><td>Student 42</td><td>Cloud Basics</td><td>2025-02-12</td><td class="num">155.40</td><td>Short note</td></tr>
+      <tr><td class="rn">2</td><td>Student 43</td><td>Finance 101</td><td>2025-02-13</td><td class="num">159.10</td><td>Line one line two</td></tr>
+      <tr><td class="rn">3</td><td>Student 47</td><td>Cloud Basics</td><td>2025-02-17</td><td class="num">173.90</td><td>Short note</td></tr>
+      <tr><td class="rn">4</td><td>Student 48</td><td class="focus">Finance 101</td><td>2025-02-18</td><td class="num">177.60</td><td>Tab separated</td></tr>
+      <tr><td class="rn">5</td><td>Student 52</td><td>Cloud Basics</td><td>2025-02-22</td><td class="num">192.40</td><td>Short note</td></tr>
+      <tr><td class="rn">6</td><td>Student 53</td><td>Finance 101</td><td>2025-02-23</td><td class="num">196.10</td><td>Short note</td></tr>
+    </tbody>
+  </table>
+  <div class="pop" style="top:158px;left:290px;width:270px">
+    <h5><span class="ty">ABC</span>ProgramName</h5>
+    <div class="in">⌕ Search values…</div>
+    <div class="tools"><span>Select all</span><span>Clear</span></div>
+    <div class="list">
+      <div class="it"><span class="box"></span><span>Data Literacy</span><span class="c">200</span></div>
+      <div class="it"><span class="box"></span><span>Leadership Lab</span><span class="c">200</span></div>
+      <div class="it"><span class="box on"></span><span>Cloud Basics</span><span class="c">200</span></div>
+      <div class="it"><span class="box on"></span><span>Finance 101</span><span class="c">200</span></div>
+      <div class="it"><span class="box"></span><span>Design Thinking</span><span class="c">200</span></div>
+      <div class="it"><span class="box"></span><span class="empty">(empty)</span><span class="c">0</span></div>
+    </div>
+    <div class="actions"><span class="btn ghost">Cancel</span><span class="btn primary">Apply</span></div>
+  </div>
+  <div class="foot"><span>1–6 of 412 (filtered from 1,000)</span></div>
+</div>
+
+<h2>2. Number range filter, and right-clicking a cell</h2>
+<div class="panel" style="height:300px">
+  <table>
+    <thead><tr><th class="rn">#</th><th><span class="ty">ABC</span>StudentName<span class="fn">⏷</span></th><th><span class="ty">ABC</span>ProgramName<span class="fn">⏷</span></th><th class="num"><span class="ty">123</span>FeePaid<span class="fn on">⏷</span></th><th><span class="ty">ABC</span>Notes<span class="fn">⏷</span></th></tr></thead>
+    <tbody>
+      <tr><td class="rn">1</td><td>Student 1</td><td>Leadership Lab</td><td class="num">0.37</td><td>Short note</td></tr>
+      <tr><td class="rn">2</td><td>Student 2</td><td class="focus">Cloud Basics</td><td class="num">0.74</td><td>Short note</td></tr>
+      <tr><td class="rn">3</td><td>Student 3</td><td>Finance 101</td><td class="num">1.11</td><td>Short note</td></tr>
+      <tr><td class="rn">4</td><td>Student 4</td><td>Design Thinking</td><td class="num">1.48</td><td>A much longer note…</td></tr>
+      <tr><td class="rn">5</td><td>Student 5</td><td>Data Literacy</td><td class="num">1.85</td><td>Short note</td></tr>
+    </tbody>
+  </table>
+  <div class="menu" style="top:96px;left:300px">
+    <div class="hl">Show only "Cloud Basics"</div>
+    <div>Hide "Cloud Basics"</div>
+    <hr>
+    <div>Copy cell <kbd>Ctrl+C</kbd></div>
+    <div>Open record</div>
+  </div>
+  <div class="pop" style="top:34px;left:540px;width:250px">
+    <h5><span class="ty">123</span>FeePaid</h5>
+    <div class="hist"><i style="height:60%"></i><i style="height:80%"></i><i class="in" style="height:75%"></i><i class="in" style="height:90%"></i><i class="in" style="height:70%"></i><i class="in" style="height:85%"></i><i style="height:65%"></i><i style="height:55%"></i><i style="height:40%"></i><i style="height:30%"></i></div>
+    <div class="range"><div><label>From</label><div class="in">100</div></div><div><label>To</label><div class="in">500</div></div></div>
+    <div style="padding:0 10px 4px"><span class="box"></span> Include empty values</div>
+    <div class="actions"><span class="btn ghost">Clear</span><span class="btn primary">Apply</span></div>
+  </div>
+</div>
+
+<h2>3. Filtering from the Details panel</h2>
+<div class="row2">
+  <div class="callouts" style="grid-template-columns:1fr;margin:0">
+    <div>In the <b>Column</b> tab, clicking a top value (or a histogram bar) offers the same two actions: <b>Show only</b> / <b>Hide</b> that value (bar = that range).</div>
+    <div>The <b>Row</b> tab gets a small filter action per field on hover: "Show only this value".</div>
+  </div>
+  <div class="side">
+    <b>ProgramName</b> <span class="ty">ABC</span>
+    <div class="top" style="margin-top:8px">
+      <span class="v hov">Cloud Basics</span><span class="bar" style="width:90px"></span><span class="num">200</span>
+      <span class="v">Data Literacy</span><span class="bar" style="width:90px"></span><span class="num">200</span>
+      <span class="v">Finance 101</span><span class="bar" style="width:90px"></span><span class="num">200</span>
+    </div>
+    <div class="tip">Click a value: Show only · Hide</div>
+  </div>
+</div>
+
+<h2>How it behaves</h2>
+<div class="callouts">
+  <div><b>Where filters live:</b> a filter mark in every header (blue when active), the right-click menu on any cell, and the Details panel.</div>
+  <div><b>Text and Yes/No:</b> a searchable checklist of the values in the loaded rows with counts, plus "(empty)". <b>Numbers and dates:</b> from/to with a small histogram, plus "Include empty values".</div>
+  <div><b>Combining:</b> several values in one column = any of them; filters on different columns = all of them; search still narrows on top.</div>
+  <div><b>Chips:</b> one per filtered column; ✕ removes it, clicking it reopens its filter; "Clear all". Footer reads "… of 412 (filtered from 1,000)".</div>
+  <div><b>Cut-off results:</b> the chip bar says "Filtering the first 1,000 rows". <b>Add to query</b> turns the chips into builder filters (Totals filters for summary columns), clears them from the grid, and re-runs.</div>
+  <div><b>Totals and profile:</b> footer totals and Copy follow the filtered rows; the Column profile describes the filtered rows and says so.</div>
+</div>
+</body>
+</html>
