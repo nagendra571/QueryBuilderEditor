@@ -1,5 +1,4 @@
 import type { QueryColumn, QueryResultColumnDto } from '@/types'
-import { toNumber } from '../../visualizations/chart-data.ts'
 import { parseDateValue, profileKind } from './column-profile.ts'
 import { decimalsOf } from './selection-totals.ts'
 
@@ -52,11 +51,10 @@ function isEmpty(v: unknown): boolean {
   return v === null || v === undefined || v === ''
 }
 
-// Text that parses to a number beyond double precision would add up silently wrong.
+// Only real numbers count: numeric text in a number column is not a number
+// (it may be a value beyond double precision that would add up silently wrong).
 function numberOf(v: unknown): number | null {
-  const n = toNumber(v)
-  if (typeof n !== 'number') return null
-  return Math.abs(n) <= Number.MAX_SAFE_INTEGER ? n : null
+  return typeof v === 'number' && Number.isFinite(v) ? v : null
 }
 
 export function totalValue(

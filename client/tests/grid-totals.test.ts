@@ -67,6 +67,11 @@ test('totals skip non-numbers', () => {
   assert.equal(totalValue(rowsOf(10, '9999999999999999999999.5', null, 5), col('number'), 'sum', String), '15')
 })
 
+test('numeric text is skipped and large real numbers are kept', () => {
+  assert.equal(totalValue(rowsOf(10, '12', 5), col('number'), 'sum', String), '15')
+  assert.equal(totalValue(rowsOf(1e18, 1), col('number'), 'max', String), String(1e18))
+})
+
 test('empty rows', () => {
   const fns: TotalFn[] = ['sum', 'avg', 'min', 'max', 'earliest', 'latest', 'none']
   for (const fn of fns) assert.equal(totalValue([], col('number'), fn, String), '', fn)
