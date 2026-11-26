@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Results grid: foundation</title>
+<style>
+  :root{
+    --ground:#eef1ec; --ink:#1e2a38; --white:#fff; --blue:#2f6db5; --blue-wash:#dde7f3; --blue-deep:#173c66;
+    --violet:#6f51a0; --yellow:#f2c94c; --yellow-ink:#3b2c00; --tint:#e2e7e0; --muted-bg:#e6eae4;
+    --muted:#52605b; --edge:#c9d1c7; --input:#8c9891; --green:#3a7d4c;
+    --sans:"Public Sans Variable","Public Sans",ui-sans-serif,system-ui,sans-serif;
+    --num:"Barlow Condensed","Arial Narrow",ui-sans-serif,sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--ground);color:var(--ink);font:14px/1.45 var(--sans);padding:24px 28px 60px}
+  h1{font-size:22px;margin:0 0 4px;letter-spacing:-.02em}
+  .lede{color:var(--muted);margin:0 0 22px;max-width:900px}
+  .opt{border:2px solid transparent;border-radius:6px;padding:14px 14px 18px;margin-bottom:28px;cursor:pointer;background:transparent}
+  .opt:hover{border-color:var(--edge)}
+  .opt.selected{border-color:var(--blue);background:#fff6}
+  .opt-head{display:flex;align-items:baseline;gap:12px;margin-bottom:10px}
+  .letter{font:600 15px var(--num);background:var(--ink);color:#fff;border-radius:3px;padding:1px 8px}
+  .opt-head h2{font-size:16px;margin:0}
+  .opt-head p{margin:0;color:var(--muted);font-size:13px}
+
+  /* ---------- panel ---------- */
+  .panel{background:var(--white);border:1px solid var(--edge);border-radius:4px;overflow:hidden;cursor:default}
+  .tabs{display:flex;gap:2px;padding:8px 12px 0;background:var(--ground);border-bottom:1px solid var(--edge)}
+  .tab{font-size:12px;padding:6px 12px;border-radius:3px 3px 0 0;color:var(--muted)}
+  .tab.on{background:var(--white);color:var(--ink);font-weight:600;border:1px solid var(--edge);border-bottom-color:var(--white);margin-bottom:-1px}
+  .tab b{font:600 11px var(--num);background:var(--tint);border-radius:2px;padding:0 4px;margin-left:4px}
+
+  .toolbar{display:flex;align-items:center;gap:6px;padding:7px 10px;border-bottom:1px solid var(--edge)}
+  .search{display:flex;align-items:center;gap:6px;width:230px;height:28px;border:1px solid var(--input);border-radius:4px;padding:0 8px;color:var(--muted);font-size:12px}
+  .btn{height:28px;display:inline-flex;align-items:center;gap:5px;padding:0 9px;border:1px solid var(--edge);border-radius:4px;font-size:12px;font-weight:500;background:var(--ground);white-space:nowrap}
+  .btn.ghost{border-color:transparent;background:transparent}
+  .btn.icon{width:28px;justify-content:center;padding:0}
+  .btn.on{background:var(--blue-wash);border-color:#b9cbe4;color:var(--blue-deep)}
+  .seg{display:inline-flex;border:1px solid var(--edge);border-radius:4px;overflow:hidden}
+  .seg span{height:26px;display:inline-flex;align-items:center;padding:0 8px;font-size:12px}
+  .seg span.on{background:var(--blue-wash);color:var(--blue-deep);font-weight:600}
+  .sep{width:1px;height:18px;background:var(--edge);margin:0 3px}
+  .meta{margin-left:auto;display:flex;gap:10px;align-items:center;font:500 13px var(--num);color:var(--muted);letter-spacing:.02em}
+  .meta .k{font:500 11px var(--num);text-transform:uppercase;letter-spacing:.08em}
+  .warn{display:flex;align-items:center;gap:8px;padding:6px 12px;background:#fbf1cf;color:var(--yellow-ink);font-size:12px;border-bottom:1px solid #ecd98f}
+  .warn i{width:10px;height:10px;background:var(--yellow);border-radius:2px;display:inline-block;flex:none}
+  .warn a{color:var(--yellow-ink);font-weight:600;margin-left:auto}
+
+  .gridwrap{position:relative;height:372px;overflow:hidden}
+  table{border-collapse:separate;border-spacing:0;font-size:13px;width:max-content;min-width:100%}
+  th,td{height:32px;padding:0 10px;white-space:nowrap;text-align:left}
+  thead th{position:sticky;top:0;background:var(--white);font-weight:600;font-size:12px;z-index:2}
+  td.num,th.num{text-align:right;font-family:var(--num);font-size:14px;font-variant-numeric:tabular-nums;letter-spacing:.01em}
+  th.num{font-family:var(--sans);font-size:12px}
+  .rn{width:44px;text-align:right;color:#8a968f;font:500 12px var(--num);background:var(--ground)}
+  thead .rn{background:var(--ground)}
+  .ty{font:600 10px var(--num);color:var(--muted);border:1px solid var(--edge);border-radius:2px;padding:0 3px;margin-right:6px;letter-spacing:.04em}
+  .sort{color:var(--blue);margin-left:4px;font-size:11px}
+  .grip{position:absolute;right:0;top:7px;bottom:7px;width:3px;border-right:1px solid var(--edge)}
+  th{position:relative}
+  .null{color:#9aa69f;font-style:italic}
+  .pill{display:inline-block;font-size:11px;font-weight:600;padding:1px 7px;border-radius:2px;border:1px solid var(--edge)}
+  .pin-edge{box-shadow:inset -2px 0 0 var(--ink)}
+  .pinned{position:sticky;background:var(--white);z-index:1}
+  thead .pinned{z-index:3}
+  .pin-ico{font-size:10px;color:var(--muted);margin-left:5px}
+  .sel{background:var(--blue-wash)!important;outline:2px solid var(--blue);outline-offset:-2px}
+  .selr td{background:#f4f7fb}
+  .wrap td.long{white-space:normal;max-width:260px;line-height:1.3;padding-top:6px;padding-bottom:6px}
+
+  /* option A ledger */
+  .A td,.A th{border-right:1px solid #e4e9e2;border-bottom:1px solid #e4e9e2}
+  .A thead th{border-bottom:1px solid var(--ink);background:#f6f8f5}
+  .A thead .pinned{background:#f6f8f5}
+  .A tbody tr:hover td{background:#f7f9f6}
+  /* option B quiet */
+  .B td{border-bottom:1px solid #edf0ec}
+  .B thead th{border-bottom:2px solid var(--ink)}
+  .B tbody tr:nth-child(even) td:not(.rn){background:#fafbf9}
+  .B .rn{background:var(--white);border-right:1px solid var(--edge)}
+
+  .menu{position:absolute;top:34px;left:248px;width:212px;background:var(--white);border:1px solid var(--edge);border-radius:4px;box-shadow:0 8px 24px -8px rgb(30 42 56/.35);padding:4px;z-index:9;font-size:12px}
+  .menu .it{display:flex;justify-content:space-between;padding:5px 8px;border-radius:3px}
+  .menu .it:hover,.menu .it.hl{background:var(--muted-bg)}
+  .menu .it kbd{font:500 11px var(--num);color:var(--muted)}
+  .menu hr{border:0;border-top:1px solid var(--edge);margin:4px 0}
+  .menu .lbl{font:600 10px var(--num);text-transform:uppercase;letter-spacing:.1em;color:var(--muted);padding:4px 8px 2px}
+  .menu .soon{color:#9aa69f}
+
+  .foot{display:flex;align-items:center;gap:14px;padding:6px 12px;border-top:1px solid var(--edge);background:var(--ground);font:500 13px var(--num);color:var(--muted);letter-spacing:.02em}
+  .foot .sum{margin-left:auto;display:flex;gap:14px;color:var(--ink)}
+  .foot .sum span em{font-style:normal;color:var(--muted);text-transform:uppercase;font-size:11px;letter-spacing:.08em;margin-right:4px}
+  .foot .ghosty{border:1px dashed var(--input);border-radius:3px;padding:0 6px;color:var(--muted)}
+  .note{font-size:12px;color:var(--muted);margin:8px 2px 0}
+  .callouts{display:grid;grid-template-columns:repeat(3,1fr);gap:10px 22px;margin-top:12px;font-size:12.5px}
+  .callouts div b{font:600 13px var(--num);background:var(--ink);color:#fff;border-radius:2px;padding:0 5px;margin-right:6px}
+  .callouts div{color:#33413b}
+</style>
+</head>
+<body>
+<h1>Results grid: the foundation (phase 1)</h1>
+<p class="lede">Both options have the same features: smooth scroll through all 1,000 rows, a pinned first column, resizable columns, a density switch, wrap text, full screen, and cell selection you can copy into Excel. They differ only in how the grid <em>reads</em>. Click the one that feels right; tell me in the terminal what to change.</p>
+
+<!-- ======================= OPTION A ======================= -->
+<div class="opt" data-choice="a" onclick="toggleSelect(this)">
+  <div class="opt-head"><span class="letter">A</span><h2>Ledger</h2><p>Spreadsheet feel: every cell has a hairline box, a tinted header with a solid ink rule. Strongest for scanning across wide rows and selecting cell ranges.</p></div>
+  <div class="panel">
+    <div class="tabs"><span class="tab">Build</span><span class="tab on">Results <b>1,000</b></span><span class="tab">Enrolments per program</span><span class="tab">History</span></div>
+    <div class="toolbar">
+      <span class="search">⌕ &nbsp;Search 1,000 rows…</span>
+      <span class="btn">▥ Columns <b style="font:600 11px var(--num);background:var(--tint);padding:0 4px;border-radius:2px">9/11</b></span>
+      <span class="sep"></span>
+      <span class="seg" title="Row density"><span>Comfortable</span><span class="on">Compact</span></span>
+      <span class="btn">↵ Wrap text</span>
+      <span class="sep"></span>
+      <span class="btn ghost">⧉ Copy</span>
+      <span class="btn ghost">↺ Reset view</span>
+      <span class="meta"><span><span class="k">rows</span> 1,000</span><span><span class="k">cols</span> 11</span><span><span class="k">ran in</span> 184 ms</span><span class="btn icon" title="Full screen">⤢</span></span>
+    </div>
+    <div class="warn"><i></i>More than 1,000 rows matched. You're seeing the first 1,000, so sorting, search and totals here cover those rows only.<a>Add a filter</a></div>
+    <div class="gridwrap A">
+      <table>
+        <thead><tr>
+          <th class="rn pinned" style="left:0">#</th>
+          <th class="pinned pin-edge" style="left:44px;min-width:200px"><span class="ty">ABC</span>StudentName<span class="pin-ico" title="Pinned left">📌</span><span class="grip"></span></th>
+          <th style="min-width:130px"><span class="ty">ABC</span>ProgramName<span class="grip"></span></th>
+          <th class="num" style="min-width:96px"><span class="ty">123</span>ProgramId<span class="sort">▲</span><span class="grip"></span></th>
+          <th style="min-width:110px"><span class="ty">DATE</span>EnrolledOn<span class="grip"></span></th>
+          <th style="min-width:96px"><span class="ty">ABC</span>Status<span class="grip"></span></th>
+          <th class="num" style="min-width:104px"><span class="ty">123</span>FeePaid<span class="grip"></span></th>
+          <th class="num" style="min-width:90px"><span class="ty">123</span>Credits<span class="grip"></span></th>
+          <th style="min-width:72px"><span class="ty">Y/N</span>Active<span class="grip"></span></th>
+          <th style="min-width:240px"><span class="ty">ABC</span>Notes<span class="grip"></span></th>
+        </tr></thead>
+        <tbody>
+          <tr><td class="rn pinned" style="left:0">1</td><td class="pinned pin-edge" style="left:44px">Mary Smith</td><td>Data Literacy</td><td class="num">10</td><td>2026-01-14</td><td><span class="pill">Active</span></td><td class="num">1,250.00</td><td class="num">12</td><td>✓</td><td class="long">Transferred from evening cohort</td></tr>
+          <tr><td class="rn pinned" style="left:0">2</td><td class="pinned pin-edge" style="left:44px">James Johnson</td><td>Data Literacy</td><td class="num">10</td><td>2026-01-16</td><td><span class="pill">Active</span></td><td class="num sel">980.00</td><td class="num sel">9</td><td>✓</td><td class="long"><span class="null">empty</span></td></tr>
+          <tr><td class="rn pinned" style="left:0">3</td><td class="pinned pin-edge" style="left:44px">Patricia Brown</td><td>Data Literacy</td><td class="num">10</td><td>2026-02-02</td><td><span class="pill">Paused</span></td><td class="num sel">1,250.00</td><td class="num sel">12</td><td>✗</td><td class="long">Medical leave until March</td></tr>
+          <tr><td class="rn pinned" style="left:0">4</td><td class="pinned pin-edge" style="left:44px">Robert Garcia</td><td>Data Literacy</td><td class="num">10</td><td>2026-02-09</td><td><span class="pill">Active</span></td><td class="num sel">1,100.00</td><td class="num sel">10</td><td>✓</td><td class="long"><span class="null">empty</span></td></tr>
+          <tr><td class="rn pinned" style="left:0">5</td><td class="pinned pin-edge" style="left:44px">Linda Martinez</td><td>Leadership Lab</td><td class="num">20</td><td>2026-01-20</td><td><span class="pill">Completed</span></td><td class="num">2,400.00</td><td class="num">18</td><td>✓</td><td class="long">Asked for certificate copy</td></tr>
+          <tr><td class="rn pinned" style="left:0">6</td><td class="pinned pin-edge" style="left:44px">Michael Davis</td><td>Leadership Lab</td><td class="num">20</td><td>2026-01-21</td><td><span class="pill">Active</span></td><td class="num">2,400.00</td><td class="num">18</td><td>✓</td><td class="long"><span class="null">empty</span></td></tr>
+          <tr><td class="rn pinned" style="left:0">7</td><td class="pinned pin-edge" style="left:44px">Elizabeth Wilson</td><td>Leadership Lab</td><td class="num">20</td><td>2026-03-03</td><td><span class="pill">Withdrawn</span></td><td class="num">600.00</td><td class="num">4</td><td>✗</td><td class="long">Refund issued 2026-03-20</td></tr>
+          <tr><td class="rn pinned" style="left:0">8</td><td class="pinned pin-edge" style="left:44px">David Anderson</td><td>Cloud Basics</td><td class="num">30</td><td>2026-02-11</td><td><span class="pill">Active</span></td><td class="num">1,800.00</td><td class="num">15</td><td>✓</td><td class="long"><span class="null">empty</span></td></tr>
+          <tr><td class="rn pinned" style="left:0">9</td><td class="pinned pin-edge" style="left:44px">Barbara Thomas</td><td>Cloud Basics</td><td class="num">30</td><td>2026-02-12</td><td><span class="pill">Active</span></td><td class="num">1,800.00</td><td class="num">15</td><td>✓</td><td class="long">Needs evening slots</td></tr>
+          <tr><td class="rn pinned" style="left:0">10</td><td class="pinned pin-edge" style="left:44px">Richard Taylor</td><td>Cloud Basics</td><td class="num">30</td><td>2026-02-15</td><td><span class="pill">Active</span></td><td class="num">1,800.00</td><td class="num">15</td><td>✓</td><td class="long"><span class="null">empty</span></td></tr>
+        </tbody>
+      </table>
+      <div class="menu">
+        <div class="lbl">ProgramName</div>
+        <div class="it">Sort A → Z</div><div class="it">Sort Z → A</div>
+        <hr>
+        <div class="it hl">Pin to left</div><div class="it">Pin to right</div>
+        <div class="it">Fit to content <kbd>dbl-click edge</kbd></div>
+        <div class="it">Hide column</div>
+        <hr>
+        <div class="it">Copy column values</div>
+        <div class="it soon">Profile this column <kbd>phase 2</kbd></div>
+        <div class="it soon">Filter… <kbd>phase 3</kbd></div>
+      </div>
+    </div>
+    <div class="foot"><span>1–10 of 1,000 visible</span><span>·</span><span>Pinned: StudentName</span>
+      <span class="sum"><span class="ghosty">8 cells selected · Sum 4,330 · Avg 541.25 <em>phase 2</em></span></span></div>
+  </div>
+</div>
+
+<!-- ======================= OPTION B ======================= -->
+<div class="opt" data-choice="b" onclick="toggleSelect(this)">
+  <div class="opt-head"><span class="letter">B</span><h2>Survey list</h2><p>Calmer report feel: horizontal rules only, faint banding, a heavy ink rule under the header, row numbers set off by one vertical edge. Reads more like a printed report.</p></div>
+  <div class="panel">
+    <div class="tabs"><span class="tab">Build</span><span class="tab on">Results <b>1,000</b></span><span class="tab">Enrolments per program</span><span class="tab">History</span></div>
+    <div class="toolbar">
+      <span class="search">⌕ &nbsp;Search 1,000 rows…</span>
+      <span class="btn">▥ Columns <b style="font:600 11px var(--num);background:var(--tint);padding:0 4px;border-radius:2px">9/11</b></span>
+      <span class="sep"></span>
+      <span class="seg"><span class="on">Comfortable</span><span>Compact</span></span>
+      <span class="btn on">↵ Wrap text</span>
+      <span class="sep"></span>
+      <span class="btn ghost">⧉ Copy</span>
+      <span class="meta"><span><span class="k">rows</span> 1,000</span><span><span class="k">ran in</span> 184 ms</span><span class="btn icon">⤢</span></span>
+    </div>
+    <div class="gridwrap B wrap" style="height:330px">
+      <table>
+        <thead><tr>
+          <th class="rn pinned" style="left:0">#</th>
+          <th class="pinned pin-edge" style="left:44px;min-width:200px;height:40px"><span class="ty">ABC</span>StudentName<span class="pin-ico">📌</span></th>
+          <th style="min-width:130px"><span class="ty">ABC</span>ProgramName</th>
+          <th class="num" style="min-width:96px"><span class="ty">123</span>ProgramId<span class="sort">▲</span></th>
+          <th style="min-width:110px"><span class="ty">DATE</span>EnrolledOn</th>
+          <th style="min-width:96px"><span class="ty">ABC</span>Status</th>
+          <th class="num" style="min-width:104px"><span class="ty">123</span>FeePaid</th>
+          <th style="min-width:72px"><span class="ty">Y/N</span>Active</th>
+          <th style="min-width:240px"><span class="ty">ABC</span>Notes</th>
+        </tr></thead>
+        <tbody style="--h:44px">
+          <tr class="selr"><td class="rn pinned" style="left:0;height:44px">1</td><td class="pinned pin-edge" style="left:44px">Mary Smith</td><td>Data Literacy</td><td class="num">10</td><td>2026-01-14</td><td><span class="pill">Active</span></td><td class="num">1,250.00</td><td>✓</td><td class="long">Transferred from evening cohort after the January intake was full</td></tr>
+          <tr><td class="rn pinned" style="left:0;height:44px">2</td><td class="pinned pin-edge" style="left:44px">James Johnson</td><td>Data Literacy</td><td class="num">10</td><td>2026-01-16</td><td><span class="pill">Active</span></td><td class="num">980.00</td><td>✓</td><td class="long"><span class="null">empty</span></td></tr>
+          <tr><td class="rn pinned" style="left:0;height:44px">3</td><td class="pinned pin-edge" style="left:44px">Patricia Brown</td><td>Data Literacy</td><td class="num">10</td><td>2026-02-02</td><td><span class="pill">Paused</span></td><td class="num">1,250.00</td><td>✗</td><td class="long">Medical leave until March</td></tr>
+          <tr><td class="rn pinned" style="left:0;height:44px">4</td><td class="pinned pin-edge" style="left:44px">Robert Garcia</td><td>Data Literacy</td><td class="num">10</td><td>2026-02-09</td><td><span class="pill">Active</span></td><td class="num">1,100.00</td><td>✓</td><td class="long"><span class="null">empty</span></td></tr>
+          <tr><td class="rn pinned" style="left:0;height:44px">5</td><td class="pinned pin-edge" style="left:44px">Linda Martinez</td><td>Leadership Lab</td><td class="num">20</td><td>2026-01-20</td><td><span class="pill">Completed</span></td><td class="num">2,400.00</td><td>✓</td><td class="long">Asked for certificate copy</td></tr>
+          <tr><td class="rn pinned" style="left:0;height:44px">6</td><td class="pinned pin-edge" style="left:44px">Michael Davis</td><td>Leadership Lab</td><td class="num">20</td><td>2026-01-21</td><td><span class="pill">Active</span></td><td class="num">2,400.00</td><td>✓</td><td class="long"><span class="null">empty</span></td></tr>
+          <tr><td class="rn pinned" style="left:0;height:44px">7</td><td class="pinned pin-edge" style="left:44px">Elizabeth Wilson</td><td>Leadership Lab</td><td class="num">20</td><td>2026-03-03</td><td><span class="pill">Withdrawn</span></td><td class="num">600.00</td><td>✗</td><td class="long">Refund issued 2026-03-20</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="foot"><span>Row 1 of 1,000</span><span>·</span><span>Pinned: StudentName</span><span class="sum"><span class="ghosty">Selection totals <em>phase 2</em></span></span></div>
+  </div>
+</div>
+
+<div class="callouts">
+  <div><b>1</b>No pages. All 1,000 rows scroll smoothly; header and row numbers stay put.</div>
+  <div><b>2</b>Pinned column keeps a solid ink edge (the map stays flat, no shadow) and a pin mark.</div>
+  <div><b>3</b>Drag a header edge to resize; double-click it to fit the content.</div>
+  <div><b>4</b>Density follows the app's existing Comfortable/Compact switch, with an override here.</div>
+  <div><b>5</b>Click, shift-click or drag to select cells; Ctrl+C copies them with headers, ready for Excel.</div>
+  <div><b>6</b>Header menu: sort, pin left/right, fit, hide, copy column. Later phases add Profile and Filter here.</div>
+</div>
+<p class="note">Mock data is demo data only. The cut-off warning (yellow, as the app uses for warnings) is the honest-numbers note from the feature list.</p>
+</body>
+</html>

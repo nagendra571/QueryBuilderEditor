@@ -13,6 +13,8 @@ integration ergonomics (single-call registration, embedded SPA, DBA-friendly mig
   `TemplateBuilderClient` references it. **1.1.0** (targets `net8.0` with EF Core 9.0.22 and `net10.0` with EF
   Core 10.0.14) is published and committed on the same branch, not merged to `main`. `TemplateBuilderClient` hasn't
   moved to it yet. Any further change needs a new version.
+- **2.2.0 is PUBLISHED (2026-11-18)**: chart drill-down (see "Where we left off"); on `main` via PR #10 (`94f6102`).
+  Schema script now `QueryBuilder.schema.2.2.0.sql`. Launch unchanged at 1.0.2. Next: Editor 2.2.1+ / Launch 1.0.3+.
 - **2.1.0 + Launch 1.0.1 are PUBLISHED (2026-11-14)**: chart data downloads (CSV/XLSX); on `main` via PR #4.
   **Launch 1.0.2 is PUBLISHED (2026-11-15)**: audience check before signing; on `main` via PR #5. Editor still 2.1.0.
 - **2.0.0 is PUBLISHED (2026-11-12): `QueryBuilder.Editor` 2.0.0 and the new `QueryBuilder.Launch` 1.0.0 were pushed to
@@ -34,8 +36,38 @@ integration ergonomics (single-call registration, embedded SPA, DBA-friendly mig
 
 ## Where we left off (update this at the end of each session)
 
-**2026-11-18: chart drill-down BUILT on local branch `feature/chart-drill-down` (27 commits on `main` f6281a8, NOT pushed,
-no version bump). START HERE.** Why: a client demo asked for Monday.com-style drill-down. Spec
+**2026-11-19..25: NEW FEATURE IN BRAINSTORMING — CSV and JSON data sources. START HERE.** Nothing built, no branch, no
+spec yet (brainstorming skill in progress; next steps: get the user's "why", lay out approaches, short/full design doc in
+`docs/superpowers/specs/`, approval, then writing-plans). The user's ask: add CSV and JSON as data source types beside SQL
+Server and PostgreSQL; "real" databases (MySQL etc.) later. `DataSourceProvider` enum already has `MySql = 2`, `Sqlite = 3`
+(unused); new types need new values. Provider-specific code: `ISqlDialect` (+ shared `SqlQueryBuilder`), `ICatalogReader`,
+`RoutingQueryExecutionService` (switch, throws for unknown), plus ~16 files switching on provider (ConnectionTester,
+ManagedConnectionStringBuilder, AppUsersDirectory, IdentifierMatching, MetadataDatabaseIdentity, ConnectionPoolCleaner…).
+**Key point raised:** everything (builder, totals, parameters, data scope, record limits, charts, drill) is generated SQL, so
+CSV/JSON need a SQL engine in front (embedded DuckDB — MIT, DuckDB.NET — or load into tables) rather than a second non-SQL
+engine that would have to re-prove data scope. Where files live (upload vs URL) decides storage, SSRF, and schema change.
+**Redash analysis done (source + help pages, evidence only, no code copied):** no uploads — CSV/Excel/JSON fetched from a URL
+every run via an SSRF-guarded session (blocks private addresses); query = YAML (CSV: `url`, `user-agent`, pandas read options;
+JSON: `url` same-origin as data source base URL, method/headers/params/body/auth, `path` into nested data, `fields`,
+pagination); no schema (`get_schema` NotSupported — columns only after running); no filter/aggregate in those runners — users
+write a second query in the "Query Results" data source, which loads results into in-memory SQLite and runs SQL; JSON values all
+text. The CSV page the user linked is deprecated; its replacement (CSV + Excel runner) works the same way. Takeaways given: Redash's
+model needs users writing YAML/SQL (doesn't fit our point-and-click users); we need columns/types at registration time; Redash
+confirms "SQL engine in front of the file"; URL fetching needs SSRF protection (we already allowlist managed hosts); type
+detection matters (admin should be able to correct types). **Open question to the user (unanswered):** who has these
+CSV/JSON files, how often do they change (one-off export uploaded vs a URL/shared file updated daily)? This decides upload vs
+URL. The 2026-11-19 "open offers" menu below still stands.
+
+**2026-11-18: chart drill-down RELEASED as Editor 2.2.0 (NuGet pushed by the user; merged to `main` via PR #10, `94f6102`).
+START HERE.** These notes are uncommitted on `main` (PR-only): commit them on the next branch. Release verification: full suites
+at `eae6adc` (later commits: docs, a comment, client-only fixes; client 255/255); DBA script applied twice fresh and twice over
+2.0.0 on LocalDB. **Azure demo hub redeployed with 2.2.0 (2026-11-18 17:37Z)**: `dotnet publish src/QueryBuilder.Hub` →
+zip → `az webapp deploy`; auto-migration ran (hub DB 17 migrations, `hub_app` has db_ddladmin), bundle `index-D7hI-w6U.js`;
+checked live as Lee (Viewer, program 10): bar → "See the 20 rows" shows only ProgramId 10. `demo.ResetNorthwind` copies only
+shared columns, so the new column takes its default. Known console noise: a Viewer's drill page 403s on
+`/api/queries/{id}` and `/visualizations` (name lookups, retried) — harmless, deferred. Demo charts have no drill columns yet,
+so "Break down by" doesn't appear there. Not yet done: `TemplateBuilderClient` (still on 1.3.0). Delete merged local branch
+`feature/chart-drill-down` (plus the older merged ones listed below) when the user agrees. Why: a client demo asked for Monday.com-style drill-down. Spec
 `docs/superpowers/specs/2026-11-17-chart-drill-down-design.md`, plan `docs/superpowers/plans/2026-11-17-chart-drill-down.md`.
 Built: See these rows (page `/queries/:q/charts/:v/drill?s=&f=&d=&t=&n=`), Break down by (in place, trail), Filter this
 dashboard (click-to-filter, per-dashboard switch `Dashboards.ClickToFilterEnabled`, migration `AddDashboardClickToFilter`),
@@ -48,12 +80,26 @@ as datetime2 only for native datetime2/datetimeoffset columns (`FilterCondition.
 saved JSON), chart data rows carry `keyColumns`. Break down by only offers drill columns (the click pins every plain column).
 Verified: net10 1489 + net8 1425 passed / 0 failed (PG group 352/352 each, separately); client 255; full browser acceptance
 (bars, pie, line/area taps, combo bands, keyboard, http copy link, tampered link → 0 rows, switch off, results-row drill,
-breakdown). Next: user decides merge/PR; release = Editor 2.2.0 + DBA script `QueryBuilder.schema.2.2.0.sql` (only when asked).
+breakdown).
 Parked follow-ups: `EmptyTextIsValue` accepted from browser-sent definitions (no scope impact) → clear on Run/Export/Preview/Save;
 other stale `f` kinds 400 every tile; SQL Server `time` columns can't be filtered (pre-existing). Demo chart "Enrolments per
 program" in local `QueryBuilderAppDb` now has drill columns [Status, ProgramName]. The 2026-11-17 notes below are older.
 
-**2026-11-17, end of session: START HERE.** State: `main` = `f6281a8` (PRs #6–#9 merged). NuGet unchanged: **Editor 2.1.0,
+**Open offers to the user (2026-11-19, unanswered) — the menu for the next session:**
+1. Set "Columns to show when drilling" on a few Azure demo showcase charts (e.g. Status, ProgramName on enrolment charts) so
+   "Break down by" appears, then re-capture the Reset baseline (`EXEC demo.CaptureNorthwindBaseline`).
+2. Move `TemplateBuilderClient` (hosted site, still Editor 1.3.0) to 2.2.0 and redeploy.
+3. Drill follow-ups (Editor 2.2.1): clear `EmptyTextIsValue` on browser-sent definitions; stale `f` → "not applied" instead of
+   400; stop the Viewer drill page's 403 name lookups; SQL Server `time` columns.
+4. Drill release 2 (needs brainstorm/spec): date zoom (year → quarter → month; needs "group by period" first) and
+   author-linked destinations.
+5. Still open from 2026-11-17 (below): ship the Hub as a product; SqlClient 7.1.1 bump; `returnUrl` in the Launch README's
+   .NET 4.8 sample; CSV formula injection; delete merged local branches (now also `feature/chart-drill-down`); Azure Free Trial
+   end date / upgrade.
+Local state at /clear (unchanged at the 2026-11-25 /clear): on `main` = `94f6102`, `CLAUDE.md` modified (uncommitted, PR-only — commit on the next branch),
+`nupkg/QueryBuilder.Editor.2.2.0.nupkg` present (already pushed — never re-push). No app or container running.
+
+**2026-11-17, end of session (superseded by the 2026-11-18 entry above).** State: `main` = `f6281a8` (PRs #6–#9 merged). NuGet unchanged: **Editor 2.1.0,
 Launch 1.0.2** (nothing since touched either package). Next versions: Editor 2.1.1+, Launch 1.0.3+. Schema script still
 `QueryBuilder.schema.2.0.0.sql`. This `CLAUDE.md` has these notes UNCOMMITTED on `main` (PR-only): commit them on the next branch.
 - **Merged since 2026-11-15:** PR #6 Azure demo (simulator, setup script, Reset demo, App B cleanup, lock decision); PR #7
