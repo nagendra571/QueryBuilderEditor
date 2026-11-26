@@ -35,13 +35,17 @@ export function ResultsTable({
     if (!fullScreen) return
     const previous = document.body.style.overflow
     document.body.style.overflow = 'hidden'
+    // The overlay is portalled to body, outside #root, so menus and tooltips (also on body) stay usable.
+    const root = document.getElementById('root')
+    root?.setAttribute('inert', '')
     return () => {
       document.body.style.overflow = previous
+      root?.removeAttribute('inert')
     }
   }, [fullScreen])
 
   useEffect(() => {
-    if (wasFullScreen.current && !fullScreen) fullScreenButton.current?.focus()
+    if (wasFullScreen.current !== fullScreen) fullScreenButton.current?.focus()
     wasFullScreen.current = fullScreen
   }, [fullScreen])
 
