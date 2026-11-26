@@ -128,12 +128,7 @@ function Segmented({ label, options, value, onChange }: { label: string; options
 }
 
 function numberSample(sample: unknown): number | null {
-  if (typeof sample === 'number' && Number.isFinite(sample)) return sample
-  if (typeof sample === 'string' && sample.trim() !== '') {
-    const n = Number(sample)
-    return Number.isFinite(n) ? n : null
-  }
-  return null
+  return typeof sample === 'number' && Number.isFinite(sample) ? sample : null
 }
 
 export function FormatPanel({
@@ -170,7 +165,13 @@ export function FormatPanel({
   const setNumber = (patch: Partial<NumberFormat>) => update({ number: { ...nf, ...patch } })
   const setDate = (patch: Partial<DateFormat>) => update({ date: { ...df, ...patch } })
 
-  const [currencyDraft, setCurrencyDraft] = useState(nf.currency)
+  // The box holds what is being typed; anything that changes the applied code from outside (Reset, Clear, another
+  // column, choosing Currency again) puts it back in step, which also clears a stale invalid-code error.
+  const syncKey = `${column.name}|${nf.currency}|${nf.style === 'currency'}`
+  const [currency, setCurrency] = useState({ key: syncKey, draft: nf.currency })
+  if (currency.key !== syncKey) setCurrency({ key: syncKey, draft: nf.currency })
+  const currencyDraft = currency.key === syncKey ? currency.draft : nf.currency
+  const setCurrencyDraft = (draft: string) => setCurrency({ key: syncKey, draft })
   const currencyBad = !/^[A-Za-z]{3}$/.test(currencyDraft.trim())
 
   const n = numberSample(sample)
@@ -210,8 +211,8 @@ export function FormatPanel({
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex shrink-0 items-center gap-1.5 border-b border-border px-3 py-2">
-        <span className="min-w-0 truncate text-sm font-semibold">{column.name}</span>
         <TypeBadge dataType={type} />
+        <span className="min-w-0 truncate text-sm font-semibold">{column.name}</span>
         <span className="ml-auto flex shrink-0">
           <Button variant="ghost" size="icon" className="size-7" aria-label="Previous column" disabled={!onPrev} onClick={onPrev}>
             <ChevronLeft className="size-4" />
@@ -341,10 +342,11 @@ export function FormatPanel({
         {hasRules && (
           <Section title="Highlight rules" onReset={() => setRules([])} resetDisabled={rules.length === 0}>
             <p className="text-xs text-muted-foreground">First match wins</p>
-            {rules.map((rule) => (
+            {rules.map((rule, i) => (
               <RuleEditor
                 key={rule.id}
                 rule={rule}
+                position={i + 1}
                 dataType={type}
                 numberFormat={current.number}
                 onChange={(next) => setRules(rules.map((r) => (r.id === rule.id ? next : r)))}
@@ -356,11 +358,11 @@ export function FormatPanel({
               size="sm"
               className="w-full"
               disabled={rules.length >= MAX_RULES}
-              title={rules.length >= MAX_RULES ? `Up to ${MAX_RULES} rules per column` : undefined}
               onClick={addRule}
             >
               + Add rule
             </Button>
+            {rules.length >= MAX_RULES && <p className="text-xs text-muted-foreground">Up to {MAX_RULES} rules per column</p>}
           </Section>
         )}
 
@@ -402,11 +404,12 @@ export function FormatTab({
   const column = range ? snap.columns[range.focus.col] : undefined
   if (!range || !column || !columns.includes(column)) return HINT
   const cell = snap.rows[range.focus.row]?.[column.name]
-  const sample = !isBlankSample(cell) ? cell : rows.find((r) => !isBlankSample(r[column.name]))?.[column.name]
+  // A number column can hold text (very long numerics), which has no number to preview.
+  const usable = column.dataType === 'number' ? (v: unknown) => typeof v === 'number' && Number.isFinite(v) : (v: unknown) => !isBlankSample(v)
+  const sample = usable(cell) ? cell : rows.find((r) => usable(r[column.name]))?.[column.name]
   const { row, col } = range.focus
   return (
     <FormatPanel
-      key={column.name}
       column={column}
       format={formats[column.name]}
       onChange={(next) => onChange(column.name, next)}

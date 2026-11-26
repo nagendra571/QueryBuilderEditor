@@ -36,12 +36,15 @@ function Swatch({ token, pct }: { token: string; pct: number }) {
 
 export function RuleEditor({
   rule,
+  position,
   dataType,
   numberFormat,
   onChange,
   onRemove,
 }: {
   rule: HighlightRule
+  /** 1-based, so several rules' controls have distinct names. */
+  position: number
   dataType: ColumnDataType
   numberFormat: NumberFormat | undefined
   onChange: (next: HighlightRule) => void
@@ -57,12 +60,12 @@ export function RuleEditor({
       : { type: 'text' as const }
   const field = (value: string, set: (v: string) => void, label: string) => {
     const n = Number(value.trim())
-    const shown = isNumber && numberFormat?.fraction && value.trim() !== '' && Number.isFinite(n)
+    const shown = isNumber && numberFormat?.style === 'percent' && numberFormat.fraction && value.trim() !== '' && Number.isFinite(n)
     return (
       <span className="flex min-w-0 items-center gap-1.5">
         <Input
           {...inputProps}
-          aria-label={label}
+          aria-label={`${label}, rule ${position}`}
           value={value}
           onChange={(e) => set(e.target.value)}
           className={`h-7 min-w-0 flex-1 px-2 text-xs ${inputProps.className ?? ''}`}
@@ -76,7 +79,7 @@ export function RuleEditor({
     <div className="space-y-1.5 border border-border p-2">
       <div className="flex items-center gap-1.5">
         <Select value={rule.op} onValueChange={(op) => op && onChange({ ...rule, op: op as RuleOp })}>
-          <SelectTrigger size="sm" aria-label="Condition" className="min-w-0 flex-1 text-xs">
+          <SelectTrigger size="sm" aria-label={`Condition, rule ${position}`} className="min-w-0 flex-1 text-xs">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -88,7 +91,7 @@ export function RuleEditor({
           </SelectContent>
         </Select>
         <Select value={rule.color} onValueChange={(color) => color && onChange({ ...rule, color: color as RuleColor })}>
-          <SelectTrigger size="sm" aria-label="Colour" className="w-28 shrink-0 text-xs">
+          <SelectTrigger size="sm" aria-label={`Colour, rule ${position}`} className="w-28 shrink-0 text-xs">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -102,7 +105,7 @@ export function RuleEditor({
         </Select>
         <button
           type="button"
-          aria-label="Remove rule"
+          aria-label={`Remove rule ${position}`}
           className="grid size-7 shrink-0 place-items-center text-muted-foreground hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
           onClick={onRemove}
         >
