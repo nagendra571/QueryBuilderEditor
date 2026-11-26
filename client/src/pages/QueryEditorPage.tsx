@@ -42,7 +42,7 @@ import { useDeleteVisualization, useSaveVisualization, useVisualizations, visual
 import { savedQueriesApi } from '@/lib/api'
 import { ApiError } from '@/lib/api-client'
 import { cn } from '@/lib/utils'
-import type { ParameterType, RunQueryRequest, VisualizationDto } from '@/types'
+import type { ParameterType, QueryResultDto, RunQueryRequest, VisualizationDto } from '@/types'
 import { downloadBlob } from '@/lib/download'
 
 const ALL_PARAMETER_TYPES: ParameterType[] = ['text', 'number', 'date', 'dateTime', 'dateRange', 'dateTimeRange', 'list', 'queryList', 'boolean']
@@ -143,6 +143,13 @@ export function QueryEditorPage() {
     },
     onError: (error) => toast.error(error instanceof ApiError ? error.message : 'The query failed to run.'),
   })
+
+  // TanStack clears `data` while a new run is pending. Holding the last result keeps the grid mounted, so its
+  // pins, wrap and density carry over to the new result instead of resetting.
+  const [lastResult, setLastResult] = useState<QueryResultDto | null>(null)
+  if (runMutation.data && runMutation.data !== lastResult) setLastResult(runMutation.data)
+  if (runMutation.isError && lastResult) setLastResult(null)
+  const shownResult = runMutation.data ?? (runMutation.isPending ? lastResult : null)
 
   const exportMutation = useMutation({
     mutationFn: async ({ format, exportValues }: { format: 'csv' | 'xlsx'; exportValues: ParameterValues }) => {
@@ -536,20 +543,29 @@ export function QueryEditorPage() {
           </TabsContent>
 
           <TabsContent value="results" className="min-h-0 flex-1 overflow-hidden">
-            {runMutation.isPending && (
+            {shownResult && (
+              <div className="relative h-full" aria-busy={runMutation.isPending}>
+                <ResultsTable
+                  result={shownResult}
+                  onRowClick={gridDrill}
+                  rowActionLabel={gridDrill ? 'See the rows behind this row' : undefined}
+                  onAddFilter={() => setActiveTab('build')}
+                />
+                {runMutation.isPending && (
+                  <div role="status" className="absolute inset-0 z-30 flex items-center justify-center bg-background/60">
+                    <span className="flex items-center rounded-md border border-border bg-background px-3 py-1.5 text-sm text-muted-foreground">
+                      <Loader2 className="mr-2 size-4 animate-spin" /> Running query…
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
+            {!shownResult && runMutation.isPending && (
               <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
                 <Loader2 className="mr-2 size-4 animate-spin" /> Running query…
               </div>
             )}
-            {!runMutation.isPending && runMutation.data && (
-              <ResultsTable
-                result={runMutation.data}
-                onRowClick={gridDrill}
-                rowActionLabel={gridDrill ? 'See the rows behind this row' : undefined}
-                onAddFilter={() => setActiveTab('build')}
-              />
-            )}
-            {!runMutation.isPending && !runMutation.data && (
+            {!shownResult && !runMutation.isPending && (
               <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
                 Run the query to see results here.
               </div>
