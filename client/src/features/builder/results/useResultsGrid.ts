@@ -210,6 +210,10 @@ export function useResultsGrid(result: QueryResultDto) {
       }),
     [setView],
   )
+  const setTotals = useCallback(
+    (on: boolean) => setView((v) => ({ ...v, totals: { ...v.totals, on } })),
+    [setView],
+  )
   const setTotalFn = useCallback(
     (column: string, fn: TotalFn) => setView((v) => ({ ...v, totals: { ...v.totals, fns: { ...v.totals.fns, [column]: fn } } })),
     [setView],
@@ -244,6 +248,7 @@ export function useResultsGrid(result: QueryResultDto) {
     filterRows,
     formats: view.formats,
     setColumnFormat,
+    setTotals,
     setTotalFn,
     compiled,
   }

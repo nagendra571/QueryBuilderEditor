@@ -158,6 +158,8 @@ export function ResultsTable({
         detailsOpen={panel.open}
         onToggleDetails={() => setPanel((p) => ({ ...p, open: !p.open }))}
         detailsRef={detailsButton}
+        totalsOn={view.totals.on}
+        onTotalsChange={grid.setTotals}
         onCopy={() => gridRef.current?.copy()}
         copyDisabled={noRows}
         isDefaultView={grid.isDefault}
@@ -216,7 +218,8 @@ export function ResultsTable({
             </AlertDescription>
           </Alert>
         ) : (
-          <div className="isolate min-h-0 min-w-0 flex-1">
+          <div className="isolate flex min-h-0 min-w-0 flex-1 flex-col">
+            <div className="min-h-0 flex-1">
             <ResultsGrid
               grid={grid}
               onRowClick={onRowClick}
@@ -234,6 +237,12 @@ export function ResultsTable({
                 if (col >= 0) gridRef.current?.moveTo({ row: store.get().range?.focus.row ?? 0, col })
               }}
             />
+            </div>
+            {view.totals.on && result.truncated && (
+              <div role="status" className="shrink-0 border-t border-warning/40 bg-warning/20 px-(--space-row-x) py-1 text-xs text-foreground">
+                Totals cover the first {result.rowLimit.toLocaleString()} loaded rows. Export and charts use all matching rows.
+              </div>
+            )}
           </div>
         )}
         {panel.open && (

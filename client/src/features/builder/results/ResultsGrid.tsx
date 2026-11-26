@@ -7,6 +7,7 @@ import { nextSort } from './grid-view.ts'
 import { GridHeaderRow } from './GridHeaderRow'
 import type { HeaderActions } from './GridHeaderCell'
 import { GridRow } from './GridRow'
+import { TotalsRow } from './TotalsRow'
 import { rangeContains, rowSlice, type CellPos } from './selection.ts'
 import { restoredScroll, type GridMemory } from './grid-memory.ts'
 import { headerExtra } from './header-width.ts'
@@ -59,7 +60,7 @@ export function ResultsGrid({
   /** Opens the formatting panel for a column; without it the header menu has no Format… item. */
   onFormat?: (column: string) => void
 }) {
-  const { table, view, setView, rows, columns, density, filters, allColumns, formats, compiled, setColumnFilter, clearColumnFilter, showOnlyValue, hideColumnValue } = grid
+  const { table, view, setView, rows, columns, density, filters, allColumns, formats, compiled, setColumnFilter, clearColumnFilter, showOnlyValue, hideColumnValue, setTotalFn } = grid
   const rowHeight = ROW_HEIGHT[density]
   const scrollRef = useRef<HTMLDivElement>(null)
   const idPrefix = useId().replace(/:/g, '')
@@ -102,6 +103,8 @@ export function ResultsGrid({
     overscan: 10,
     paddingStart: rowHeight,
     scrollPaddingStart: rowHeight,
+    // The sticky totals row covers the bottom of the viewport, so keyboard moves must stop above it.
+    scrollPaddingEnd: view.totals.on ? rowHeight : 0,
     measureElement: view.wrap ? undefined : () => rowHeight,
     initialOffset: initialScroll.top,
   })
@@ -406,6 +409,20 @@ export function ResultsGrid({
           )
         })}
       </div>
+      {view.totals.on && (
+        <TotalsRow
+          rows={displayed}
+          columns={columns}
+          layouts={layouts}
+          colWindow={colWindow}
+          formats={cellFormats}
+          fns={view.totals.fns}
+          height={rowHeight}
+          width={sizerWidth}
+          rowCount={rows.length}
+          onChange={setTotalFn}
+        />
+      )}
     </div>
     </CellContextMenu>
   )
