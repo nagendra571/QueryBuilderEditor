@@ -38,9 +38,18 @@ export function ResultsTable({
     // The overlay is portalled to body, outside #root, so menus and tooltips (also on body) stay usable.
     const root = document.getElementById('root')
     root?.setAttribute('inert', '')
+    // On the document, after React's handlers: a control that consumes Escape calls preventDefault first, and
+    // the press still exits when focus has fallen back to body (e.g. after a resize handle lost focus).
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape' || e.defaultPrevented) return
+      if ((e.target as Element | null)?.closest?.('[role="menu"], [role="listbox"], [role="dialog"]')) return
+      setFullScreen(false)
+    }
+    document.addEventListener('keydown', onKeyDown)
     return () => {
       document.body.style.overflow = previous
       root?.removeAttribute('inert')
+      document.removeEventListener('keydown', onKeyDown)
     }
   }, [fullScreen])
 
@@ -128,7 +137,7 @@ export function ResultsTable({
         filtered={rows.length}
         raw={grid.totalRaw}
         pinned={pinned}
-        selectedCells={selectedCells}
+        selectedCells={noRows ? 0 : selectedCells}
       />
     </div>
   )
@@ -136,14 +145,7 @@ export function ResultsTable({
   if (!fullScreen) return <div className="h-full">{content}</div>
 
   return createPortal(
-    <div
-      className="fixed inset-0 z-50 flex flex-col bg-background"
-      onKeyDown={(e) => {
-        if (e.key !== 'Escape' || e.defaultPrevented) return
-        if ((e.target as HTMLElement).closest('[role="menu"], [role="listbox"], [role="dialog"]')) return
-        setFullScreen(false)
-      }}
-    >
+    <div className="fixed inset-0 z-50 flex flex-col bg-background">
       {content}
     </div>,
     document.body,

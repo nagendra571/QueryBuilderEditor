@@ -16,7 +16,7 @@ export function GridCell({ value, dataType, wrap }: { value: unknown; dataType: 
   const text = displayString(value)
   if (wrap && dataType === 'text') {
     return (
-      <span className="line-clamp-4 min-w-0 whitespace-normal break-words" title={text}>
+      <span className="line-clamp-4 min-w-0 whitespace-pre-line break-words" title={text}>
         {text}
       </span>
     )

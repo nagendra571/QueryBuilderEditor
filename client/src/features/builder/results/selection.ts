@@ -73,3 +73,23 @@ export function rangeSize(r: CellRange): number {
   const n = normalize(r)
   return (n.bottom - n.top + 1) * (n.right - n.left + 1)
 }
+
+export interface RowSlice {
+  /** First and last selected column in this row, or -1 when the row has no selected cells. */
+  selLeft: number
+  selRight: number
+  /** The focus cell's column when it is in this row, else -1. */
+  focusCol: number
+}
+
+// Primitives rather than the range object, so a memoised row re-renders only when its own slice changes.
+export function rowSlice(range: CellRange | null, row: number): RowSlice {
+  if (!range) return { selLeft: -1, selRight: -1, focusCol: -1 }
+  const n = normalize(range)
+  const inRows = row >= n.top && row <= n.bottom
+  return {
+    selLeft: inRows ? n.left : -1,
+    selRight: inRows ? n.right : -1,
+    focusCol: range.focus.row === row ? range.focus.col : -1,
+  }
+}

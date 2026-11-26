@@ -127,7 +127,7 @@ export function ResultsToolbar({
             aria-checked={density === d.value}
             onClick={() => onDensityChange(d.value)}
             className={cn(
-              'h-7 px-2 text-xs',
+              'h-7 px-2 text-xs focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring',
               density === d.value ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted',
             )}
           >

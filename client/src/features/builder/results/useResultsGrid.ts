@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   getCoreRowModel,
   getFilteredRowModel,
@@ -16,9 +16,12 @@ import { DEFAULT_COL_CAP, FIT_SAMPLE_ROWS, createCanvasMeasure, fitWidth } from 
 import { displayOrder, displayString } from './grid-columns.ts'
 import { buildColumnDefs, tableBehaviour, type RowData } from './grid-table.ts'
 import { carryOver, defaultView, isDefaultView, type GridView } from './grid-view.ts'
+import { HEADER_EXTRA, PINNED_HEADER_EXTRA } from './header-width.ts'
 
-// Header padding 20 + type badge ~36 + sort mark ~16 + menu button ~24.
-export const HEADER_EXTRA = 96
+export { HEADER_EXTRA, PINNED_HEADER_EXTRA }
+
+export const HEADER_FONT = '600 12px "Public Sans Variable"'
+export const CELL_FONT = '400 13px "Public Sans Variable"'
 
 function resolve<T>(updater: Updater<T>, current: T): T {
   return typeof updater === 'function' ? (updater as (old: T) => T)(current) : updater
@@ -47,24 +50,51 @@ export function useResultsGrid(result: QueryResultDto) {
     setState((s) => ({ ...s, view: update(s.view) }))
   }, [])
 
-  const defaultWidths = useMemo(() => {
-    const measure = createCanvasMeasure({
-      header: '600 12px "Public Sans Variable"',
-      cell: '400 13px "Public Sans Variable"',
+  // Canvas measures with a fallback font until the web font has loaded, which under-sizes headers.
+  const [fontsReady, setFontsReady] = useState(
+    () => typeof document === 'undefined' || !document.fonts || document.fonts.status === 'loaded',
+  )
+  useEffect(() => {
+    if (fontsReady) return
+    let live = true
+    document.fonts.ready.then(() => {
+      if (live) setFontsReady(true)
     })
-    const out: Record<string, number> = {}
+    return () => {
+      live = false
+    }
+  }, [fontsReady])
+
+  const defaultWidths = useMemo(() => {
+    void fontsReady
+    const measure = createCanvasMeasure({ header: HEADER_FONT, cell: CELL_FONT })
+    const plain: Record<string, number> = {}
+    const pinned: Record<string, number> = {}
     for (const c of result.columns) {
       const values = result.rows.slice(0, FIT_SAMPLE_ROWS).map((r) => displayString(r[c.name]))
-      out[c.name] = fitWidth(c.name, values, measure, HEADER_EXTRA, DEFAULT_COL_CAP)
+      plain[c.name] = fitWidth(c.name, values, measure, HEADER_EXTRA, DEFAULT_COL_CAP)
+      pinned[c.name] = Math.max(
+        plain[c.name],
+        fitWidth(c.name, [], measure, HEADER_EXTRA + PINNED_HEADER_EXTRA, DEFAULT_COL_CAP),
+      )
     }
-    return out
-  }, [result])
+    return { plain, pinned }
+  }, [result, fontsReady])
+
+  const defaultWidthOf = useCallback(
+    (name: string, pinnedLeft: string[], pinnedRight: string[]) =>
+      (pinnedLeft.includes(name) || pinnedRight.includes(name) ? defaultWidths.pinned : defaultWidths.plain)[name],
+    [defaultWidths],
+  )
 
   const columnDefs = useMemo(() => buildColumnDefs(result.columns), [result.columns])
 
   const sizing = useMemo<ColumnSizingState>(
-    () => Object.fromEntries(names.map((n) => [n, view.widths[n] ?? defaultWidths[n]])),
-    [names, view.widths, defaultWidths],
+    () =>
+      Object.fromEntries(
+        names.map((n) => [n, view.widths[n] ?? defaultWidthOf(n, view.pinnedLeft, view.pinnedRight)]),
+      ),
+    [names, view.widths, view.pinnedLeft, view.pinnedRight, defaultWidthOf],
   )
 
   const sorting = useMemo<SortingState>(
@@ -102,7 +132,7 @@ export function useResultsGrid(result: QueryResultDto) {
       setView((v) => {
         const widths = { ...v.widths }
         for (const n of names) {
-          if (next[n] !== undefined && next[n] !== (v.widths[n] ?? defaultWidths[n])) widths[n] = next[n]
+          if (next[n] !== undefined && next[n] !== (v.widths[n] ?? defaultWidthOf(n, v.pinnedLeft, v.pinnedRight))) widths[n] = next[n]
         }
         return { ...v, widths }
       })

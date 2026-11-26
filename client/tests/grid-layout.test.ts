@@ -26,3 +26,16 @@ test('moveColumn reorders within a group only', () => {
   assert.deepEqual(moveColumn(v, 'd', 'b').order, ['a', 'd', 'b', 'c'])
   assert.equal(moveColumn(v, 'a', 'b'), v)
 })
+
+test('columnWindow renders pinned columns always and spaces skipped centre columns', async () => {
+  const { columnWindow } = await import('../src/features/builder/results/grid-layout.ts')
+  const l = layoutColumns(['a', 'b', 'c', 'd', 'e', 'f'], [100, 110, 120, 130, 140, 150], ['a'], ['f'])
+  const all = columnWindow(l, null, null)
+  assert.deepEqual(all, { left: [0], centre: [1, 2, 3, 4], right: [5], before: 0, after: 0 })
+  const w = columnWindow(l, 1, 2)
+  assert.deepEqual(w, { left: [0], centre: [2, 3], right: [5], before: 110, after: 140 })
+  const clamped = columnWindow(l, 3, 99)
+  assert.deepEqual(clamped.centre, [4])
+  assert.equal(clamped.before, 110 + 120 + 130)
+  assert.equal(clamped.after, 0)
+})

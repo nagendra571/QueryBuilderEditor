@@ -1,3 +1,4 @@
+import { memo } from 'react'
 import {
   DndContext,
   type DragEndEvent,
@@ -14,7 +15,8 @@ import { GridHeaderCell, type HeaderActions } from './GridHeaderCell'
 import { ROW_NUM_WIDTH, type ColumnLayout } from './grid-layout.ts'
 import type { GridSort } from './grid-view.ts'
 
-export function GridHeaderRow({
+// Memoised so scrolling the body does not re-render every header and its sortable hooks.
+export const GridHeaderRow = memo(function GridHeaderRow({
   columns,
   layouts,
   sort,
@@ -47,7 +49,7 @@ export function GridHeaderRow({
       role="row"
       aria-rowindex={1}
       className="sticky top-0 z-20 flex border-b border-foreground bg-muted"
-      style={{ width, height }}
+      style={{ width, minWidth: '100%', height }}
     >
       <div
         role="columnheader"
@@ -62,8 +64,11 @@ export function GridHeaderRow({
         collisionDetection={closestCenter}
         onDragEnd={onDragEnd}
         modifiers={[restrictToHorizontalAxis, restrictToParentElement]}
+        // The default live region lands inside role="row", where only cells are allowed.
+        accessibility={{ container: document.body }}
       >
-        {(['left', 'centre', 'right'] as const).map((group) => (
+        {(['left', 'centre', 'right'] as const).map((group) => [
+          group === 'right' && <div key="filler" aria-hidden className="min-w-0 flex-1" />,
           <SortableContext key={group} items={ids(group)} strategy={horizontalListSortingStrategy}>
             {columns.map((col, i) =>
               layouts[i].group === group ? (
@@ -77,9 +82,9 @@ export function GridHeaderRow({
                 />
               ) : null,
             )}
-          </SortableContext>
-        ))}
+          </SortableContext>,
+        ])}
       </DndContext>
     </div>
   )
-}
+})

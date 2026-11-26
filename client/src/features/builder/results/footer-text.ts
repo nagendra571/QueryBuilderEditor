@@ -5,3 +5,9 @@ export function footerRange(first: number, last: number, filtered: number, raw: 
   const range = `${n(first)}–${n(last)} of ${n(filtered)}`
   return filtered < raw ? `${range} (filtered from ${n(raw)})` : `${range} visible`
 }
+
+/** "1 cell selected", "12 cells selected"; empty when nothing is selected. */
+export function selectedCellsText(cells: number): string {
+  if (cells <= 0) return ''
+  return `${cells.toLocaleString()} ${cells === 1 ? 'cell' : 'cells'} selected`
+}

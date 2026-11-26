@@ -1,18 +1,20 @@
-import { useCallback, useEffect, useImperativeHandle, useRef } from 'react'
+import { useCallback, useEffect, useId, useImperativeHandle, useMemo, useRef } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
-import { createCanvasMeasure, fitWidth } from './column-widths.ts'
+import { MAX_COL_WIDTH, MIN_COL_WIDTH, createCanvasMeasure, fitWidth } from './column-widths.ts'
 import { displayString } from './grid-columns.ts'
-import { ROW_NUM_WIDTH, layoutColumns, moveColumn, pinColumn } from './grid-layout.ts'
+import { ROW_NUM_WIDTH, cellId, columnWindow, layoutColumns, moveColumn, pinColumn } from './grid-layout.ts'
 import { nextSort } from './grid-view.ts'
 import { GridHeaderRow } from './GridHeaderRow'
 import type { HeaderActions } from './GridHeaderCell'
 import { GridRow } from './GridRow'
-import type { CellPos } from './selection.ts'
-import { HEADER_EXTRA, type useResultsGrid } from './useResultsGrid.ts'
+import { rowSlice, type CellPos } from './selection.ts'
+import { CELL_FONT, HEADER_EXTRA, HEADER_FONT, PINNED_HEADER_EXTRA, type useResultsGrid } from './useResultsGrid.ts'
 import { useGridSelection } from './useGridSelection.ts'
 import { cn } from '@/lib/utils'
 
 const ROW_HEIGHT = { comfortable: 44, compact: 32 } as const
+// Below this many centre columns every cell is rendered; above it only the ones in view (plus overscan).
+const COLUMN_VIRTUALISATION_THRESHOLD = 16
 
 export function ResultsGrid({
   grid,
@@ -27,7 +29,7 @@ export function ResultsGrid({
   rowActionLabel?: string
   /** 1-based display rows in view, for the footer. */
   onVisibleRangeChange?: (first: number, last: number) => void
-  /** 0 when nothing is selected. */
+  /** 0 when nothing is selected, and again when the grid unmounts. */
   onSelectionChange?: (cells: number) => void
   copyRef?: React.Ref<{ copy: () => void }>
 }) {
@@ -35,18 +37,26 @@ export function ResultsGrid({
   const rowHeight = ROW_HEIGHT[density]
   const scrollRef = useRef<HTMLDivElement>(null)
   const measureRef = useRef<ReturnType<typeof createCanvasMeasure> | null>(null)
+  const idPrefix = useId().replace(/:/g, '')
 
-  const widths = columns.map((c) => table.getColumn(c.name)?.getSize() ?? 120)
-  const layouts = layoutColumns(
-    columns.map((c) => c.name),
-    widths,
-    view.pinnedLeft,
-    view.pinnedRight,
+  const sizing = table.getState().columnSizing
+  // Same clamp as TanStack's getSize, read from the memoised sizing state so the result is stable across scrolls.
+  const widths = useMemo(
+    () => columns.map((c) => Math.min(MAX_COL_WIDTH, Math.max(MIN_COL_WIDTH, sizing[c.name] ?? 150))),
+    [columns, sizing],
   )
-  const sizerWidth = ROW_NUM_WIDTH + widths.reduce((a, b) => a + b, 0)
+  const layouts = useMemo(
+    () =>
+      layoutColumns(
+        columns.map((c) => c.name),
+        widths,
+        view.pinnedLeft,
+        view.pinnedRight,
+      ),
+    [columns, widths, view.pinnedLeft, view.pinnedRight],
+  )
+  const sizerWidth = useMemo(() => ROW_NUM_WIDTH + widths.reduce((a, b) => a + b, 0), [widths])
 
-  // Rows-only virtualisation: column widths are capped at 480px, so even 60 columns are a few
-  // thousand cells per screenful of rows, which stays cheap without windowing columns too.
   const virtualizer = useVirtualizer({
     count: rows.length,
     getScrollElement: () => scrollRef.current,
@@ -60,6 +70,28 @@ export function ResultsGrid({
   useEffect(() => {
     virtualizer.measure()
   }, [virtualizer, rowHeight, view.wrap])
+
+  const centre = useMemo(() => layouts.filter((l) => l.group === 'centre'), [layouts])
+  const virtualiseColumns = centre.length > COLUMN_VIRTUALISATION_THRESHOLD
+  const columnVirtualizer = useVirtualizer({
+    horizontal: true,
+    enabled: virtualiseColumns,
+    count: centre.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: (i) => centre[i]?.width ?? 120,
+    // Starts the centre group at its real x, so the virtualiser's item positions equal the layout's.
+    paddingStart: centre[0]?.x ?? ROW_NUM_WIDTH,
+    overscan: 3,
+  })
+
+  useEffect(() => {
+    columnVirtualizer.measure()
+  }, [columnVirtualizer, centre])
+
+  const colItems = virtualiseColumns ? columnVirtualizer.getVirtualItems() : []
+  const colFrom = virtualiseColumns && colItems.length ? colItems[0].index : null
+  const colTo = virtualiseColumns && colItems.length ? colItems[colItems.length - 1].index : null
+  const colWindow = useMemo(() => columnWindow(layouts, colFrom, colTo), [layouts, colFrom, colTo])
 
   const reveal = useCallback(
     (pos: CellPos) => {
@@ -119,28 +151,42 @@ export function ResultsGrid({
     onVisibleRangeChange?.(first, last)
   }, [first, last, onVisibleRangeChange])
 
-  function setWidth(name: string, width: number) {
-    setView((v) => ({ ...v, widths: { ...v.widths, [name]: width } }))
-  }
+  const setWidth = useCallback(
+    (name: string, width: number) => setView((v) => ({ ...v, widths: { ...v.widths, [name]: width } })),
+    [setView],
+  )
 
-  function fit(name: string) {
-    measureRef.current ??= createCanvasMeasure({
-      header: '600 12px "Public Sans Variable"',
-      cell: '400 13px "Public Sans Variable"',
-    })
-    const values = rows.slice(0, 200).map((r) => displayString(r.original[name]))
-    setWidth(name, fitWidth(name, values, measureRef.current, HEADER_EXTRA))
-  }
+  const fit = useCallback(
+    (name: string) => {
+      measureRef.current ??= createCanvasMeasure({ header: HEADER_FONT, cell: CELL_FONT })
+      const values = rows.slice(0, 200).map((r) => displayString(r.original[name]))
+      const pinned = view.pinnedLeft.includes(name) || view.pinnedRight.includes(name)
+      setWidth(name, fitWidth(name, values, measureRef.current, HEADER_EXTRA + (pinned ? PINNED_HEADER_EXTRA : 0)))
+    },
+    [rows, view.pinnedLeft, view.pinnedRight, setWidth],
+  )
 
-  const actionsFor = (name: string): HeaderActions => ({
-    toggleSort: () => setView((v) => ({ ...v, sort: nextSort(v.sort, name) })),
-    setSort: (direction) => setView((v) => ({ ...v, sort: direction ? { column: name, direction } : null })),
-    pin: (side) => setView((v) => pinColumn(v, name, side)),
-    hide: () => setView((v) => (v.hidden.includes(name) ? v : { ...v, hidden: [...v.hidden, name] })),
-    fit: () => fit(name),
-    copyColumn: () => copyColumn(name),
-    resize: (width) => setWidth(name, width),
-  })
+  const actionsFor = useCallback(
+    (name: string): HeaderActions => ({
+      toggleSort: () => setView((v) => ({ ...v, sort: nextSort(v.sort, name) })),
+      setSort: (direction) => setView((v) => ({ ...v, sort: direction ? { column: name, direction } : null })),
+      pin: (side) => setView((v) => pinColumn(v, name, side)),
+      hide: () => setView((v) => (v.hidden.includes(name) ? v : { ...v, hidden: [...v.hidden, name] })),
+      fit: () => fit(name),
+      copyColumn: () => copyColumn(name),
+      resize: (width) => setWidth(name, width),
+    }),
+    [setView, fit, copyColumn, setWidth],
+  )
+
+  const onReorder = useCallback(
+    (active: string, over: string) => setView((v) => moveColumn(v, active, over)),
+    [setView],
+  )
+
+  const focusRendered =
+    !!range && items.some((i) => i.index === range.focus.row) &&
+    (layouts[range.focus.col]?.group !== 'centre' || colWindow.centre.includes(range.focus.col))
 
   return (
     <div
@@ -151,13 +197,14 @@ export function ResultsGrid({
       aria-rowcount={rows.length + 1}
       aria-colcount={columns.length + 1}
       aria-multiselectable
+      aria-activedescendant={focusRendered && range ? cellId(idPrefix, range.focus.row, range.focus.col) : undefined}
       onKeyDown={selection.onKeyDown}
       className={cn(
         'relative h-full min-h-60 overflow-auto bg-background select-none',
         'focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring',
       )}
     >
-      <div className="relative" style={{ width: sizerWidth, height: virtualizer.getTotalSize() }}>
+      <div className="relative" style={{ width: sizerWidth, minWidth: '100%', height: virtualizer.getTotalSize() }}>
         <GridHeaderRow
           columns={columns}
           layouts={layouts}
@@ -165,27 +212,34 @@ export function ResultsGrid({
           height={rowHeight}
           width={sizerWidth}
           actionsFor={actionsFor}
-          onReorder={(active, over) => setView((v) => moveColumn(v, active, over))}
+          onReorder={onReorder}
         />
-        {items.map((item) => (
-          <GridRow
-            key={item.key}
-            row={rows[item.index]}
-            index={item.index}
-            start={item.start}
-            height={rowHeight}
-            wrap={view.wrap}
-            width={sizerWidth}
-            columns={columns}
-            layouts={layouts}
-            range={range}
-            onPointerDown={selection.onCellPointerDown}
-            onPointerEnter={selection.onCellPointerEnter}
-            onAction={onRowClick}
-            actionLabel={rowActionLabel}
-            measureRef={view.wrap ? virtualizer.measureElement : undefined}
-          />
-        ))}
+        {items.map((item) => {
+          const slice = rowSlice(range, item.index)
+          return (
+            <GridRow
+              key={item.key}
+              row={rows[item.index]}
+              index={item.index}
+              start={item.start}
+              height={rowHeight}
+              wrap={view.wrap}
+              width={sizerWidth}
+              columns={columns}
+              layouts={layouts}
+              colWindow={colWindow}
+              selLeft={slice.selLeft}
+              selRight={slice.selRight}
+              focusCol={slice.focusCol}
+              idPrefix={idPrefix}
+              onPointerDown={selection.onCellPointerDown}
+              onPointerEnter={selection.onCellPointerEnter}
+              onAction={onRowClick}
+              actionLabel={rowActionLabel}
+              measureRef={view.wrap ? virtualizer.measureElement : undefined}
+            />
+          )
+        })}
       </div>
     </div>
   )

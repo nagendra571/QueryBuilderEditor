@@ -69,11 +69,22 @@ export function useGridSelection({
 
   const size = range ? rangeSize(range) : 0
   const lastReported = useRef(0)
+  const reportRef = useRef(onSelectionChange)
+  useEffect(() => {
+    reportRef.current = onSelectionChange
+  }, [onSelectionChange])
   useEffect(() => {
     if (lastReported.current === size) return
     lastReported.current = size
     onSelectionChange?.(size)
   }, [size, onSelectionChange])
+  // The grid remounts on full screen and unmounts on an empty search; the footer must not keep the old count.
+  useEffect(
+    () => () => {
+      if (lastReported.current !== 0) reportRef.current?.(0)
+    },
+    [],
+  )
 
   const dragging = useRef(false)
   useEffect(() => {
@@ -151,7 +162,11 @@ export function useGridSelection({
         return
       }
       if (e.key === 'Escape') {
-        if (range) update(() => null)
+        if (range) {
+          // Consumed here, so the same press does not also leave full screen.
+          e.preventDefault()
+          update(() => null)
+        }
         return
       }
       if (e.key === 'Enter') {

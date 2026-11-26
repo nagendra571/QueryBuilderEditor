@@ -85,3 +85,12 @@ test('rangeSize and rangeContains', () => {
     assert.equal(rangeContains(r, p), false)
   }
 })
+
+test('rowSlice gives each row only its own selected span and focus column', async () => {
+  const { rowSlice } = await import('../src/features/builder/results/selection.ts')
+  const range = { anchor: { row: 4, col: 3 }, focus: { row: 2, col: 1 } }
+  assert.deepEqual(rowSlice(null, 2), { selLeft: -1, selRight: -1, focusCol: -1 })
+  assert.deepEqual(rowSlice(range, 2), { selLeft: 1, selRight: 3, focusCol: 1 })
+  assert.deepEqual(rowSlice(range, 3), { selLeft: 1, selRight: 3, focusCol: -1 })
+  assert.deepEqual(rowSlice(range, 5), { selLeft: -1, selRight: -1, focusCol: -1 })
+})

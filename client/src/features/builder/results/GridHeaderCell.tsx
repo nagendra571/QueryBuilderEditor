@@ -17,7 +17,8 @@ const BADGE: Record<ColumnDataType, string> = {
   text: 'ABC',
   number: '123',
   date: 'DATE',
-  dateTime: 'TIME',
+  // A dateTime is usually a date with a midnight time, so TIME read as a time-of-day column.
+  dateTime: 'DATE',
   boolean: 'Y/N',
   guid: 'ID',
   unknown: '?',
@@ -102,14 +103,14 @@ export function GridHeaderCell({
     >
       <button
         type="button"
-        className="cursor-grab touch-none text-muted-foreground/40 hover:text-foreground active:cursor-grabbing"
+        className="flex w-3.5 shrink-0 cursor-grab touch-none justify-center text-muted-foreground/40 hover:text-foreground active:cursor-grabbing"
         aria-label={`Reorder ${column.name}`}
         {...attributes}
         {...listeners}
       >
         <GripVertical className="size-3.5" />
       </button>
-      <span className="shrink-0 rounded-sm border border-border px-1 font-numeric text-[10px] font-semibold text-muted-foreground">
+      <span className="w-8 shrink-0 rounded-sm border border-border text-center font-numeric text-[10px] font-semibold text-muted-foreground">
         {BADGE[column.dataType]}
       </span>
       <button
@@ -129,7 +130,7 @@ export function GridHeaderCell({
           <button
             type="button"
             aria-label={`Column options for ${column.name}`}
-            className="shrink-0 rounded-sm p-0.5 text-muted-foreground opacity-0 hover:text-foreground focus-visible:opacity-100 group-focus-within/h:opacity-100 group-hover/h:opacity-100 data-[state=open]:opacity-100"
+            className="flex size-[18px] shrink-0 items-center justify-center rounded-sm text-muted-foreground opacity-0 hover:text-foreground focus-visible:opacity-100 group-focus-within/h:opacity-100 group-hover/h:opacity-100 data-[state=open]:opacity-100"
           >
             <MoreVertical className="size-3.5" />
           </button>

@@ -72,3 +72,36 @@ export function pinColumn(view: GridView, name: string, side: 'left' | 'right' |
   if (side === 'right') pinnedRight.unshift(name)
   return { ...view, pinnedLeft, pinnedRight }
 }
+
+export interface ColumnWindow {
+  /** Indices into the display-ordered columns, per group; `centre` holds only the rendered ones. */
+  left: number[]
+  centre: number[]
+  right: number[]
+  /** Widths of the centre columns skipped before and after the rendered ones. */
+  before: number
+  after: number
+}
+
+// `from`/`to` are positions in the centre group (inclusive), as the column virtualiser reports them;
+// null renders every centre column. Pinned columns are always rendered.
+export function columnWindow(layouts: ColumnLayout[], from: number | null, to: number | null): ColumnWindow {
+  const left: number[] = []
+  const all: number[] = []
+  const right: number[] = []
+  layouts.forEach((l, i) => (l.group === 'left' ? left : l.group === 'right' ? right : all).push(i))
+  if (from === null || to === null || all.length === 0) return { left, centre: all, right, before: 0, after: 0 }
+  const lo = Math.max(0, Math.min(from, all.length - 1))
+  const hi = Math.max(lo, Math.min(to, all.length - 1))
+  const width = (ids: number[]) => ids.reduce((a, i) => a + layouts[i].width, 0)
+  return {
+    left,
+    centre: all.slice(lo, hi + 1),
+    right,
+    before: width(all.slice(0, lo)),
+    after: width(all.slice(hi + 1)),
+  }
+}
+
+/** DOM id of a body cell, for the grid's aria-activedescendant. */
+export const cellId = (prefix: string, row: number, col: number) => `${prefix}-r${row}-c${col}`
