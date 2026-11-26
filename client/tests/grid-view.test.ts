@@ -22,8 +22,16 @@ function customised(): GridView {
     density: 'compact' as GridView['density'],
     wrap: true,
     filters: [{ kind: 'values', column: 'A', mode: 'include', values: ['x'] }],
+    formats: {},
+    totals: { on: false, fns: {} },
   }
 }
+
+const aFormat = () => ({
+  number: { style: 'currency' as const, decimals: 2, currency: 'USD', thousands: true, fraction: false },
+  date: { pattern: 'iso' as const, showTime: false },
+  rules: [{ id: 'r1', op: 'gt' as const, value: '5', value2: '', color: 'red' as const }],
+})
 
 test('defaultView lists columns in order with nothing else set', () => {
   assert.deepEqual(defaultView(cols), {
@@ -37,7 +45,37 @@ test('defaultView lists columns in order with nothing else set', () => {
     density: null,
     wrap: false,
     filters: [],
+    formats: {},
+    totals: { on: false, fns: {} },
   })
+})
+
+test('carryOver deep-copies formats and totals, and resets them on another set', () => {
+  const v = customised()
+  v.formats = { A: aFormat() }
+  v.totals = { on: true, fns: { A: 'avg' } }
+  const next = carryOver(v, cols, ['B', 'C', 'A'])
+  assert.deepEqual(next.formats, v.formats)
+  assert.deepEqual(next.totals, v.totals)
+  next.formats.A.rules[0].value = '9'
+  next.formats.A.number!.decimals = 0
+  next.totals.fns.A = 'max'
+  assert.equal(v.formats.A.rules[0].value, '5')
+  assert.equal(v.formats.A.number!.decimals, 2)
+  assert.equal(v.totals.fns.A, 'avg')
+  const reset = carryOver(v, cols, ['A', 'B'])
+  assert.deepEqual(reset.formats, {})
+  assert.deepEqual(reset.totals, { on: false, fns: {} })
+})
+
+test('isDefaultView is false with totals on or any format', () => {
+  const a = defaultView(cols)
+  a.totals = { on: true, fns: {} }
+  assert.equal(isDefaultView(a, cols), false)
+  const b = defaultView(cols)
+  b.formats = { A: aFormat() }
+  assert.equal(isDefaultView(b, cols), false)
+  assert.equal(isDefaultView({ ...defaultView(cols), formats: {} }, cols), true)
 })
 
 test('carryOver keeps filters on the same column set and drops them otherwise', () => {
