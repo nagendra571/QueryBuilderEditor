@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Results grid: formatting</title>
+<style>
+  :root{--ground:#eef1ec;--ink:#1e2a38;--white:#fff;--blue:#2f6db5;--wash:#dde7f3;--deep:#173c66;--tint:#e2e7e0;--mbg:#e6eae4;--muted:#52605b;--edge:#c9d1c7;--input:#8c9891;--yellow:#f2c94c;--yink:#3b2c00;
+    --red:#c0392b;--redw:#f6dcd8;--green:#2e7d4f;--greenw:#d7ecdf;--amberw:#fbecc8;
+    --sans:"Public Sans Variable","Public Sans",ui-sans-serif,system-ui,sans-serif;--num:"Barlow Condensed","Arial Narrow",ui-sans-serif,sans-serif}
+  *{box-sizing:border-box} body{margin:0;background:var(--ground);color:var(--ink);font:14px/1.45 var(--sans);padding:24px 28px 60px}
+  h1{font-size:22px;margin:0 0 4px} .lede{color:var(--muted);margin:0 0 18px;max-width:1000px}
+  h2{font-size:15px;margin:28px 0 8px}
+  .wrap{display:grid;grid-template-columns:1fr 340px;border:1px solid var(--edge);border-radius:4px;background:#fff;overflow:hidden;max-width:1240px;position:relative}
+  .grid{border-right:1px solid var(--edge);min-width:0;position:relative}
+  .toolbar{display:flex;align-items:center;gap:6px;padding:7px 10px;border-bottom:1px solid var(--edge)}
+  .search{width:180px;height:28px;border:1px solid var(--input);border-radius:4px;padding:0 8px;color:var(--muted);font-size:12px;display:flex;align-items:center}
+  .btn{height:28px;display:inline-flex;align-items:center;gap:5px;padding:0 9px;border:1px solid var(--edge);border-radius:4px;font-size:12px;font-weight:500;background:var(--ground);white-space:nowrap}
+  .btn.on{background:var(--wash);border-color:#9fbbe0;color:var(--deep)}
+  .btn.primary{background:var(--blue);border-color:var(--blue);color:#fff}
+  .btn.ghost{border-color:transparent;background:transparent;color:var(--muted)}
+  .meta{margin-left:auto;font:500 13px var(--num);color:var(--muted)}
+  table{border-collapse:separate;border-spacing:0;font-size:13px;width:100%}
+  th,td{height:32px;padding:0 10px;white-space:nowrap;text-align:left;border-right:1px solid #e4e9e2;border-bottom:1px solid #e4e9e2;position:relative}
+  thead th{background:#f6f8f5;border-bottom:1px solid var(--ink);font-size:12px;font-weight:600}
+  th.act{box-shadow:inset 0 -3px 0 var(--blue)}
+  .num{text-align:right;font-family:var(--num);font-size:14px}
+  .rn{width:42px;text-align:right;color:#8a968f;font:500 12px var(--num);background:var(--ground)}
+  .ty{font:600 10px var(--num);color:var(--muted);border:1px solid var(--edge);border-radius:2px;padding:0 3px;margin-right:6px}
+  .fmk{display:inline-block;margin-left:6px;width:7px;height:7px;border-radius:50%;background:var(--blue);vertical-align:middle}
+  .bar{position:absolute;right:auto;left:4px;top:7px;bottom:7px;background:#c9daf0;border-radius:1px;z-index:0}
+  td .v{position:relative;z-index:1}
+  .hlr{background:var(--redw);color:#7a1f15;font-weight:600}
+  .hlg{background:var(--greenw)}
+  .focus{outline:2px solid var(--blue);outline-offset:-2px}
+  tfoot td{background:#f6f8f5;border-top:1px solid var(--ink);border-bottom:0;font-weight:600;height:34px}
+  tfoot .fnl{font:600 10px var(--num);letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-right:6px}
+  tfoot .pick{display:inline-flex;align-items:center;gap:4px;border-radius:3px;padding:0 4px}
+  tfoot .pick.hot{outline:2px solid var(--blue);outline-offset:1px;background:var(--wash)}
+  .warn{display:flex;gap:8px;align-items:center;background:#fbf1cf;border-top:1px solid #ecd98f;padding:4px 10px;font:500 12px var(--sans)}
+  .warn i{width:9px;height:9px;background:var(--yellow);flex:none}
+  .foot{display:flex;gap:14px;padding:6px 12px;border-top:1px solid var(--edge);background:var(--ground);font:500 13px var(--num);color:var(--muted)}
+  /* panel */
+  .side{background:#fff;display:flex;flex-direction:column;min-width:0}
+  .tabs{display:flex;border-bottom:1px solid var(--edge);padding:0 8px}
+  .tabs span{padding:9px 10px 8px;font-size:12.5px;font-weight:500;color:var(--muted);border-bottom:2px solid transparent}
+  .tabs span.on{color:var(--ink);border-color:var(--blue);font-weight:600}
+  .tabs .x{margin-left:auto;align-self:center;color:var(--muted)}
+  .ph{padding:10px 14px 4px;display:flex;align-items:center;gap:6px;font-weight:600}
+  .ph .nav{margin-left:auto;font-weight:400;color:var(--muted);font-size:12px}
+  .sec{padding:8px 14px 10px;border-top:1px solid #e4e9e2}
+  .sec:first-of-type{border-top:0}
+  .sl{font:600 10.5px var(--num);letter-spacing:.09em;text-transform:uppercase;color:var(--muted);margin:2px 0 6px;display:flex;align-items:center}
+  .sl .r{margin-left:auto;text-transform:none;letter-spacing:0;font:500 12px var(--sans);color:var(--blue)}
+  .row{display:flex;gap:6px;align-items:center;margin-bottom:6px;font-size:12.5px}
+  .sel{height:28px;border:1px solid var(--input);border-radius:3px;padding:0 8px;display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:12.5px;background:#fff;flex:1}
+  .sel::after{content:"▾";color:var(--muted);font-size:10px}
+  .sel.sm{flex:0 0 auto;min-width:64px}
+  .seg{display:inline-flex;border:1px solid var(--input);border-radius:3px;overflow:hidden}
+  .seg span{padding:4px 9px;font-size:12px;border-right:1px solid var(--edge)}.seg span:last-child{border:0}
+  .seg span.on{background:var(--blue);color:#fff}
+  .prev{margin-top:4px;font-size:12px;color:var(--muted)} .prev b{font:600 15px var(--num);color:var(--ink);margin-left:4px}
+  .sw{width:30px;height:16px;border-radius:9px;background:var(--input);position:relative;flex:none}.sw::after{content:"";position:absolute;top:2px;left:2px;width:12px;height:12px;border-radius:50%;background:#fff}
+  .sw.on{background:var(--blue)}.sw.on::after{left:16px}
+  .scale{height:10px;border-radius:2px;flex:1;border:1px solid var(--edge)}
+  .rule{display:grid;grid-template-columns:auto 1fr auto auto;gap:6px;align-items:center;border:1px solid var(--edge);border-radius:3px;padding:6px 8px;margin-bottom:6px;font-size:12.5px}
+  .rule .chipc{width:16px;height:16px;border-radius:2px;border:1px solid rgb(0 0 0/.15)}
+  .rule .n{font-family:var(--num);font-size:14px}
+  .rule .x{color:var(--muted)}
+  .add{color:var(--blue);font-weight:500;font-size:12.5px}
+  .hint{font-size:11.5px;color:var(--muted);margin-top:4px}
+  .pop{position:absolute;background:#fff;border:1px solid var(--edge);border-radius:4px;box-shadow:0 8px 24px -8px rgb(30 42 56/.35);font-size:12px;z-index:5;padding:4px;width:170px}
+  .pop div{padding:5px 8px;border-radius:3px;display:flex;justify-content:space-between}
+  .pop .hl{background:var(--mbg);font-weight:600}.pop hr{border:0;border-top:1px solid var(--edge);margin:4px 0}.pop .k{font:500 13px var(--num);color:var(--muted)}
+  .callouts{display:grid;grid-template-columns:repeat(2,1fr);gap:8px 24px;font-size:12.5px;margin-top:12px;color:#33413b;max-width:1240px}
+  .callouts b{color:var(--ink)}
+  .q{background:#fff;border-left:3px solid var(--blue);padding:8px 12px;margin-top:14px;max-width:1240px;font-size:13px}
+</style>
+</head>
+<body>
+<h1>Results grid, phase 4: formats, highlights and a totals row</h1>
+<p class="lede">Option B as you picked it: a <b>Format</b> tab beside Details and Profile in the right-hand panel. It follows the column you click, so you format while the grid changes next to you. Settings last for the session (carried over on re-run, kept in full screen, cleared by Reset view).</p>
+
+<h2>1 · A number column: currency format, in-cell bars, one highlight rule, totals row on</h2>
+<div class="wrap">
+  <div class="grid">
+    <div class="toolbar">
+      <div class="search">Search results…</div>
+      <span class="btn">Columns</span><span class="btn">Density</span><span class="btn">Wrap</span>
+      <span class="btn on">Σ Totals</span>
+      <span class="btn">Details</span>
+      <span class="meta">2,500 rows · 41 ms</span>
+    </div>
+    <table>
+      <thead><tr><th class="rn"></th><th><span class="ty">ABC</span>Region</th><th><span class="ty">ABC</span>Product</th><th><span class="ty">DATE</span>Order date<span class="fmk" title="Formatted"></span></th><th class="act num"><span class="ty">123</span>Amount<span class="fmk"></span></th><th class="num"><span class="ty">123</span>Margin %</th></tr></thead>
+      <tbody>
+        <tr><td class="rn">1</td><td>East</td><td>Desk lamp</td><td>3 Nov 2026</td><td class="num"><i class="bar" style="width:62%"></i><span class="v">$12,400.00</span></td><td class="num">31.5</td></tr>
+        <tr><td class="rn">2</td><td>West</td><td>Monitor arm</td><td>4 Nov 2026</td><td class="num"><i class="bar" style="width:16%"></i><span class="v">$3,100.00</span></td><td class="num">12.0</td></tr>
+        <tr><td class="rn">3</td><td>North</td><td>Standing desk</td><td>4 Nov 2026</td><td class="num hlg focus"><i class="bar" style="width:94%"></i><span class="v">$18,920.50</span></td><td class="num">44.2</td></tr>
+        <tr><td class="rn">4</td><td>East</td><td>Chair mat</td><td>7 Nov 2026</td><td class="num"><i class="bar" style="width:4%"></i><span class="v">$780.00</span></td><td class="num">8.9</td></tr>
+        <tr><td class="rn">5</td><td>South</td><td>Desk lamp</td><td>9 Nov 2026</td><td class="num hlg"><i class="bar" style="width:76%"></i><span class="v">$15,210.00</span></td><td class="num">29.0</td></tr>
+        <tr><td class="rn">6</td><td>West</td><td>Cable tray</td><td>12 Nov 2026</td><td class="num"><i class="bar" style="width:28%"></i><span class="v">$5,600.00</span></td><td class="num">17.3</td></tr>
+      </tbody>
+      <tfoot><tr><td class="rn" style="font-weight:600;color:var(--ink)">Σ</td><td><span class="fnl">Count</span><span class="num">2,500</span></td><td><span class="fnl">Distinct</span><span class="num">48</span></td><td><span class="fnl">Latest</span>28 Nov 2026</td><td class="num"><span class="pick hot"><span class="fnl">Sum</span>$21,480,315.20 ▾</span></td><td class="num"><span class="fnl">Avg</span>22.6</td></tr></tfoot>
+    </table>
+    <div class="pop" style="right:150px;bottom:66px">
+      <div class="hl">Sum <span class="k">$21,480,315.20</span></div>
+      <div>Average <span class="k">$8,592.13</span></div>
+      <div>Count <span class="k">2,500</span></div>
+      <div>Min <span class="k">$120.00</span></div>
+      <div>Max <span class="k">$19,990.00</span></div>
+      <hr><div>None</div>
+    </div>
+    <div class="foot"><span>2,500 rows</span><span>6 columns</span></div>
+  </div>
+  <div class="side">
+    <div class="tabs"><span>Details</span><span>Profile</span><span class="on">Format</span><span class="x">✕</span></div>
+    <div class="ph"><span class="ty">123</span>Amount <span class="nav">‹ column ›</span></div>
+    <div class="sec">
+      <div class="sl">Number format <span class="r">Reset</span></div>
+      <div class="row"><span class="sel">Currency</span><span class="sel sm">USD</span></div>
+      <div class="row">Decimals <span class="seg"><span>Auto</span><span>0</span><span>1</span><span class="on">2</span><span>3</span></span></div>
+      <div class="row"><span class="sw on"></span> Thousands separator</div>
+      <div class="prev">Looks like <b>$18,920.50</b></div>
+    </div>
+    <div class="sec">
+      <div class="sl">Bars in cells</div>
+      <div class="row"><span class="sw on"></span> Show a bar sized to the value</div>
+      <div class="sl" style="margin-top:8px">Colour scale</div>
+      <div class="row"><span class="sw"></span> Shade cells from low to high</div>
+      <div class="row" style="opacity:.55"><span class="scale" style="background:linear-gradient(90deg,#fff,#2f6db5)"></span><span class="scale" style="background:linear-gradient(90deg,#c0392b,#fff,#2e7d4f)"></span></div>
+    </div>
+    <div class="sec">
+      <div class="sl">Highlight rules <span class="r">First match wins</span></div>
+      <div class="rule"><span class="chipc" style="background:var(--greenw)"></span><span>is greater than <span class="n">15,000</span></span><span>Green</span><span class="x">✕</span></div>
+      <div class="rule"><span class="chipc" style="background:var(--redw)"></span><span>is less than <span class="n">0</span></span><span>Red</span><span class="x">✕</span></div>
+      <span class="add">+ Add rule</span>
+      <div class="hint">Colours: red, amber, green, blue. Up to 5 rules per column.</div>
+    </div>
+  </div>
+</div>
+<div class="callouts">
+  <div><b>Format tab</b> follows the active column; ‹ › steps to the previous / next column. Header menu gains <b>Format…</b>, which opens this tab. A small blue dot in the header marks a formatted column.</div>
+  <div><b>Totals row</b> (Σ Totals in the toolbar): one row stuck to the bottom. Click a totals cell to pick Sum, Average, Count, Min, Max or None. Numbers start on Sum, dates on Latest, text on Count (or Distinct).</div>
+  <div><b>Bars</b> are drawn behind the number, sized from zero to the largest value in the loaded rows (after the grid's filters). Negatives grow left from a zero line.</div>
+  <div><b>Rules</b> colour the cell only. Numbers: &gt;, &lt;, between, equals. Text: is, contains, is empty. Dates: before, after, between. Rules sit on top of a colour scale.</div>
+</div>
+
+<h2>2 · A date column, and the totals row when the result was cut off</h2>
+<div class="wrap" style="grid-template-columns:1fr 340px">
+  <div class="grid">
+    <table>
+      <thead><tr><th class="rn"></th><th><span class="ty">ABC</span>Region</th><th class="act"><span class="ty">DATE</span>Order date<span class="fmk"></span></th><th class="num"><span class="ty">123</span>Amount</th></tr></thead>
+      <tbody>
+        <tr><td class="rn">1</td><td>East</td><td class="focus">Tue 3 Nov 2026</td><td class="num">12,400</td></tr>
+        <tr><td class="rn">2</td><td>West</td><td>Wed 4 Nov 2026</td><td class="num">3,100</td></tr>
+        <tr><td class="rn">3</td><td>North</td><td class="hlr">Sat 31 Oct 2026</td><td class="num">18,920.5</td></tr>
+      </tbody>
+      <tfoot><tr><td class="rn" style="font-weight:600;color:var(--ink)">Σ</td><td><span class="fnl">Count</span><span class="num">5,000</span></td><td><span class="fnl">Latest</span>Sat 28 Nov 2026</td><td class="num"><span class="fnl">Sum</span>40,112,980</td></tr></tfoot>
+    </table>
+    <div class="warn"><i></i>Totals cover the first 5,000 rows (the data source's record limit). Export and charts use all matching rows.</div>
+  </div>
+  <div class="side">
+    <div class="tabs"><span>Details</span><span>Profile</span><span class="on">Format</span><span class="x">✕</span></div>
+    <div class="ph"><span class="ty">DATE</span>Order date</div>
+    <div class="sec">
+      <div class="sl">Date format <span class="r">Reset</span></div>
+      <div class="row"><span class="sel">Day, date (Tue 3 Nov 2026)</span></div>
+      <div class="hint">Also: 3 Nov 2026 · 03/11/2026 (your locale) · 2026-11-03 · Nov 2026 · 2026. Date-time columns add “Show time”.</div>
+    </div>
+    <div class="sec">
+      <div class="sl">Highlight rules</div>
+      <div class="rule"><span class="chipc" style="background:var(--redw)"></span><span>is before <span class="n">1 Nov 2026</span></span><span>Red</span><span class="x">✕</span></div>
+      <span class="add">+ Add rule</span>
+    </div>
+  </div>
+</div>
+
+<div class="q"><b>My calls, to check:</b> Copy (Ctrl+C) still copies the <b>raw values</b> (so Excel can add them up), not the formatted text. Export is unchanged: it re-runs the query on the server and ignores grid formatting. Filters, sorting and search keep working on raw values. The number formats are the same ones charts use, so a column reads the same in the grid and in a chart.</div>
+</body>
+</html>
