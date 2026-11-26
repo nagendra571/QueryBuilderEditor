@@ -4,7 +4,6 @@ import {
   getFilteredRowModel,
   getSortedRowModel,
   useReactTable,
-  type ColumnDef,
   type ColumnSizingState,
   type Row,
   type SortingState,
@@ -13,19 +12,10 @@ import {
 } from '@tanstack/react-table'
 import type { QueryResultColumnDto, QueryResultDto } from '@/types'
 import { useDensityStore, type Density } from '../../../state/density-store.ts'
-import { compareCells } from './compare-cells.ts'
-import {
-  DEFAULT_COL_CAP,
-  FIT_SAMPLE_ROWS,
-  MAX_COL_WIDTH,
-  MIN_COL_WIDTH,
-  createCanvasMeasure,
-  fitWidth,
-} from './column-widths.ts'
-import { displayOrder, displayString, matchesSearch } from './grid-columns.ts'
+import { DEFAULT_COL_CAP, FIT_SAMPLE_ROWS, createCanvasMeasure, fitWidth } from './column-widths.ts'
+import { displayOrder, displayString } from './grid-columns.ts'
+import { buildColumnDefs, tableBehaviour, type RowData } from './grid-table.ts'
 import { carryOver, defaultView, isDefaultView, type GridView } from './grid-view.ts'
-
-type RowData = Record<string, unknown>
 
 // Header padding 20 + type badge ~36 + sort mark ~16 + menu button ~24.
 const HEADER_EXTRA = 96
@@ -70,20 +60,7 @@ export function useResultsGrid(result: QueryResultDto) {
     return out
   }, [result])
 
-  const columnDefs = useMemo<ColumnDef<RowData>[]>(
-    () =>
-      result.columns.map((c) => ({
-        id: c.name,
-        accessorFn: (row) => row[c.name],
-        minSize: MIN_COL_WIDTH,
-        maxSize: MAX_COL_WIDTH,
-        enableMultiSort: false,
-        sortDescFirst: false,
-        sortUndefined: false,
-        sortingFn: (a, b, id) => compareCells(a.getValue(id), b.getValue(id), c.dataType === 'number'),
-      })),
-    [result.columns],
-  )
+  const columnDefs = useMemo(() => buildColumnDefs(result.columns), [result.columns])
 
   const sizing = useMemo<ColumnSizingState>(
     () => Object.fromEntries(names.map((n) => [n, view.widths[n] ?? defaultWidths[n]])),
@@ -112,10 +89,7 @@ export function useResultsGrid(result: QueryResultDto) {
       sorting,
       globalFilter: view.search,
     },
-    enableMultiSort: false,
-    sortDescFirst: false,
-    getColumnCanGlobalFilter: (column) => column.getIsVisible(),
-    globalFilterFn: (row, columnId, filterValue) => matchesSearch(row.getValue(columnId), String(filterValue ?? '')),
+    ...tableBehaviour,
     onSortingChange: (updater) => {
       const next = resolve(updater, sorting)[0]
       setView((v) => ({
