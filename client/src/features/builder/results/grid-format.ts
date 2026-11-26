@@ -159,6 +159,20 @@ export function formatDate(raw: unknown, dataType: 'date' | 'dateTime', f: DateF
   return text
 }
 
+export type RuleProblem = 'incomplete' | 'notNumber'
+
+const NUMBER_OPS: ReadonlySet<RuleOp> = new Set(['gt', 'lt', 'between', 'eq'])
+
+// "15,000" or "$100" would otherwise make a rule that silently matches nothing.
+export function ruleProblem(rule: HighlightRule, dataType: ColumnDataType): RuleProblem | null {
+  if (!isComplete(rule)) return 'incomplete'
+  if (dataType === 'number' && NUMBER_OPS.has(rule.op)) {
+    const bad = (v: string) => v.trim() !== '' && !Number.isFinite(Number(v.trim()))
+    if (bad(rule.value) || (rule.op === 'between' && bad(rule.value2))) return 'notNumber'
+  }
+  return null
+}
+
 export function isComplete(rule: HighlightRule): boolean {
   if (rule.op === 'empty') return true
   if (rule.value.trim() === '') return false
@@ -213,6 +227,11 @@ export function isFormatted(f: ColumnFormat | undefined): boolean {
   )
 }
 
+/** What in a format can change a column's measured width: its text settings and the header's "formatted" mark. */
+export function widthKey(f: ColumnFormat | undefined): string {
+  return `${JSON.stringify(f?.number ?? null)}|${JSON.stringify(f?.date ?? null)}|${isFormatted(f)}`
+}
+
 const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v)
 
 // The displayed calendar day, as a UTC midnight, so two values compare by the day the viewer reads.
@@ -229,46 +248,128 @@ function blank(v: unknown): boolean {
   return v === null || v === undefined || String(v).trim() === ''
 }
 
-function matches(rule: HighlightRule, value: unknown): boolean {
-  if (!isComplete(rule)) return false
+type Matcher = (value: unknown) => boolean
+
+// Bounds are parsed once per edit, not per cell; the number path only applies to number columns and the day path
+// only to date columns, so numeric-looking text never falls through to Date.parse.
+function compileRule(rule: HighlightRule, dataType: ColumnDataType): Matcher | null {
+  if (ruleProblem(rule, dataType) !== null) return null
+  const isNumberColumn = dataType === 'number'
+  const isDateColumn = dataType === 'date' || dataType === 'dateTime'
   switch (rule.op) {
     case 'empty':
-      return blank(value)
-    case 'is':
-      return value !== null && value !== undefined && String(value) === rule.value
-    case 'contains':
-      return value !== null && value !== undefined && String(value).toLowerCase().includes(rule.value.toLowerCase())
+      return blank
+    case 'is': {
+      const want = rule.value
+      return (value) => value !== null && value !== undefined && String(value) === want
+    }
+    case 'contains': {
+      const want = rule.value.toLowerCase()
+      return (value) => value !== null && value !== undefined && String(value).toLowerCase().includes(want)
+    }
     case 'gt':
     case 'lt':
     case 'eq': {
-      if (!isNum(value)) return false
+      if (!isNumberColumn) return null
       const a = Number(rule.value.trim())
-      if (Number.isNaN(a)) return false
-      return rule.op === 'gt' ? value > a : rule.op === 'lt' ? value < a : value === a
+      if (rule.op === 'gt') return (value) => isNum(value) && value > a
+      if (rule.op === 'lt') return (value) => isNum(value) && value < a
+      return (value) => isNum(value) && value === a
     }
     case 'between': {
-      if (isNum(value)) {
+      if (isNumberColumn) {
         const a = Number(rule.value.trim())
         const b = Number(rule.value2.trim())
-        if (Number.isNaN(a) || Number.isNaN(b)) return false
-        return value >= Math.min(a, b) && value <= Math.max(a, b)
+        const lo = Math.min(a, b)
+        const hi = Math.max(a, b)
+        return (value) => isNum(value) && value >= lo && value <= hi
       }
-      const v = dayOf(value)
+      if (!isDateColumn) return null
       const a = dayOf(rule.value)
       const b = dayOf(rule.value2)
-      if (v === null || a === null || b === null) return false
-      return v >= Math.min(a, b) && v <= Math.max(a, b)
+      if (a === null || b === null) return null
+      const lo = Math.min(a, b)
+      const hi = Math.max(a, b)
+      return (value) => {
+        const v = dayOf(value)
+        return v !== null && v >= lo && v <= hi
+      }
     }
     default: {
-      const v = dayOf(value)
+      if (!isDateColumn) return null
       const a = dayOf(rule.value)
-      if (v === null || a === null) return false
-      return rule.op === 'before' ? v < a : v > a
+      if (a === null) return null
+      const before = rule.op === 'before'
+      return (value) => {
+        const v = dayOf(value)
+        return v !== null && (before ? v < a : v > a)
+      }
     }
   }
 }
 
-const cache = new WeakMap<readonly Record<string, unknown>[], Map<string, { f: ColumnFormat | undefined; locale: string | undefined; c: CompiledFormat }>>()
+export interface ColumnStats {
+  min: number
+  max: number
+  median: number
+  /** min and max widened to include zero: the span bars are drawn on. */
+  lo: number
+  hi: number
+}
+
+const statsCache = new WeakMap<readonly Record<string, unknown>[], Map<string, ColumnStats>>()
+
+// Statistics depend only on the rows and the column, never on the format, so a rule or currency keystroke reuses them.
+export function columnStats(rows: readonly Record<string, unknown>[], name: string): ColumnStats {
+  let byName = statsCache.get(rows)
+  if (!byName) statsCache.set(rows, (byName = new Map()))
+  const hit = byName.get(name)
+  if (hit) return hit
+  let count = 0
+  for (const row of rows) if (isNum(row[name])) count++
+  const nums = new Float64Array(count)
+  let i = 0
+  for (const row of rows) {
+    const v = row[name]
+    if (isNum(v)) nums[i++] = v
+  }
+  // A typed array sorts numerically without a JS comparator, several times faster at 100,000 rows.
+  nums.sort()
+  const stats: ColumnStats = { min: 0, max: 0, median: 0, lo: 0, hi: 0 }
+  if (count > 0) {
+    stats.min = nums[0]
+    stats.max = nums[count - 1]
+    const mid = count >> 1
+    stats.median = count % 2 ? nums[mid] : (nums[mid - 1] + nums[mid]) / 2
+    stats.lo = Math.min(0, stats.min)
+    stats.hi = Math.max(0, stats.max)
+  }
+  byName.set(name, stats)
+  return stats
+}
+
+/** The cell text a format produces, without bars, scales or rules: what column widths are measured from. */
+export function formatText(
+  column: { dataType: ColumnDataType },
+  f: ColumnFormat | undefined,
+  locale?: string,
+): (value: unknown) => string {
+  const isNumberColumn = column.dataType === 'number'
+  const isDateColumn = column.dataType === 'date' || column.dataType === 'dateTime'
+  const number = isNumberColumn ? f?.number : undefined
+  const date = isDateColumn && f?.date && f.date.pattern !== 'auto' ? f.date : undefined
+  if (number) return (value) => (isNum(value) ? formatNumber(value, number, locale) : displayString(value))
+  if (date) {
+    const dataType = column.dataType as 'date' | 'dateTime'
+    return (value) => formatDate(value, dataType, date, locale) ?? displayString(value)
+  }
+  return displayString
+}
+
+const cache = new WeakMap<
+  readonly Record<string, unknown>[],
+  Map<string, { dataType: ColumnDataType; f: ColumnFormat | undefined; locale: string | undefined; c: CompiledFormat }>
+>()
 
 export function compileFormat(
   rows: readonly Record<string, unknown>[],
@@ -279,9 +380,9 @@ export function compileFormat(
   let byName = cache.get(rows)
   if (!byName) cache.set(rows, (byName = new Map()))
   const hit = byName.get(column.name)
-  if (hit && hit.f === f && hit.locale === locale) return hit.c
+  if (hit && hit.dataType === column.dataType && hit.f === f && hit.locale === locale) return hit.c
   const c = build(rows, column, f, locale)
-  byName.set(column.name, { f, locale, c })
+  byName.set(column.name, { dataType: column.dataType, f, locale, c })
   return c
 }
 
@@ -293,39 +394,15 @@ function build(
 ): CompiledFormat {
   const isNumberColumn = column.dataType === 'number'
   const isDateColumn = column.dataType === 'date' || column.dataType === 'dateTime'
-  const rules = (f?.rules ?? []).filter(isComplete)
+  const rules = (f?.rules ?? []).flatMap((rule) => {
+    const test = compileRule(rule, column.dataType)
+    return test ? [{ rule, test }] : []
+  })
   const wantBars = isNumberColumn && !!f?.bars
   const scaleKind = isNumberColumn ? f?.scale ?? null : null
-
-  let lo = 0
-  let hi = 0
-  let min = 0
-  let max = 0
-  let median = 0
-  if (wantBars || scaleKind) {
-    const nums: number[] = []
-    for (const row of rows) {
-      const v = row[column.name]
-      if (isNum(v)) nums.push(v)
-    }
-    if (nums.length > 0) {
-      nums.sort((a, b) => a - b)
-      min = nums[0]
-      max = nums[nums.length - 1]
-      const mid = nums.length >> 1
-      median = nums.length % 2 ? nums[mid] : (nums[mid - 1] + nums[mid]) / 2
-      lo = Math.min(0, min)
-      hi = Math.max(0, max)
-    }
-  }
-
-  const formatText = (value: unknown): string => {
-    if (isNumberColumn && f?.number && isNum(value)) return formatNumber(value, f.number, locale)
-    if (isDateColumn && f?.date && f.date.pattern !== 'auto') {
-      return formatDate(value, column.dataType as 'date' | 'dateTime', f.date, locale) ?? displayString(value)
-    }
-    return displayString(value)
-  }
+  const { lo, hi, min, max, median } =
+    wantBars || scaleKind ? columnStats(rows, column.name) : { lo: 0, hi: 0, min: 0, max: 0, median: 0 }
+  const text = formatText(column, f, locale)
 
   const fmtRuleValue = (v: string): string => {
     if (isNumberColumn && f?.number) {
@@ -356,25 +433,25 @@ function build(
 
   return {
     formatted: isFormatted(f),
-    text: formatText,
+    text,
     look(value) {
-      const text = formatText(value)
+      const shown = text(value)
       const raw = displayString(value)
       let highlight: RuleColor | null = null
       let label: string | null = null
-      for (const rule of rules) {
-        if (matches(rule, value)) {
+      for (const { rule, test } of rules) {
+        if (test(value)) {
           highlight = rule.color
           label = ruleLabel(column.name, rule, fmtRuleValue)
           break
         }
       }
       const parts: string[] = []
-      if (raw !== text) parts.push(raw)
+      if (raw !== shown) parts.push(raw)
       if (label) parts.push(label)
       const numeric = isNumberColumn && isNum(value)
       return {
-        text,
+        text: shown,
         title: parts.length ? parts.join(' · ') : null,
         bar: wantBars && numeric ? barFor(value as number) : null,
         scale: scaleKind && numeric ? { kind: scaleKind, t: scaleFor(value as number, scaleKind) } : null,

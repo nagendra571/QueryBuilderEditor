@@ -1,15 +1,19 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
+  columnStats,
   compileFormat,
   defaultDateFormat,
   defaultNumberFormat,
   formatDate,
   formatNumber,
+  formatText,
   isComplete,
   isFormatted,
   ruleLabel,
+  ruleProblem,
   rulesFor,
+  widthKey,
   type ColumnFormat,
   type HighlightRule,
   type NumberFormat,
@@ -223,4 +227,74 @@ test('isFormatted', () => {
 test('grouping follows the locale default, like the charts', () => {
   assert.equal(formatNumber(1234, nf({ style: 'number' }), 'es'), new Intl.NumberFormat('es', { minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(1234))
   assert.equal(formatNumber(1234, nf({ style: 'number', thousands: false }), 'es'), '1234')
+})
+
+test('columnStats is computed once per rows and column and shared across format edits', () => {
+  const rows = [{ c: 5 }, { c: -2 }, { c: 'text' }, { c: 9 }, { c: null }, { c: 1 }]
+  const s = columnStats(rows, 'c')
+  assert.deepEqual(s, { min: -2, max: 9, median: 3, lo: -2, hi: 9 })
+  assert.equal(columnStats(rows, 'c'), s)
+  assert.notEqual(columnStats([...rows], 'c'), s)
+  assert.deepEqual(columnStats([{ c: 'x' }], 'c'), { min: 0, max: 0, median: 0, lo: 0, hi: 0 })
+  assert.equal(columnStats([{ c: 4 }, { c: 2 }, { c: 3 }], 'c').median, 3)
+})
+
+test('different rules over the same rows reuse one statistics pass', () => {
+  const rows = [{ c: 0 }, { c: 50 }, { c: 100 }]
+  const col = { name: 'c', dataType: 'number' as const }
+  const stats = columnStats(rows, 'c')
+  const a = compileFormat(rows, col, { scale: 'blue', rules: [rule('gt', '1')] }, GB)
+  const b = compileFormat(rows, col, { scale: 'blue', rules: [rule('gt', '10')] }, GB)
+  assert.notEqual(a, b)
+  assert.equal(columnStats(rows, 'c'), stats)
+  assert.equal(a.look(50).scale!.t, 0.5)
+  assert.equal(b.look(50).scale!.t, 0.5)
+})
+
+test('compileFormat recompiles when the column type changes', () => {
+  const rows = [{ c: 1 }]
+  const f: ColumnFormat = { rules: [] }
+  const a = compileFormat(rows, { name: 'c', dataType: 'number' }, f, GB)
+  assert.notEqual(compileFormat(rows, { name: 'c', dataType: 'text' }, f, GB), a)
+})
+
+test('ruleProblem flags non-numeric number rule values', () => {
+  assert.equal(ruleProblem(rule('gt', ''), 'number'), 'incomplete')
+  assert.equal(ruleProblem(rule('gt', '15,000'), 'number'), 'notNumber')
+  assert.equal(ruleProblem(rule('gt', '$100'), 'number'), 'notNumber')
+  assert.equal(ruleProblem(rule('between', '1', 'ten'), 'number'), 'notNumber')
+  assert.equal(ruleProblem(rule('between', '1', ''), 'number'), 'incomplete')
+  assert.equal(ruleProblem(rule('gt', ' 15000 '), 'number'), null)
+  assert.equal(ruleProblem(rule('is', '15,000'), 'text'), null)
+  assert.equal(ruleProblem(rule('before', '2026-11-04'), 'date'), null)
+  assert.equal(hl('number', [rule('gt', '15,000')], 20000), null)
+})
+
+test('number rules ignore numeric text and date rules ignore non-date columns', () => {
+  assert.equal(hl('number', [rule('between', '2026-01-01', '2026-12-31')], '2026-06-01'), null)
+  assert.equal(hl('number', [rule('gt', '1')], '5'), null)
+})
+
+test('formatText gives the cell text without bars, scales or rules', () => {
+  const t = formatText({ dataType: 'number' }, { number: nf({ style: 'number', decimals: 2 }), bars: true, rules: [] }, GB)
+  assert.equal(t(1234.5), '1,234.50')
+  assert.equal(t('x'), 'x')
+  assert.equal(formatText({ dataType: 'text' }, { number: nf({ style: 'number' }), rules: [] }, GB)(5), '5')
+  assert.equal(formatText({ dataType: 'date' }, { date: { pattern: 'iso', showTime: false }, rules: [] }, GB)('2026-11-03'), '2026-11-03')
+  assert.equal(
+    compileFormat([{ c: 1234.5 }], { name: 'c', dataType: 'number' }, { number: nf({ style: 'number', decimals: 2 }), rules: [] }, GB).text(1234.5),
+    t(1234.5),
+  )
+})
+
+test('widthKey changes only for settings that change text or the formatted mark', () => {
+  const base: ColumnFormat = { number: nf({ style: 'number' }), rules: [] }
+  const k = widthKey(base)
+  assert.equal(widthKey({ ...base, rules: [rule('gt', '5')] }), k)
+  assert.equal(widthKey({ ...base, bars: true }), k)
+  assert.equal(widthKey({ ...base, scale: 'blue' }), k)
+  assert.notEqual(widthKey({ ...base, number: nf({ style: 'number', decimals: 2 }) }), k)
+  assert.notEqual(widthKey({ ...base, date: { pattern: 'iso', showTime: false } }), k)
+  // A bar on an otherwise plain column turns on the header's formatted mark, which takes width.
+  assert.notEqual(widthKey({ rules: [], bars: true }), widthKey({ rules: [] }))
 })

@@ -3,7 +3,9 @@ import assert from 'node:assert/strict'
 import type { QueryColumn, QueryResultColumnDto } from '../src/types/index.ts'
 import {
   defaultTotal,
+  formatTotal,
   totalChoices,
+  totalRaw,
   totalValue,
   withAggregates,
   type TotalFn,
@@ -106,4 +108,42 @@ test('withAggregates copies the aggregate from the matching visible column', () 
   assert.equal(out[1].aggregate, undefined)
   assert.equal(out[2].aggregate, undefined)
   assert.equal(withAggregates(columns, undefined), columns)
+})
+
+test('totalRaw is cached per rows, column and function', () => {
+  const rows = rowsOf(1.5, 2, 3)
+  const c = col('number')
+  const a = totalRaw(rows, c, 'sum')
+  assert.deepEqual(a, { kind: 'number', value: 6.5 })
+  assert.equal(totalRaw(rows, c, 'sum'), a)
+  assert.equal(totalRaw(rows, { ...c }, 'sum'), a)
+  assert.notEqual(totalRaw(rows, c, 'avg'), a)
+  assert.notEqual(totalRaw([...rows], c, 'sum'), a)
+  assert.deepEqual(totalRaw(rows, col('text'), 'count'), { kind: 'count', n: 3 })
+  assert.equal(totalRaw(rows, c, 'none'), null)
+  assert.equal(totalRaw([], c, 'sum'), null)
+})
+
+test('formatTotal formats the cached raw value at draw time', () => {
+  const rows = rowsOf('2024-03-01T00:00:00', '2025-07-09T00:00:00')
+  const raw = totalRaw(rows, col('dateTime'), 'latest')
+  assert.deepEqual(raw, { kind: 'date', raw: '2025-07-09T00:00:00' })
+  assert.equal(formatTotal(raw, (v) => `<${v}>`), '<2025-07-09T00:00:00>')
+  assert.equal(formatTotal({ kind: 'number', value: 1234 }, (v) => `$${v}`), '$1234')
+  assert.equal(formatTotal(null, String), '')
+})
+
+test('count totals group digits like the footer', () => {
+  assert.equal(formatTotal({ kind: 'count', n: 100000 }, String, 'en-US'), '100,000')
+  const rows = Array.from({ length: 1234 }, (_, i) => ({ X: i }))
+  assert.equal(totalValue(rows, col('number'), 'count', String), (1234).toLocaleString())
+})
+
+test('withAggregates treats a whitespace alias as no alias, like the server', () => {
+  const columns: QueryResultColumnDto[] = [{ name: 'Amount', dataType: 'number' }]
+  const out = withAggregates(columns, {
+    columns: [{ tableAlias: 't', columnName: 'Amount', alias: '   ', dataType: 'number', aggregate: 'avg', orderIndex: 0, isVisible: true }],
+  })
+  assert.equal(out[0].aggregate, 'avg')
+  assert.ok(!totalChoices(out[0]).includes('sum'))
 })

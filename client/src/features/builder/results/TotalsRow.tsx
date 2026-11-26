@@ -11,7 +11,7 @@ import { cn } from '@/lib/utils'
 import type { QueryResultColumnDto } from '@/types'
 import type { CompiledFormat } from './grid-format.ts'
 import { ROW_NUM_WIDTH, type ColumnLayout, type ColumnWindow } from './grid-layout.ts'
-import { TOTAL_LABEL, defaultTotal, totalChoices, totalValue, type TotalFn } from './grid-totals.ts'
+import { TOTAL_LABEL, defaultTotal, formatTotal, totalChoices, totalRaw, type TotalFn } from './grid-totals.ts'
 
 const CHOICE_NAME: Record<TotalFn, string> = {
   sum: 'Sum',
@@ -60,10 +60,9 @@ export const TotalsRow = memo(function TotalsRow({
   onFocusGrid,
 }: TotalsRowProps) {
   const effective = useMemo(() => columns.map((c) => fns[c.name] ?? defaultTotal(c)), [columns, fns])
-  const values = useMemo(
-    () => columns.map((c, i) => totalValue(rows, c, effective[i], formats[i].text)),
-    [rows, columns, effective, formats],
-  )
+  // Only the row pass is memoised: formatting is cheap, so a format edit re-formats without re-scanning the rows.
+  const raws = useMemo(() => columns.map((c, i) => totalRaw(rows, c, effective[i])), [rows, columns, effective])
+  const values = columns.map((_, i) => formatTotal(raws[i], formats[i].text))
 
   const cell = (ci: number) => {
     const col = columns[ci]
@@ -138,12 +137,13 @@ export const TotalsRow = memo(function TotalsRow({
 
   return (
     // Keys pressed here (and in the portalled menu, whose events bubble through React) must not drive the grid.
-    // Escape still passes so full screen can exit.
+    // Escape on a totals button still passes so full screen can exit.
     <div
       role="row"
       aria-rowindex={rowCount + 2}
       onKeyDown={(e) => {
-        if (e.key !== 'Escape') e.stopPropagation()
+        // The portalled menu is no DOM descendant: its Escape only closes the menu, never clears the grid's selection.
+        if (e.key !== 'Escape' || !e.currentTarget.contains(e.target as Node)) e.stopPropagation()
       }}
       className={cn('sticky bottom-0 z-20 flex border-t-2 border-foreground', STICKY_BG)}
       style={{ width, minWidth: '100%', height }}

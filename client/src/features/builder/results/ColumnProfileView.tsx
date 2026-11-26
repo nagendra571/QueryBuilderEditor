@@ -3,11 +3,10 @@ import { Histogram } from './Histogram'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { binFilter, hideText, showOnlyText } from './filter-actions.ts'
 import type { GridFilter } from './grid-filters.ts'
-import { profileColumn, type Bin, type ColumnProfile } from './column-profile.ts'
+import { parseDateValue, profileColumn, type Bin, type ColumnProfile } from './column-profile.ts'
 import { formatTotal } from './selection-totals.ts'
 import { TypeBadge } from './TypeBadge'
 import type { SelectionStore } from './selection-store.ts'
-import { parseDateValue } from './column-profile.ts'
 import type { ColumnFormat, CompiledFormat } from './grid-format.ts'
 import type { QueryResultDto } from '@/types'
 
@@ -67,14 +66,25 @@ function Profile({
   // Tiles follow the column's format; bin bounds stay on the plain functions above.
   // Bars, scales and rules leave the numbers as they were; only a number or date format changes the tiles.
   const tileNum = columnFormat?.number && columnFormat.number.style !== 'auto' ? format.text : fmtNum
+  const dateFormatted = !!columnFormat?.date && columnFormat.date.pattern !== 'auto'
+  // One row pass per profile, not per render: this view re-renders on every arrow key.
+  const dateRaws = useMemo(() => {
+    if (!dateFormatted || profile.kind !== 'date') return null
+    const found = new Map<number, unknown>()
+    for (const r of rows) {
+      if (found.size === 2 || (found.size === 1 && profile.earliest === profile.latest)) break
+      const ms = parseDateValue(r[column.name])
+      if ((ms === profile.earliest || ms === profile.latest) && ms !== null && !found.has(ms)) found.set(ms, r[column.name])
+    }
+    return found
+  }, [dateFormatted, profile, rows, column.name])
   // The original value is formatted, not the UTC day, so a zoned value reads the same as in its cell.
-  const tileDate =
-    columnFormat?.date && columnFormat.date.pattern !== 'auto'
-      ? (ms: number) => {
-          const raw = rows.find((r) => parseDateValue(r[column.name]) === ms)?.[column.name]
-          return raw === undefined ? fmtDate(ms) : format.text(raw)
-        }
-      : fmtDate
+  const tileDate = dateRaws
+    ? (ms: number) => {
+        const raw = dateRaws.get(ms)
+        return raw === undefined ? fmtDate(ms) : format.text(raw)
+      }
+    : fmtDate
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">

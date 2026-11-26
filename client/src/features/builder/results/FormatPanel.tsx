@@ -29,7 +29,7 @@ import { TypeBadge } from './TypeBadge'
 import type { GridTotals } from './grid-view.ts'
 
 const NUMBER_STYLES: { value: NumberStyle; label: string }[] = [
-  { value: 'auto', label: 'As stored' },
+  { value: 'auto', label: 'Automatic' },
   { value: 'number', label: 'Number' },
   { value: 'compact', label: 'Compact (1.2K)' },
   { value: 'currency', label: 'Currency' },
@@ -37,7 +37,7 @@ const NUMBER_STYLES: { value: NumberStyle; label: string }[] = [
 ]
 const DECIMALS: (number | null)[] = [null, 0, 1, 2, 3]
 const DATE_PATTERNS: { value: DatePattern; label: string }[] = [
-  { value: 'auto', label: 'As stored' },
+  { value: 'auto', label: 'Automatic' },
   { value: 'weekday', label: 'Day, date' },
   { value: 'medium', label: 'Day month year' },
   { value: 'short', label: 'Short, your locale' },
@@ -214,10 +214,25 @@ export function FormatPanel({
         <TypeBadge dataType={type} />
         <span className="min-w-0 truncate text-sm font-semibold">{column.name}</span>
         <span className="ml-auto flex shrink-0">
-          <Button variant="ghost" size="icon" className="size-7" aria-label="Previous column" disabled={!onPrev} onClick={onPrev}>
+          {/* aria-disabled, not disabled: a disabled button drops focus to <body>, where Escape no longer closes the panel. */}
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-7 aria-disabled:opacity-50"
+            aria-label="Previous column"
+            aria-disabled={onPrev ? undefined : 'true'}
+            onClick={() => onPrev?.()}
+          >
             <ChevronLeft className="size-4" />
           </Button>
-          <Button variant="ghost" size="icon" className="size-7" aria-label="Next column" disabled={!onNext} onClick={onNext}>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-7 aria-disabled:opacity-50"
+            aria-label="Next column"
+            aria-disabled={onNext ? undefined : 'true'}
+            onClick={() => onNext?.()}
+          >
             <ChevronRight className="size-4" />
           </Button>
         </span>

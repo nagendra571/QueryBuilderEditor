@@ -1,8 +1,9 @@
+import { useId } from 'react'
 import { X } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import type { ColumnDataType } from '@/types'
-import { formatNumber, isComplete, rulesFor, type HighlightRule, type NumberFormat, type RuleColor, type RuleOp } from './grid-format.ts'
+import { formatNumber, ruleProblem, rulesFor, type HighlightRule, type NumberFormat, type RuleColor, type RuleOp } from './grid-format.ts'
 
 const OP_LABEL: Record<RuleOp, string> = {
   gt: 'is greater than',
@@ -58,14 +59,19 @@ export function RuleEditor({
     : isNumber
       ? { type: 'text' as const, inputMode: 'decimal' as const, className: 'font-numeric' }
       : { type: 'text' as const }
+  const problem = ruleProblem(rule, dataType)
+  const problemId = useId()
   const field = (value: string, set: (v: string) => void, label: string) => {
     const n = Number(value.trim())
+    const invalid = problem === 'notNumber' && value.trim() !== '' && !Number.isFinite(n)
     const shown = isNumber && numberFormat?.style === 'percent' && numberFormat.fraction && value.trim() !== '' && Number.isFinite(n)
     return (
       <span className="flex min-w-0 items-center gap-1.5">
         <Input
           {...inputProps}
           aria-label={`${label}, rule ${position}`}
+          aria-invalid={invalid || undefined}
+          aria-describedby={invalid ? problemId : undefined}
           value={value}
           onChange={(e) => set(e.target.value)}
           className={`h-7 min-w-0 flex-1 px-2 text-xs ${inputProps.className ?? ''}`}
@@ -114,7 +120,12 @@ export function RuleEditor({
       </div>
       {rule.op !== 'empty' && field(rule.value, (value) => onChange({ ...rule, value }), rule.op === 'between' ? 'From' : 'Value')}
       {rule.op === 'between' && field(rule.value2, (value2) => onChange({ ...rule, value2 }), 'To')}
-      {!isComplete(rule) && <p className="text-[11px] text-muted-foreground">Incomplete</p>}
+      {problem === 'notNumber' && (
+        <p id={problemId} className="text-[11px] text-destructive">
+          Enter a plain number, like 15000
+        </p>
+      )}
+      {problem === 'incomplete' && <p className="text-[11px] text-muted-foreground">Incomplete</p>}
     </div>
   )
 }

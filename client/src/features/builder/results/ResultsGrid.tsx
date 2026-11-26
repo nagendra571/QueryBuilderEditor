@@ -361,7 +361,7 @@ export function ResultsGrid({
       role="grid"
       tabIndex={0}
       aria-label="Query results"
-      aria-rowcount={rows.length + 1}
+      aria-rowcount={rows.length + 1 + (view.totals.on ? 1 : 0)}
       aria-colcount={columns.length + 1}
       aria-multiselectable
       aria-activedescendant={focusRendered && range ? cellId(idPrefix, range.focus.row, range.focus.col) : undefined}

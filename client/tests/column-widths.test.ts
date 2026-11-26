@@ -8,6 +8,7 @@ import {
   FIT_SAMPLE_ROWS,
   MAX_COL_WIDTH,
   MIN_COL_WIDTH,
+  cachedWidth,
   cellFont,
   createCanvasMeasure,
   fitWidth,
@@ -80,4 +81,20 @@ test('cell widths are measured at the body size each density renders', () => {
   }
   assert.equal(bodyPx('comfortable'), CELL_FONT_PX.comfortable)
   assert.equal(bodyPx('compact'), CELL_FONT_PX.compact)
+})
+
+test('cachedWidth measures again only when rows, type or key change', () => {
+  const rows = [{ a: 1 }]
+  let calls = 0
+  const measure = () => ({ plain: 100 + ++calls, pinned: 120 })
+  const col = { name: 'a', dataType: 'number' }
+  const first = cachedWidth(rows, col, 'k1', measure)
+  assert.equal(cachedWidth(rows, col, 'k1', measure), first)
+  assert.equal(calls, 1)
+  cachedWidth(rows, col, 'k2', measure)
+  assert.equal(calls, 2)
+  cachedWidth(rows, { ...col, dataType: 'text' }, 'k2', measure)
+  assert.equal(calls, 3)
+  cachedWidth([...rows], col, 'k2', measure)
+  assert.equal(calls, 4)
 })
