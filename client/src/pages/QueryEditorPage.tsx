@@ -251,8 +251,19 @@ export function QueryEditorPage() {
     runMutation.mutate(parameterValues)
   }
 
+  // The same gates as the Run button: adding filters that cannot then run would leave the old result looking filtered.
+  const addToQueryBlocked = runMutation.isPending || isDisabled || missing.length > 0 || !canQuery
+  const addToQueryDisabledReason = runMutation.isPending
+    ? 'Wait for the run to finish'
+    : isDisabled
+      ? 'This query is disabled and cannot be run.'
+      : missing.length > 0
+        ? 'Fill in the required parameters first.'
+        : undefined
+
   function addGridFiltersToQuery(where: FilterCondition[], having: FilterCondition[], filterCount: number) {
-    const { appendFilterConditions, appendHavingConditions } = useBuilderStore.getState()
+    if (addToQueryBlocked) return
+    const {appendFilterConditions, appendHavingConditions } = useBuilderStore.getState()
     appendFilterConditions(where)
     appendHavingConditions(having)
     // mutationFn reads the store, so this run carries the conditions just appended.
@@ -563,7 +574,7 @@ export function QueryEditorPage() {
                   rowActionLabel={gridDrill ? 'See the rows behind this row' : undefined}
                   onAddFilter={() => setActiveTab('build')}
                   queryDefinition={definition}
-                  addToQueryDisabledReason={runMutation.isPending ? 'Wait for the run to finish' : undefined}
+                  addToQueryDisabledReason={addToQueryBlocked ? (addToQueryDisabledReason ?? 'This query cannot be run yet.') : undefined}
                   onAddToQuery={addGridFiltersToQuery}
                 />
                 {runMutation.isPending && (

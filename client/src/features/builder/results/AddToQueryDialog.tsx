@@ -6,7 +6,9 @@ export function AddToQueryDialog({
   plan,
   onConfirm,
   onCancel,
+  onCloseAutoFocus,
 }: {
+  onCloseAutoFocus?: (e: Event) => void
   /** Null = closed. */
   plan: AddToQueryPlan | null
   onConfirm: () => void
@@ -19,7 +21,7 @@ export function AddToQueryDialog({
 
   return (
     <Dialog open={plan !== null} onOpenChange={(open) => !open && onCancel()}>
-      <DialogContent className="max-h-[80vh] overflow-y-auto sm:max-w-md">
+      <DialogContent className="max-h-[80vh] overflow-y-auto sm:max-w-md" onCloseAutoFocus={onCloseAutoFocus}>
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription className="sr-only">Review what will be added to the query before it runs again.</DialogDescription>

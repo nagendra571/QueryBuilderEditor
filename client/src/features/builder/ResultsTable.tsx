@@ -50,6 +50,7 @@ export function ResultsTable({
   // Here, not in the grid, so a filter chip can open a column's popover.
   const [filterOpenFor, setFilterOpenFor] = useState<string | null>(null)
   const [addPlan, setAddPlan] = useState<AddToQueryPlan | null>(null)
+  const focusGridAfterClose = useRef(false)
   const fullScreenButton = useRef<HTMLButtonElement>(null)
   const detailsButton = useRef<HTMLButtonElement>(null)
   const wasFullScreen = useRef(false)
@@ -242,10 +243,26 @@ export function ResultsTable({
     const where = addPlan.add.filter((p) => p.clause === 'where').flatMap((p) => p.conditions)
     const having = addPlan.add.filter((p) => p.clause === 'having').flatMap((p) => p.conditions)
     onAddToQuery(where, having, addPlan.add.length)
-    grid.removeFilters(addPlan.add.map((p) => p.column))
+    const added = addPlan.add.map((p) => p.column)
+    grid.removeFilters(added)
+    // With no chips left the bar unmounts, taking the "Add to query" trigger Radix would return focus to.
+    focusGridAfterClose.current = grid.filters.every((f) => added.includes(f.column))
     setAddPlan(null)
   }
-  const dialog = <AddToQueryDialog plan={addPlan} onConfirm={confirmAdd} onCancel={() => setAddPlan(null)} />
+  const dialog = (
+    <AddToQueryDialog
+      plan={addPlan}
+      onConfirm={confirmAdd}
+      onCancel={() => setAddPlan(null)}
+      onCloseAutoFocus={(e) => {
+        if (!focusGridAfterClose.current) return
+        focusGridAfterClose.current = false
+        e.preventDefault()
+        if (gridRef.current) gridRef.current.focus()
+        else document.querySelector<HTMLInputElement>('input[aria-label="Search rows"]')?.focus()
+      }}
+    />
+  )
 
   if (!fullScreen) {
     return (
