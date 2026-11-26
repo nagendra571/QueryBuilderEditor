@@ -437,6 +437,26 @@ Detection costs one extra row (the query fetches *N + 1*), never a separate `COU
 grid shows up to 1,000 rows (now with the same warning banner when there are more) and exports stop
 at 100,000 rows without an error. Limit changes are recorded in the audit log.
 
+## Working with query results
+
+After **Run**, the Results tab is a grid you can work in. It is a client-only change: no API, schema or migration
+change, and nothing to configure.
+
+- **Scroll** smoothly through every loaded row (no pages); the header and row numbers stay in view.
+- **Columns:** pin left or right, resize by dragging a header edge (double-click it, or **Fit to content**; arrow keys
+  work on a focused edge), drag to reorder, hide or show, and **Wrap text** for text columns (up to 4 lines).
+  **Reset view** puts it all back. Re-running with the same columns keeps your layout.
+- **Look:** Comfortable or Compact density (this grid only) and an in-app full screen; Escape leaves it.
+- **Select and copy:** click, shift-click, drag, or use the keyboard (arrows, Shift+arrows, Ctrl/Cmd+A, Esc). Ctrl/Cmd+C
+  or the **Copy** button copies tab-separated text with headers that pastes into Excel, also on plain http. With nothing
+  selected, Copy takes all shown rows. The column menu also has sort, pin, fit, hide and **Copy column values**.
+- **Rows behind a total:** for a saved query with totals, the button in a row's number cell (or Enter) opens the rows behind it.
+- **Cut-off results:** when more rows matched than the grid holds (1,000 by default, or the record limit, see "Record
+  Limits"), sorting, search and copy cover only the loaded rows. Export and charts still run on the server and ignore what
+  you did in the grid; **Add a filter** jumps to the Build tab.
+
+The layout is not remembered across visits yet.
+
 ## Visualizations
 
 Turn a saved query's results into charts. Open a saved query, click **Add chart** next to the
@@ -951,8 +971,9 @@ Every failing check includes a one-line fix. Returns 404 outside Development.
   typed run-time parameters (text, number, date, date range with relative dates, dropdowns from a
   list or another query, multi-select) in a parameter bar with Apply
 - Read-only generated SQL preview
-- Run queries and browse results with client-side pagination, search, column show/hide, reorder,
-  and sort
+- Run queries and work with the results in a spreadsheet-style grid: smooth scrolling, pinned and resizable
+  columns, wrap text, density, full screen, cell selection and copy that pastes into Excel, search, sort,
+  show/hide and reorder (see "Working with query results")
 - Export results to CSV or Excel
 - Download the data behind any chart, on the query page or a dashboard tile, as CSV or Excel (only the chart's own columns,
   with the viewer's scope; audited)

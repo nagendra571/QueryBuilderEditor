@@ -1,4 +1,4 @@
-import { Columns3, RotateCcw, Search } from 'lucide-react'
+import { Columns3, Copy, Maximize2, Minimize2, RotateCcw, Search, WrapText } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -12,28 +12,66 @@ import {
 import { Input } from '@/components/ui/input'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { DataTypeIcon } from '@/lib/data-type-icons'
+import { cn } from '@/lib/utils'
 import type { QueryResultColumnDto } from '@/types'
+import type { Density } from '@/state/density-store'
+
+const DENSITIES: { value: Density; label: string }[] = [
+  { value: 'comfortable', label: 'Comfortable' },
+  { value: 'compact', label: 'Compact' },
+]
+
+function Meta({ label, value }: { label: string; value: string }) {
+  return (
+    <span className="font-numeric text-xs">
+      <span className="tracking-widest text-muted-foreground uppercase">{label}</span>{' '}
+      <span className="tabular-nums text-foreground">{value}</span>
+    </span>
+  )
+}
 
 export function ResultsToolbar({
   search,
   onSearchChange,
+  searchCount,
   allColumns,
   hiddenColumns,
   onToggleColumn,
+  density,
+  onDensityChange,
+  wrap,
+  onWrapChange,
+  onCopy,
+  copyDisabled,
   isDefaultView,
   onReset,
+  rowCount,
   executionTimeMs,
+  fullScreen,
+  onToggleFullScreen,
+  fullScreenRef,
 }: {
   search: string
   onSearchChange: (value: string) => void
+  searchCount: number
   allColumns: QueryResultColumnDto[]
-  hiddenColumns: Set<string>
+  hiddenColumns: string[]
   onToggleColumn: (name: string) => void
+  density: Density
+  onDensityChange: (d: Density) => void
+  wrap: boolean
+  onWrapChange: (wrap: boolean) => void
+  onCopy: () => void
+  copyDisabled: boolean
   isDefaultView: boolean
   onReset: () => void
+  rowCount: number
   executionTimeMs: number
+  fullScreen: boolean
+  onToggleFullScreen: () => void
+  fullScreenRef: React.Ref<HTMLButtonElement>
 }) {
-  const visibleCount = allColumns.length - hiddenColumns.size
+  const visibleCount = allColumns.length - hiddenColumns.length
 
   return (
     <div className="flex flex-wrap items-center gap-2 border-b border-border px-(--space-row-x) py-1.5">
@@ -42,7 +80,8 @@ export function ResultsToolbar({
         <Input
           value={search}
           onChange={(e) => onSearchChange(e.target.value)}
-          placeholder="Search results…"
+          placeholder={`Search ${searchCount.toLocaleString()} rows…`}
+          aria-label="Search rows"
           className="h-7 pl-8 text-xs"
         />
       </div>
@@ -60,20 +99,62 @@ export function ResultsToolbar({
         <DropdownMenuContent align="start" className="max-h-72 overflow-y-auto">
           <DropdownMenuLabel className="text-xs">Show columns</DropdownMenuLabel>
           <DropdownMenuSeparator />
-          {allColumns.map((col) => (
-            <DropdownMenuCheckboxItem
-              key={col.name}
-              checked={!hiddenColumns.has(col.name)}
-              onCheckedChange={() => onToggleColumn(col.name)}
-              onSelect={(e) => e.preventDefault()}
-              className="gap-1.5 text-xs"
-            >
-              <DataTypeIcon dataType={col.dataType} />
-              {col.name}
-            </DropdownMenuCheckboxItem>
-          ))}
+          {allColumns.map((col) => {
+            const shown = !hiddenColumns.includes(col.name)
+            return (
+              <DropdownMenuCheckboxItem
+                key={col.name}
+                checked={shown}
+                disabled={shown && visibleCount <= 1}
+                onCheckedChange={() => onToggleColumn(col.name)}
+                onSelect={(e) => e.preventDefault()}
+                className="gap-1.5 text-xs"
+              >
+                <DataTypeIcon dataType={col.dataType} />
+                {col.name}
+              </DropdownMenuCheckboxItem>
+            )
+          })}
         </DropdownMenuContent>
       </DropdownMenu>
+
+      <span className="h-5 w-px bg-border" aria-hidden />
+
+      <div role="radiogroup" aria-label="Row density" className="flex overflow-hidden rounded-md border border-border">
+        {DENSITIES.map((d) => (
+          <button
+            key={d.value}
+            type="button"
+            role="radio"
+            aria-checked={density === d.value}
+            onClick={() => onDensityChange(d.value)}
+            className={cn(
+              'h-7 px-2 text-xs focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring',
+              density === d.value ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted',
+            )}
+          >
+            {d.label}
+          </button>
+        ))}
+      </div>
+
+      <Button
+        variant={wrap ? 'secondary' : 'outline'}
+        size="sm"
+        className="h-7 gap-1.5 text-xs"
+        aria-pressed={wrap}
+        onClick={() => onWrapChange(!wrap)}
+      >
+        <WrapText className="size-3.5" />
+        Wrap text
+      </Button>
+
+      <span className="h-5 w-px bg-border" aria-hidden />
+
+      <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs" onClick={onCopy} disabled={copyDisabled}>
+        <Copy className="size-3.5" />
+        Copy
+      </Button>
 
       {!isDefaultView && (
         <Tooltip>
@@ -82,12 +163,28 @@ export function ResultsToolbar({
               <RotateCcw className="size-3.5" />
             </Button>
           </TooltipTrigger>
-          <TooltipContent>Reset columns, sort, search &amp; paging</TooltipContent>
+          <TooltipContent>Reset columns, sort, search and layout</TooltipContent>
         </Tooltip>
       )}
 
-      <div className="ml-auto flex items-center gap-2 text-xs text-muted-foreground">
-        <span>{executionTimeMs}ms</span>
+      <div className="ml-auto flex items-center gap-3 text-muted-foreground">
+        <Meta label="Rows" value={rowCount.toLocaleString()} />
+        <Meta label="Cols" value={String(visibleCount)} />
+        <Meta label="Ran in" value={`${executionTimeMs.toLocaleString()} ms`} />
+        {/* No Radix Tooltip here: this button is focused programmatically on entering and leaving full screen,
+            and a tooltip opened by that focus swallowed the first Escape. */}
+        <Button
+          ref={fullScreenRef}
+          variant="ghost"
+          size="icon"
+          className="size-7"
+          aria-label={fullScreen ? 'Exit full screen' : 'Full screen'}
+          title={fullScreen ? 'Exit full screen' : 'Full screen'}
+          aria-pressed={fullScreen}
+          onClick={onToggleFullScreen}
+        >
+          {fullScreen ? <Minimize2 className="size-3.5" /> : <Maximize2 className="size-3.5" />}
+        </Button>
       </div>
     </div>
   )
