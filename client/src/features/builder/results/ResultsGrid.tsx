@@ -12,6 +12,8 @@ import { restoredScroll, type GridMemory } from './grid-memory.ts'
 import { HEADER_EXTRA, PINNED_HEADER_EXTRA, type useResultsGrid } from './useResultsGrid.ts'
 import { useGridSelection } from './useGridSelection.ts'
 import type { SelectionStore } from './selection-store.ts'
+import { FilterPopover } from './FilterPopover'
+import type { QueryResultColumnDto } from '@/types'
 import { cn } from '@/lib/utils'
 
 export interface GridHandle {
@@ -32,6 +34,8 @@ export function ResultsGrid({
   store,
   gridRef,
   memory,
+  filterOpenFor,
+  onFilterOpenChange,
 }: {
   grid: ReturnType<typeof useResultsGrid>
   onRowClick?: (row: Record<string, unknown>) => void
@@ -43,8 +47,11 @@ export function ResultsGrid({
   gridRef?: React.Ref<GridHandle>
   /** Keeps the scroll position and selection across the remount that full screen causes. */
   memory?: GridMemory
+  /** Column whose filter popover is open; lives in the parent so a chip can open it. */
+  filterOpenFor?: string | null
+  onFilterOpenChange?: (column: string | null) => void
 }) {
-  const { table, view, setView, rows, columns, density } = grid
+  const { table, view, setView, rows, columns, density, filters, allColumns, setColumnFilter, clearColumnFilter } = grid
   const rowHeight = ROW_HEIGHT[density]
   const scrollRef = useRef<HTMLDivElement>(null)
   const idPrefix = useId().replace(/:/g, '')
@@ -227,8 +234,31 @@ export function ResultsGrid({
       fit: () => fit(name),
       copyColumn: () => copyColumn(name),
       resize: (width) => setWidth(name, width),
+      filter: {
+        active: filters.some((f) => f.column === name),
+        open: () => onFilterOpenChange?.(name),
+        clear: () => clearColumnFilter(name),
+      },
     }),
-    [setView, fit, copyColumn, setWidth, canHide],
+    [setView, fit, copyColumn, setWidth, canHide, filters, onFilterOpenChange, clearColumnFilter],
+  )
+
+  const onColumnFilterOpen = useCallback(
+    (column: string, open: boolean) => onFilterOpenChange?.(open ? column : null),
+    [onFilterOpenChange],
+  )
+  const renderFilter = useCallback(
+    (column: QueryResultColumnDto) => (
+      <FilterPopover
+        column={column}
+        rows={data as Record<string, unknown>[]}
+        filters={filters}
+        columns={allColumns}
+        onApply={(next) => (next ? setColumnFilter(next) : clearColumnFilter(column.name))}
+        onClose={() => onFilterOpenChange?.(null)}
+      />
+    ),
+    [data, filters, allColumns, setColumnFilter, clearColumnFilter, onFilterOpenChange],
   )
 
   const onReorder = useCallback(
@@ -266,6 +296,9 @@ export function ResultsGrid({
           width={sizerWidth}
           actionsFor={actionsFor}
           onReorder={onReorder}
+          filterOpenFor={filterOpenFor ?? null}
+          onFilterOpenChange={onColumnFilterOpen}
+          renderFilter={renderFilter}
         />
         {items.map((item) => {
           const slice = rowSlice(range, item.index)

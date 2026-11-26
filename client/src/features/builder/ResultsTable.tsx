@@ -37,6 +37,8 @@ export function ResultsTable({
   // Like memory, outlives the full-screen remount; the footer and later the panel read it without re-rendering this component.
   const [store] = useState(createSelectionStore)
   const gridRef = useRef<GridHandle>(null)
+  // Here, not in the grid, so a filter chip can open a column's popover.
+  const [filterOpenFor, setFilterOpenFor] = useState<string | null>(null)
   const fullScreenButton = useRef<HTMLButtonElement>(null)
   const detailsButton = useRef<HTMLButtonElement>(null)
   const wasFullScreen = useRef(false)
@@ -159,6 +161,8 @@ export function ResultsTable({
               store={store}
               gridRef={gridRef}
               memory={memory}
+              filterOpenFor={filterOpenFor}
+              onFilterOpenChange={setFilterOpenFor}
             />
           </div>
         )}

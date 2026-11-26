@@ -208,6 +208,7 @@ export function useResultsGrid(result: QueryResultDto) {
     isDefault: isDefaultView(view, names),
     reset,
     totalRaw: result.rows.length,
+    allColumns: result.columns,
     filters: view.filters,
     setColumnFilter,
     clearColumnFilter,

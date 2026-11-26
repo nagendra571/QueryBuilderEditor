@@ -24,6 +24,9 @@ export const GridHeaderRow = memo(function GridHeaderRow({
   width,
   actionsFor,
   onReorder,
+  filterOpenFor,
+  onFilterOpenChange,
+  renderFilter,
 }: {
   columns: QueryResultColumnDto[]
   layouts: ColumnLayout[]
@@ -32,6 +35,9 @@ export const GridHeaderRow = memo(function GridHeaderRow({
   width: number
   actionsFor: (name: string) => HeaderActions
   onReorder: (active: string, over: string) => void
+  filterOpenFor: string | null
+  onFilterOpenChange: (column: string, open: boolean) => void
+  renderFilter: (column: QueryResultColumnDto) => React.ReactNode
 }) {
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -79,6 +85,9 @@ export const GridHeaderRow = memo(function GridHeaderRow({
                   colIndex={i}
                   sortDirection={sort?.column === col.name ? sort.direction : null}
                   actions={actionsFor(col.name)}
+                  filterOpen={filterOpenFor === col.name}
+                  onFilterOpenChange={(open) => onFilterOpenChange(col.name, open)}
+                  filterContent={filterOpenFor === col.name ? renderFilter(col) : null}
                 />
               ) : null,
             )}

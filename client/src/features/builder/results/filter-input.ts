@@ -1,0 +1,64 @@
+import type { ColumnDataType } from '@/types'
+import { profileKind } from './column-profile.ts'
+import type { FilterValue, GridFilter, ValueOption } from './grid-filters.ts'
+
+const DAY_END_MS = 86_399_999
+
+export type Parsed = { ok: true; value: number | null } | { ok: false }
+
+export function parseBound(text: string, dataType: ColumnDataType, end: boolean): Parsed {
+  const t = text.trim()
+  if (t === '') return { ok: true, value: null }
+  if (profileKind(dataType) === 'number') {
+    const n = Number(t)
+    return Number.isFinite(n) ? { ok: true, value: n } : { ok: false }
+  }
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(t)
+  if (!m) return { ok: false }
+  const ms = Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]))
+  if (Number.isNaN(ms)) return { ok: false }
+  // A dateTime "To" day includes the whole day; a date column has no time part to include.
+  return { ok: true, value: dataType === 'dateTime' && end ? ms + DAY_END_MS : ms }
+}
+
+export function boundInputText(value: number | null, dataType: ColumnDataType): string {
+  if (value === null) return ''
+  return profileKind(dataType) === 'number' ? String(value) : new Date(value).toISOString().slice(0, 10)
+}
+
+export type RangeProblem = 'invalid' | 'order' | null
+
+export function rangeProblem(from: string, to: string, dataType: ColumnDataType): RangeProblem {
+  const a = parseBound(from, dataType, false)
+  const b = parseBound(to, dataType, true)
+  if (!a.ok || !b.ok) return 'invalid'
+  if (a.value !== null && b.value !== null && a.value > b.value) return 'order'
+  return null
+}
+
+export function buildRangeFilter(
+  column: string,
+  from: string,
+  to: string,
+  includeEmpty: boolean,
+  dataType: ColumnDataType,
+): GridFilter | null {
+  const a = parseBound(from, dataType, false)
+  const b = parseBound(to, dataType, true)
+  if (!a.ok || !b.ok) return null
+  return { kind: 'range', column, min: a.value, max: b.value, includeEmpty }
+}
+
+export function initialTicks(options: ValueOption[], filter: GridFilter | undefined): Set<FilterValue> {
+  if (!filter || filter.kind !== 'values') return new Set(options.map((o) => o.value))
+  const listed = new Set(filter.values)
+  return new Set(options.filter((o) => (filter.mode === 'include') === listed.has(o.value)).map((o) => o.value))
+}
+
+/** null = every value ticked, i.e. no filter. */
+export function filterFromTicks(column: string, options: ValueOption[], ticked: Set<FilterValue>): GridFilter | null {
+  const on = options.filter((o) => ticked.has(o.value)).map((o) => o.value)
+  if (on.length === options.length) return null
+  if (on.length < options.length / 2) return { kind: 'values', column, mode: 'include', values: on }
+  return { kind: 'values', column, mode: 'exclude', values: options.filter((o) => !ticked.has(o.value)).map((o) => o.value) }
+}
