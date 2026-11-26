@@ -42,8 +42,8 @@ export function DetailsPanel({
         mode === 'overlay' && 'absolute inset-y-0 right-0 z-10',
       )}
       onKeyDown={(e) => {
-        if (e.key !== 'Escape') return
-        if ((e.target as Element).closest('[role="menu"],[role="listbox"]')) return
+        if (e.key !== 'Escape' || e.defaultPrevented) return
+        if ((e.target as Element).closest('[role="menu"],[role="listbox"],[role="dialog"]')) return
         // The full-screen listener on the document skips a defaultPrevented press, so this one only closes the panel.
         e.preventDefault()
         onClose()

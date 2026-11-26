@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
@@ -43,14 +43,14 @@ export function ResultsTable({
   const [areaWidth, setAreaWidth] = useState(0)
   const bandObserver = useRef<ResizeObserver | null>(null)
   // A callback ref: the band remounts when full screen toggles.
-  const bandRef = (el: HTMLDivElement | null) => {
+  const bandRef = useCallback((el: HTMLDivElement | null) => {
     bandObserver.current?.disconnect()
     bandObserver.current = null
     if (!el) return
     setAreaWidth(el.clientWidth)
     bandObserver.current = new ResizeObserver(() => setAreaWidth(el.clientWidth))
     bandObserver.current.observe(el)
-  }
+  }, [])
 
   // A run that returns no columns renders no grid or exit button, so it must not stay in full screen.
   if (fullScreen && result.columns.length === 0) setFullScreen(false)
