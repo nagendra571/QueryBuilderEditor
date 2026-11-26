@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
+import { ColumnProfileView } from '@/features/builder/results/ColumnProfileView'
 import { DetailsPanel } from '@/features/builder/results/DetailsPanel'
 import { RowDetails } from '@/features/builder/results/RowDetails'
 import { ResultsFooter } from '@/features/builder/results/ResultsFooter'
@@ -173,7 +174,7 @@ export function ResultsTable({
             mode={panelMode(areaWidth)}
             areaWidth={areaWidth}
             row={<RowDetails store={store} gridRef={gridRef} onRowClick={onRowClick} rowActionLabel={rowActionLabel} />}
-            column={<p className="p-3 text-xs text-muted-foreground">Select a cell to profile its column.</p>}
+            column={<ColumnProfileView store={store} result={result} />}
           />
         )}
       </div>
