@@ -60,3 +60,12 @@ test('a truncated list excludes by default and includes only after Clear', () =>
   assert.deepEqual(filterFromTicks('x', o, new Set(['a']), undefined, true, true), { kind: 'values', column: 'x', mode: 'include', values: ['a'] })
   assert.equal(filterFromTicks('x', o, new Set(['a', 'b', 'c', 'd']), undefined, true), null)
 })
+
+test('an include filter that cannot see every value stays an include', () => {
+  const o = opts('a', 'b', 'c', 'd')
+  const inc = { kind: 'values', column: 'x', mode: 'include', values: ['a', 'z'] } as const
+  assert.deepEqual(filterFromTicks('x', o, new Set(['a', 'b', 'c']), inc), { kind: 'values', column: 'x', mode: 'include', values: ['a', 'b', 'c', 'z'] })
+  assert.deepEqual(filterFromTicks('x', o, new Set(['a', 'b', 'c', 'd']), inc), { kind: 'values', column: 'x', mode: 'include', values: ['a', 'b', 'c', 'd', 'z'] })
+  const onlyA = { kind: 'values', column: 'x', mode: 'include', values: ['a'] } as const
+  assert.deepEqual(filterFromTicks('x', o, new Set(['a', 'b']), onlyA, true), { kind: 'values', column: 'x', mode: 'include', values: ['a', 'b'] })
+})

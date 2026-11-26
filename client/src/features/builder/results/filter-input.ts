@@ -72,6 +72,10 @@ export function filterFromTicks(
   const carriedExclude = existing?.kind === 'values' && existing.mode === 'exclude' ? unlisted : []
   const carriedInclude = existing?.kind === 'values' && existing.mode === 'include' ? unlisted : []
   const on = options.filter((o) => ticked.has(o.value)).map((o) => o.value)
+  // An include filter that can't see every value must stay an include, or flipping would admit what it kept out.
+  if (existing?.kind === 'values' && existing.mode === 'include' && (carriedInclude.length > 0 || truncated)) {
+    return { kind: 'values', column, mode: 'include', values: [...new Set([...on, ...carriedInclude])] }
+  }
   if (on.length === options.length && carriedExclude.length === 0) return null
   // With a cut-off list, "fewer than half" says nothing about the values that are not listed, so the default keeps them.
   const include = truncated ? clearedInSession : on.length < options.length / 2
