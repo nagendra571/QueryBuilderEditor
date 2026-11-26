@@ -3,9 +3,10 @@ import { createPortal } from 'react-dom'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { ResultsFooter } from '@/features/builder/results/ResultsFooter'
-import { ResultsGrid } from '@/features/builder/results/ResultsGrid'
+import { ResultsGrid, type GridHandle } from '@/features/builder/results/ResultsGrid'
 import { ResultsToolbar } from '@/features/builder/results/ResultsToolbar'
 import { createGridMemory } from '@/features/builder/results/grid-memory'
+import { createSelectionStore } from '@/features/builder/results/selection-store'
 import { useResultsGrid } from '@/features/builder/results/useResultsGrid'
 import type { QueryResultDto } from '@/types'
 
@@ -29,8 +30,9 @@ export function ResultsTable({
   // Full screen remounts the grid in a portal; this carries its scroll position and selection across.
   const [memory] = useState(createGridMemory)
   const [range, setRange] = useState({ first: 0, last: 0 })
-  const [selectedCells, setSelectedCells] = useState(0)
-  const copyRef = useRef<{ copy: () => void }>(null)
+  // Like memory, outlives the full-screen remount; the footer and later the panel read it without re-rendering this component.
+  const [store] = useState(createSelectionStore)
+  const gridRef = useRef<GridHandle>(null)
   const fullScreenButton = useRef<HTMLButtonElement>(null)
   const wasFullScreen = useRef(false)
 
@@ -90,7 +92,7 @@ export function ResultsTable({
         onDensityChange={(density) => setView((v) => ({ ...v, density }))}
         wrap={view.wrap}
         onWrapChange={(wrap) => setView((v) => ({ ...v, wrap }))}
-        onCopy={() => copyRef.current?.copy()}
+        onCopy={() => gridRef.current?.copy()}
         copyDisabled={noRows}
         isDefaultView={grid.isDefault}
         onReset={grid.reset}
@@ -132,8 +134,8 @@ export function ResultsTable({
             onRowClick={onRowClick}
             rowActionLabel={rowActionLabel}
             onVisibleRangeChange={(first, last) => setRange({ first, last })}
-            onSelectionChange={setSelectedCells}
-            copyRef={copyRef}
+            store={store}
+            gridRef={gridRef}
             memory={memory}
           />
         </div>
@@ -145,7 +147,7 @@ export function ResultsTable({
         filtered={rows.length}
         raw={grid.totalRaw}
         pinned={pinned}
-        selectedCells={noRows ? 0 : selectedCells}
+        store={store}
       />
     </div>
   )
