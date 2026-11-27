@@ -64,7 +64,9 @@ public class SaveQueryLayoutCommandTests
 
         Assert.False(has);
         Assert.Null(f.Query.LayoutJson);
-        Assert.Equal("Cleared the results layout of query 'Orders by region'", Assert.Single(f.Audit.Entries).Summary);
+        var entry = Assert.Single(f.Audit.Entries);
+        Assert.Equal(AuditAction.QueryLayoutSaved, entry.Action);
+        Assert.Equal("Cleared the results layout of query 'Orders by region'", entry.Summary);
     }
 
     [Fact]

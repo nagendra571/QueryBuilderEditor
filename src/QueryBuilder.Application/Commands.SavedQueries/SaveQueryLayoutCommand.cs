@@ -46,8 +46,9 @@ public sealed class SaveQueryLayoutCommandHandler(
         }
 
         // Not stamping UpdatedAtUtc/UpdatedBy: the layout is a view setting, not an edit of the query.
+        // No repository.Update: the entity is tracked, so SaveChanges writes only LayoutJson and cannot
+        // revert a concurrent save of the definition (Update would mark every column modified).
         existing.LayoutJson = json;
-        repository.Update(existing);
         await repository.SaveChangesAsync(cancellationToken);
 
         var hasLayout = json is not null;
