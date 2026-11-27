@@ -87,3 +87,27 @@ test('isPlainLayout true for default, false after one width', () => {
   assert.equal(isPlainLayout(defaultView(cols), cols), true)
   assert.equal(isPlainLayout({ ...defaultView(cols), widths: { A: 100 } }, cols), false)
 })
+
+test('rule ids are unique within a column', () => {
+  const mk = (id: unknown) => ({ id, op: 'gt', value: '1', color: 'red' })
+  const p = parseSavedLayout({ v: 1, formats: { A: { rules: [mk('a'), mk('a'), mk('r1'), mk(7)] } } })!
+  const ids = p.formats.A.rules.map((r) => r.id)
+  assert.equal(new Set(ids).size, 4)
+  assert.equal(ids[0], 'a')
+  assert.equal(ids[2], 'r1')
+})
+
+test('currency must be a three-letter code', () => {
+  const cur = (c: unknown) =>
+    parseSavedLayout({ v: 1, formats: { A: { number: { style: 'currency', currency: c } } } })!.formats.A.number!.currency
+  assert.equal(cur('eur'), 'EUR')
+  assert.equal(cur('EURO'), 'USD')
+  assert.equal(cur('<b>'), 'USD')
+  assert.equal(cur(5), 'USD')
+})
+
+test('a column named __proto__ survives as an own key', () => {
+  const p = parseSavedLayout(JSON.parse('{"v":1,"widths":{"__proto__":100},"totals":{"fns":{"__proto__":"sum"}}}'))!
+  assert.equal(Object.hasOwn(p.widths, '__proto__'), true)
+  assert.equal(Object.hasOwn(p.totals.fns, '__proto__'), true)
+})

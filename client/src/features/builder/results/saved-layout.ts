@@ -73,7 +73,7 @@ function parseNumber(x: unknown): NumberFormat | undefined {
       typeof x.decimals === 'number' && Number.isInteger(x.decimals) && x.decimals >= 0 && x.decimals <= 20
         ? x.decimals
         : d.decimals,
-    currency: typeof x.currency === 'string' && x.currency ? x.currency : d.currency,
+    currency: typeof x.currency === 'string' && /^[A-Za-z]{3}$/.test(x.currency) ? x.currency.toUpperCase() : d.currency,
     thousands: typeof x.thousands === 'boolean' ? x.thousands : d.thousands,
     fraction: typeof x.fraction === 'boolean' ? x.fraction : d.fraction,
   }
@@ -90,14 +90,25 @@ function parseDate(x: unknown): DateFormat | undefined {
 function parseRules(x: unknown): HighlightRule[] {
   if (!Array.isArray(x)) return []
   const rules: HighlightRule[] = []
+  const seen = new Set<string>()
+  // Ids are React keys and edit handles: a duplicate or missing one gets a fresh id that clashes with no kept id,
+  // nor with any id a later rule carries.
+  const claimed = new Set(x.map((r) => (isObject(r) && typeof r.id === 'string' ? r.id : null)).filter((i) => i !== null))
   for (const [index, r] of x.entries()) {
     if (rules.length >= MAX_RULES) break
     if (!isObject(r)) continue
     const op = oneOf(r.op, RULE_OPS)
     const color = oneOf(r.color, RULE_COLORS)
     if (!op || !color) continue
+    let id = typeof r.id === 'string' && !seen.has(r.id) ? r.id : null
+    if (id === null) {
+      let n = index
+      while (seen.has(`r${n}`) || claimed.has(`r${n}`)) n++
+      id = `r${n}`
+    }
+    seen.add(id)
     rules.push({
-      id: typeof r.id === 'string' ? r.id : `r${index}`,
+      id,
       op,
       value: typeof r.value === 'string' ? r.value : '',
       value2: typeof r.value2 === 'string' ? r.value2 : '',
@@ -123,29 +134,27 @@ function parseFormat(x: unknown): ColumnFormat | null {
 
 export function parseSavedLayout(raw: unknown): SavedLayout | null {
   if (!isObject(raw) || raw.v !== 1) return null
-  const widths: Record<string, number> = {}
-  if (isObject(raw.widths)) {
-    for (const [name, w] of Object.entries(raw.widths)) {
-      if (typeof w === 'number' && Number.isFinite(w)) {
-        widths[name] = Math.min(Math.max(Math.round(w), MIN_COL_WIDTH), MAX_COL_WIDTH)
-      }
-    }
-  }
-  const formats: Record<string, ColumnFormat> = {}
-  if (isObject(raw.formats)) {
-    for (const [name, f] of Object.entries(raw.formats)) {
+  // fromEntries defines own keys, so a column called __proto__ is not swallowed by the prototype setter.
+  const widths: Record<string, number> = Object.fromEntries(
+    (isObject(raw.widths) ? Object.entries(raw.widths) : []).flatMap(([name, w]) =>
+      typeof w === 'number' && Number.isFinite(w)
+        ? [[name, Math.min(Math.max(Math.round(w), MIN_COL_WIDTH), MAX_COL_WIDTH)]]
+        : [],
+    ),
+  )
+  const formats: Record<string, ColumnFormat> = Object.fromEntries(
+    (isObject(raw.formats) ? Object.entries(raw.formats) : []).flatMap(([name, f]) => {
       const parsed = parseFormat(f)
-      if (parsed) formats[name] = parsed
-    }
-  }
+      return parsed ? [[name, parsed]] : []
+    }),
+  )
   const totalsRaw = isObject(raw.totals) ? raw.totals : {}
-  const fns: Record<string, TotalFn> = {}
-  if (isObject(totalsRaw.fns)) {
-    for (const [name, fn] of Object.entries(totalsRaw.fns)) {
+  const fns: Record<string, TotalFn> = Object.fromEntries(
+    (isObject(totalsRaw.fns) ? Object.entries(totalsRaw.fns) : []).flatMap(([name, fn]) => {
       const known = oneOf(fn, TOTAL_FNS)
-      if (known) fns[name] = known
-    }
-  }
+      return known ? [[name, known]] : []
+    }),
+  )
   return {
     v: 1,
     order: names(raw.order),
