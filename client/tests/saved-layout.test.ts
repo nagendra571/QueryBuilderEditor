@@ -6,6 +6,7 @@ import {
   isPlainLayout,
   layoutPartsEqual,
   parseSavedLayout,
+  shouldAdoptBaseline,
   toSavedLayout,
 } from '../src/features/builder/results/saved-layout.ts'
 
@@ -110,4 +111,22 @@ test('a column named __proto__ survives as an own key', () => {
   const p = parseSavedLayout(JSON.parse('{"v":1,"widths":{"__proto__":100},"totals":{"fns":{"__proto__":"sum"}}}'))!
   assert.equal(Object.hasOwn(p.widths, '__proto__'), true)
   assert.equal(Object.hasOwn(p.totals.fns, '__proto__'), true)
+})
+
+test('shouldAdoptBaseline true for an untouched view', () => {
+  const cols = ['A', 'B']
+  const next = { ...defaultView(cols), widths: { A: 120 } }
+  assert.equal(shouldAdoptBaseline(defaultView(cols), defaultView(cols), next), true)
+})
+
+test('shouldAdoptBaseline false after a width change', () => {
+  const cols = ['A', 'B']
+  const touched = { ...defaultView(cols), widths: { A: 90 } }
+  assert.equal(shouldAdoptBaseline(touched, defaultView(cols), { ...defaultView(cols), wrap: true }), false)
+})
+
+test('shouldAdoptBaseline true when the view already equals the new baseline', () => {
+  const cols = ['A', 'B']
+  const touched = { ...defaultView(cols), widths: { A: 90 } }
+  assert.equal(shouldAdoptBaseline(touched, defaultView(cols), { ...defaultView(cols), widths: { A: 90 } }), true)
 })

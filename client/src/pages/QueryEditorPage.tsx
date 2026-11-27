@@ -16,6 +16,7 @@ import { AddFilterButton, FiltersPanel } from '@/features/builder/FiltersPanel'
 import { AddHavingButton, HavingPanel } from '@/features/builder/HavingPanel'
 import { HistoryPanel } from '@/features/builder/HistoryPanel'
 import { ResultsTable } from '@/features/builder/ResultsTable'
+import type { SavedLayout } from '@/features/builder/results/saved-layout'
 import { SaveQueryDialog } from '@/features/builder/SaveQueryDialog'
 import { AccessLevelBadge, ShareDialog } from '@/features/builder/ShareDialog'
 import { AddSortControl, SortPanel } from '@/features/builder/SortPanel'
@@ -37,7 +38,7 @@ import { ChartEditorDialog } from '@/features/visualizations/ChartEditorDialog'
 import { ChartPanel } from '@/features/visualizations/ChartPanel'
 import { outputColumns } from '@/features/visualizations/chart-data'
 import { useDataSourceCatalog } from '@/hooks/useDataSources'
-import { savedQueriesKey } from '@/hooks/useSavedQueries'
+import { savedQueriesKey, useSaveQueryLayout } from '@/hooks/useSavedQueries'
 import { useDeleteVisualization, useSaveVisualization, useVisualizations, visualizationDataPrefix } from '@/hooks/useVisualizations'
 import { savedQueriesApi } from '@/lib/api'
 import { ApiError } from '@/lib/api-client'
@@ -172,6 +173,8 @@ export function QueryEditorPage() {
   })
 
   const [saveAsCopy, setSaveAsCopy] = useState(false)
+  const layoutRef = useRef<(() => { layout: SavedLayout; plain: boolean }) | null>(null)
+  const saveLayout = useSaveQueryLayout(queryId ?? '')
 
   const saveMutation = useMutation({
     mutationFn: (input: { name: string; description: string; asCopy: boolean }) =>
@@ -187,6 +190,13 @@ export function QueryEditorPage() {
       setSaveDialogOpen(false)
       queryClient.invalidateQueries({ queryKey: savedQueriesKey })
       if (input.asCopy) {
+        // The copy starts from the layout on screen, but only a layout worth keeping; a plain grid stays unsaved.
+        const shown = layoutRef.current?.()
+        if (shown && !shown.plain) {
+          savedQueriesApi
+            .saveLayout(result.id, shown.layout)
+            .catch(() => toast.error('The copy was saved, but its layout could not be.'))
+        }
         navigate(`/queries/${result.id}`, { replace: true })
         return
       }
@@ -577,6 +587,16 @@ export function QueryEditorPage() {
                   queryDefinition={definition}
                   addToQueryDisabledReason={addToQueryBlocked ? (addToQueryDisabledReason ?? 'This query cannot be run yet.') : undefined}
                   onAddToQuery={addGridFiltersToQuery}
+                  savedLayout={queryId ? existingQuery.data?.layout : undefined}
+                  canSaveLayout={canEditCharts}
+                  isSavingLayout={saveLayout.isPending}
+                  layoutRef={layoutRef}
+                  onSaveLayout={(layout) =>
+                    saveLayout.mutate(layout, {
+                      onSuccess: () =>
+                        toast.success(layout ? 'Layout saved for everyone who opens this query.' : 'Saved layout cleared.'),
+                    })
+                  }
                 />
                 {runMutation.isPending && (
                   <div role="status" className="absolute inset-0 z-30 flex items-center justify-center bg-background/60">

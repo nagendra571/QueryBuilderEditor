@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { savedQueriesApi } from '@/lib/api'
 import { ApiError } from '@/lib/api-client'
+import type { SavedLayout } from '@/features/builder/results/saved-layout'
 import type { ShareQueryRequest } from '@/types'
 
 export const savedQueriesKey = ['saved-queries'] as const
@@ -9,6 +10,18 @@ const sharesKey = (queryId: string) => ['query-shares', queryId] as const
 
 export function useSavedQueries() {
   return useQuery({ queryKey: savedQueriesKey, queryFn: savedQueriesApi.list })
+}
+
+export function useSaveQueryLayout(queryId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (layout: SavedLayout | null) => savedQueriesApi.saveLayout(queryId, layout),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['saved-query', queryId] })
+      queryClient.invalidateQueries({ queryKey: savedQueriesKey })
+    },
+    onError: (error) => toast.error(error instanceof ApiError ? error.message : 'Could not save the layout.'),
+  })
 }
 
 export function useToggleFavorite() {

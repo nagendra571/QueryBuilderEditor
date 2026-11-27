@@ -13,6 +13,7 @@ import { ResultsToolbar } from '@/features/builder/results/ResultsToolbar'
 import { createGridMemory } from '@/features/builder/results/grid-memory'
 import { createSelectionStore } from '@/features/builder/results/selection-store'
 import { initialPanel, panelMode } from '@/features/builder/results/panel-layout'
+import { isPlainLayout, type SavedLayout } from '@/features/builder/results/saved-layout'
 import { useResultsGrid } from '@/features/builder/results/useResultsGrid'
 import { AddToQueryDialog } from '@/features/builder/results/AddToQueryDialog'
 import { withAggregates } from '@/features/builder/results/grid-totals'
@@ -27,6 +28,11 @@ export function ResultsTable({
   queryDefinition,
   onAddToQuery,
   addToQueryDisabledReason,
+  savedLayout,
+  canSaveLayout,
+  onSaveLayout,
+  isSavingLayout,
+  layoutRef,
 }: {
   result: QueryResultDto
   /** Adds an icon button in each row's number cell that opens the rows behind it (saved, aggregated queries only). */
@@ -38,6 +44,13 @@ export function ResultsTable({
   queryDefinition?: { columns: QueryColumn[]; filters: FilterGroup; having?: FilterGroup | null }
   onAddToQuery?: (where: FilterCondition[], having: FilterCondition[], filterCount: number) => boolean
   addToQueryDisabledReason?: string
+  /** The layout saved with the query; applied to everyone who opens it. */
+  savedLayout?: unknown
+  canSaveLayout?: boolean
+  onSaveLayout?: (layout: SavedLayout | null) => void
+  isSavingLayout?: boolean
+  /** Filled with a reader of the layout shown now, so the page can carry it into a Save as copy. */
+  layoutRef?: React.MutableRefObject<(() => { layout: SavedLayout; plain: boolean }) | null>
 }) {
   // Aggregates are stamped on the columns so formats and totals know which are sums or averages; keyed on the
   // columns so a re-render with an equal definition keeps the same result object and the grid's view.
@@ -47,8 +60,20 @@ export function ResultsTable({
     [ran, definitionColumns],
   )
   // Above the full-screen switch so entering or leaving full screen keeps search, sort and widths.
-  const grid = useResultsGrid(result)
+  const grid = useResultsGrid(result, savedLayout)
   const { view, setView, rows } = grid
+  const shownNames = result.columns.map((c) => c.name)
+  const plainLayout = isPlainLayout(view, shownNames)
+  const { currentLayout } = grid
+  useEffect(() => {
+    if (!layoutRef) return
+    layoutRef.current = () => ({ layout: currentLayout(), plain: isPlainLayout(view, shownNames) })
+    return () => {
+      layoutRef.current = null
+    }
+    // shownNames is rebuilt every render; its content follows result.columns.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [layoutRef, currentLayout, view, result.columns])
   const [fullScreen, setFullScreen] = useState(false)
   // Full screen remounts the grid in a portal; this carries its scroll position and selection across.
   const [memory] = useState(createGridMemory)
@@ -169,6 +194,17 @@ export function ResultsTable({
         fullScreen={fullScreen}
         onToggleFullScreen={() => setFullScreen((f) => !f)}
         fullScreenRef={fullScreenButton}
+        layoutMenu={
+          canSaveLayout && onSaveLayout
+            ? {
+                dirty: grid.layoutDirty && !(!grid.baselineIsSaved && plainLayout),
+                hasSaved: grid.baselineIsSaved,
+                saving: !!isSavingLayout,
+                onSave: () => onSaveLayout(grid.currentLayout()),
+                onClear: () => onSaveLayout(null),
+              }
+            : undefined
+        }
       />
 
       {result.truncated && (

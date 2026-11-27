@@ -231,6 +231,8 @@ export interface SavedQueryDetailDto {
   isFavorite: boolean
   isDisabled: boolean
   definition: QueryDefinition
+  /** The results-grid layout saved with the query, or null. Parsed defensively by the grid. */
+  layout: unknown | null
   createdAtUtc: string
   updatedAtUtc?: string | null
 }

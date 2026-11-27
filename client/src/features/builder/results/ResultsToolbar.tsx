@@ -1,20 +1,80 @@
-import { Columns3, Copy, Maximize2, Minimize2, PanelRight, RotateCcw, Search, WrapText } from 'lucide-react'
+import { Columns3, Copy, LayoutTemplate, Maximize2, Minimize2, PanelRight, RotateCcw, Search, WrapText } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
   DropdownMenuContent,
+  DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { useState } from 'react'
 import { DataTypeIcon } from '@/lib/data-type-icons'
 import { cn } from '@/lib/utils'
 import type { QueryResultColumnDto } from '@/types'
 import type { Density } from '@/state/density-store'
+
+export interface LayoutMenuProps {
+  /** Something to save: the view differs from the saved layout (and isn't just the plain grid with nothing saved). */
+  dirty: boolean
+  hasSaved: boolean
+  saving: boolean
+  onSave: () => void
+  onClear: () => void
+}
+
+function LayoutMenu({ dirty, hasSaved, saving, onSave, onClear }: LayoutMenuProps) {
+  const [confirmOpen, setConfirmOpen] = useState(false)
+  return (
+    <>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs">
+            <LayoutTemplate className="size-3.5" />
+            Layout
+            {dirty && <span className="size-1.5 rounded-full bg-primary" aria-label="Unsaved layout changes" />}
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start">
+          <DropdownMenuItem className="text-xs" disabled={!dirty || saving} onSelect={onSave}>
+            Save layout
+          </DropdownMenuItem>
+          <DropdownMenuItem className="text-xs" disabled={!hasSaved || saving} onSelect={() => setConfirmOpen(true)}>
+            Clear saved layout
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Clear the saved layout?</DialogTitle>
+            <DialogDescription>
+              Everyone will see the plain grid again. Your current view stays until you reset it.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                setConfirmOpen(false)
+                onClear()
+              }}
+            >
+              Clear layout
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  )
+}
 
 const DENSITIES: { value: Density; label: string }[] = [
   { value: 'comfortable', label: 'Comfortable' },
@@ -55,6 +115,7 @@ export function ResultsToolbar({
   fullScreen,
   onToggleFullScreen,
   fullScreenRef,
+  layoutMenu,
 }: {
   search: string
   onSearchChange: (value: string) => void
@@ -80,6 +141,8 @@ export function ResultsToolbar({
   fullScreen: boolean
   onToggleFullScreen: () => void
   fullScreenRef: React.Ref<HTMLButtonElement>
+  /** Only passed for people who may save a layout with the query. */
+  layoutMenu?: LayoutMenuProps
 }) {
   const visibleCount = allColumns.length - hiddenColumns.length
 
@@ -188,6 +251,8 @@ export function ResultsToolbar({
         <Copy className="size-3.5" />
         Copy
       </Button>
+
+      {layoutMenu && <LayoutMenu {...layoutMenu} />}
 
       {!isDefaultView && (
         <Tooltip>

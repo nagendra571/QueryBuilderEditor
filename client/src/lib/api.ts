@@ -1,3 +1,4 @@
+import type { SavedLayout } from '@/features/builder/results/saved-layout'
 import { dropOrphanParameters } from '@/features/parameters/param-values'
 import { auditQueryParams } from '@/features/hub/audit-filter'
 import { apiClient } from '@/lib/api-client'
@@ -74,6 +75,8 @@ export const savedQueriesApi = {
   remove: async (id: string): Promise<void> => {
     await apiClient.delete(`/queries/${id}`)
   },
+  saveLayout: async (id: string, layout: SavedLayout | null): Promise<{ hasLayout: boolean }> =>
+    (await apiClient.put(`/queries/${id}/layout`, { layout })).data,
   toggleFavorite: async (id: string): Promise<{ isFavorite: boolean }> =>
     (await apiClient.post(`/queries/${id}/favorite`)).data,
   toggleDisabled: async (id: string): Promise<{ isDisabled: boolean }> =>

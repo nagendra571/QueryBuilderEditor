@@ -220,3 +220,9 @@ export function layoutPartsEqual(view: GridView, baseline: GridView): boolean {
 export function isPlainLayout(view: GridView, columns: string[]): boolean {
   return layoutPartsEqual(view, defaultView(columns))
 }
+
+// A late-loading or freshly saved layout may replace the view only when the user hasn't changed it; a view that
+// already equals the new baseline is the echo of our own save.
+export function shouldAdoptBaseline(view: GridView, oldBaseline: GridView, newBaseline: GridView): boolean {
+  return layoutPartsEqual(view, oldBaseline) || layoutPartsEqual(view, newBaseline)
+}
