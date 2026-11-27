@@ -36,8 +36,27 @@ integration ergonomics (single-call registration, embedded SPA, DBA-friendly mig
 
 ## Where we left off (update this at the end of each session)
 
-**2026-11-26 (latest): RESULTS PANEL phase 4 (formats, highlights, bars, scales, totals row) BUILT on branch
-`feature/results-formatting`, pushed for a PR, NOT released. START HERE.** Phase 3 merged via PR #13 (`d1581bb`). User chose
+**2026-11-27 (latest): RESULTS PANEL phase 5 (#17 saved layout per query, #18 Chart this column) BUILT on branch
+`feature/results-remember`, pushed for a PR, NOT released. START HERE.** Phase 4 merged via PR #14 (`792301b`). User chose
+option C (layout saved with the query; everyone who opens it gets it) and option 1 (separate "Save layout" with its own endpoint
+and a nullable `SavedQueries.LayoutJson` column, migration `AddSavedQueryLayout`, audit `QueryLayoutSaved = 38`). Spec
+`docs/superpowers/specs/2026-11-26-results-remember-design.md`, plan `docs/superpowers/plans/2026-11-26-results-remember.md`.
+Server: `PUT /api/queries/{id}/layout {layout}` (404 → 403 view-only → 400 unless object with `v: 1` and ≤ 262,144 chars;
+writes only `LayoutJson`, not UpdatedAt/By; works on disabled queries; not `AllowViewers`); detail DTO carries `layout`.
+Client: `results/saved-layout.ts` (format `{v:1, order, hidden, pinnedLeft, pinnedRight, widths, wrap, formats, totals}`; never
+sort/search/filters/density; defensive parse), baseline = saved layout for first result/Reset/column-set changes; a changed saved
+layout is adopted only on a late first load or our own save's echo; Layout menu (Save / Clear with confirm; dot = unsaved changes);
+Save as copies the layout (awaited before navigating). Chart this column (`chartForColumn` in `chart-data.ts`; number → bar,
+date → line, other → bar grouped by it; exits full screen first; disabled with a reason on unsaved queries/columns).
+`effectiveTotal` drops stored totals the column can't use. Bundle `index-CP99cgda.js`; client 465/465; server SaveQueryLayout
+17/17 net8+net10, net10 full 423/423 with `QB_TEST_METADATA_SQLSERVER`. Verified: per-task + Opus final reviews (all fixed),
+Playwright acceptance incl. a temporary viewer (reverted), user checked it in the browser. Local `QueryBuilderAppDb` migrated.
+Parked: `{}` body clears the layout; 400 title says "Invalid query definition"; rAF not cancelled. Release: Editor 2.3.0
+suggested for phases 1–5 — regenerate the DBA script (new migration) and run the full suites with both DB variables on net8+net10.
+Sample app gets killed by low memory when run in the background here — the user can run it in their own terminal.
+
+**2026-11-26: RESULTS PANEL phase 4 (formats, highlights, bars, scales, totals row) — merged to `main` via PR #14
+(`792301b`), unreleased.** Phase 3 merged via PR #13 (`d1581bb`). User chose
 session-only settings and option B (a **Format** tab in the Details panel). Spec `docs/superpowers/specs/2026-11-26-results-formatting-design.md`
 (+ "Settled after the builder check"), mockup `docs/superpowers/specs/assets/2026-11-26-results-formatting-mockup.html`, plan
 `docs/superpowers/plans/2026-11-26-results-formatting.md`. Tracker #9, #14, #15 "Done (unreleased)". Built (client-only):
