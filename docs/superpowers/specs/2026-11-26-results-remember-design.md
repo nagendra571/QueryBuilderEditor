@@ -201,8 +201,9 @@ Columns are identified by output name (the same names the grid already uses).
   *looking at* (`toSavedLayout(currentView)`), not the source's saved one, because they just arranged
   the grid. Anyone who can open a query can save a copy, and they own the copy, so this needs no extra
   permission. Skipped when the current view's saved parts are the plain default.
-- **Size cap (my call):** 256 KB is checked on the raw request body length before parsing; `v` must be
-  the JSON number `1` (`1.0` is accepted as the same number). The server stores the object as
+- **Size cap (my call):** 256 KB is checked on the layout value's raw JSON text
+  (`JsonElement.GetRawText().Length` ≤ 262,144); `v` must be the JSON number `1` (`1.0` is accepted as
+  the same number). The server stores the object as
   received (re-serialized); the client never uses any part of it without `parseSavedLayout`.
 - **Chart this column with no possible X (my call):** stays a bar chart with an empty X; the editor's
   existing problem text asks for one.
