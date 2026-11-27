@@ -55,7 +55,7 @@ export function useResultsGrid(result: QueryResultDto, savedLayout?: unknown) {
         baseline,
       )
     }
-    if (state.savedLayout !== savedLayout && shouldAdoptBaseline(view, state.baseline, baseline)) {
+    if (state.savedLayout !== savedLayout && shouldAdoptBaseline(view, state.baseline, baseline, state.savedLayout === undefined && savedLayout !== undefined)) {
       view = { ...baseline, sort: view.sort, search: view.search, filters: view.filters, density: view.density }
     }
     setState({ result, savedLayout, baseline, view })
@@ -251,7 +251,7 @@ export function useResultsGrid(result: QueryResultDto, savedLayout?: unknown) {
   )
 
   const reset = useCallback(() => setView(() => baseline), [setView, baseline])
-  const layoutDirty = !layoutPartsEqual(view, baseline)
+  const layoutDirty = useMemo(() => !layoutPartsEqual(view, baseline), [view, baseline])
   const currentLayout = useCallback(() => toSavedLayout(view), [view])
   const isDefault =
     !layoutDirty && view.sort === null && !view.search.trim() && view.filters.length === 0 && view.density === null

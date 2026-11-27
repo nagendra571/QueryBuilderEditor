@@ -202,7 +202,15 @@ function canonical(x: unknown): string {
   )
 }
 
-export function layoutPartsEqual(view: GridView, baseline: GridView): boolean {
+// What the server would hand back for this view: parsing drops explicit no-ops (bars: false, scale: null), so a
+// live view and its own echo must be compared in this form or Save stays enabled after saving.
+function normalised(view: GridView): GridView {
+  return applySavedLayout(parseSavedLayout(toSavedLayout(view)), view.order)
+}
+
+export function layoutPartsEqual(rawView: GridView, rawBaseline: GridView): boolean {
+  const view = normalised(rawView)
+  const baseline = normalised(rawBaseline)
   return (
     sameList(view.order, baseline.order) &&
     sameList(view.pinnedLeft, baseline.pinnedLeft) &&
@@ -221,8 +229,13 @@ export function isPlainLayout(view: GridView, columns: string[]): boolean {
   return layoutPartsEqual(view, defaultView(columns))
 }
 
-// A late-loading or freshly saved layout may replace the view only when the user hasn't changed it; a view that
-// already equals the new baseline is the echo of our own save.
-export function shouldAdoptBaseline(view: GridView, oldBaseline: GridView, newBaseline: GridView): boolean {
-  return layoutPartsEqual(view, oldBaseline) || layoutPartsEqual(view, newBaseline)
+// Adopt only a late first load into an untouched view, or the echo of our own save (view already equals it). A clear
+// or someone else's save arriving by refetch must leave the view alone: "your current view stays until you reset".
+export function shouldAdoptBaseline(
+  view: GridView,
+  oldBaseline: GridView,
+  newBaseline: GridView,
+  firstLoad: boolean,
+): boolean {
+  return (firstLoad && layoutPartsEqual(view, oldBaseline)) || layoutPartsEqual(view, newBaseline)
 }

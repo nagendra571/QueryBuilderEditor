@@ -113,20 +113,37 @@ test('a column named __proto__ survives as an own key', () => {
   assert.equal(Object.hasOwn(p.totals.fns, '__proto__'), true)
 })
 
-test('shouldAdoptBaseline true for an untouched view', () => {
+test('shouldAdoptBaseline: a late first load replaces an untouched view', () => {
   const cols = ['A', 'B']
   const next = { ...defaultView(cols), widths: { A: 120 } }
-  assert.equal(shouldAdoptBaseline(defaultView(cols), defaultView(cols), next), true)
+  assert.equal(shouldAdoptBaseline(defaultView(cols), defaultView(cols), next, true), true)
 })
 
-test('shouldAdoptBaseline false after a width change', () => {
+test('shouldAdoptBaseline: never a touched view on first load', () => {
   const cols = ['A', 'B']
   const touched = { ...defaultView(cols), widths: { A: 90 } }
-  assert.equal(shouldAdoptBaseline(touched, defaultView(cols), { ...defaultView(cols), wrap: true }), false)
+  assert.equal(shouldAdoptBaseline(touched, defaultView(cols), { ...defaultView(cols), wrap: true }, true), false)
 })
 
-test('shouldAdoptBaseline true when the view already equals the new baseline', () => {
+test('shouldAdoptBaseline: a clear or an outside save on refetch is not adopted', () => {
+  const cols = ['A', 'B']
+  const saved = { ...defaultView(cols), widths: { A: 120 } }
+  assert.equal(shouldAdoptBaseline(saved, saved, defaultView(cols), false), false)
+  assert.equal(shouldAdoptBaseline(saved, saved, { ...defaultView(cols), wrap: true }, false), false)
+})
+
+test('shouldAdoptBaseline: the echo of our own save is adopted', () => {
   const cols = ['A', 'B']
   const touched = { ...defaultView(cols), widths: { A: 90 } }
-  assert.equal(shouldAdoptBaseline(touched, defaultView(cols), { ...defaultView(cols), widths: { A: 90 } }), true)
+  assert.equal(shouldAdoptBaseline(touched, defaultView(cols), { ...defaultView(cols), widths: { A: 90 } }, false), true)
+})
+
+test('explicit no-op format fields do not make a saved view look changed', () => {
+  const cols = ['A']
+  const view = {
+    ...defaultView(cols),
+    formats: { A: { rules: [], bars: false, scale: null, number: { style: 'currency', decimals: 2, currency: 'USD', thousands: true, fraction: false } } },
+  } as unknown as ReturnType<typeof defaultView>
+  const echo = applySavedLayout(parseSavedLayout(JSON.parse(JSON.stringify(toSavedLayout(view)))), cols)
+  assert.equal(layoutPartsEqual(view, echo), true)
 })

@@ -16,10 +16,11 @@ export function useSaveQueryLayout(queryId: string) {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: (layout: SavedLayout | null) => savedQueriesApi.saveLayout(queryId, layout),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['saved-query', queryId] })
-      queryClient.invalidateQueries({ queryKey: savedQueriesKey })
-    },
+    onSuccess: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['saved-query', queryId] }),
+        queryClient.invalidateQueries({ queryKey: savedQueriesKey }),
+      ]),
     onError: (error) => toast.error(error instanceof ApiError ? error.message : 'Could not save the layout.'),
   })
 }

@@ -62,18 +62,16 @@ export function ResultsTable({
   // Above the full-screen switch so entering or leaving full screen keeps search, sort and widths.
   const grid = useResultsGrid(result, savedLayout)
   const { view, setView, rows } = grid
-  const shownNames = result.columns.map((c) => c.name)
-  const plainLayout = isPlainLayout(view, shownNames)
+  const shownNames = useMemo(() => result.columns.map((c) => c.name), [result.columns])
+  const plainLayout = useMemo(() => isPlainLayout(view, shownNames), [view, shownNames])
   const { currentLayout } = grid
   useEffect(() => {
     if (!layoutRef) return
-    layoutRef.current = () => ({ layout: currentLayout(), plain: isPlainLayout(view, shownNames) })
+    layoutRef.current = () => ({ layout: currentLayout(), plain: plainLayout })
     return () => {
       layoutRef.current = null
     }
-    // shownNames is rebuilt every render; its content follows result.columns.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [layoutRef, currentLayout, view, result.columns])
+  }, [layoutRef, currentLayout, plainLayout])
   const [fullScreen, setFullScreen] = useState(false)
   // Full screen remounts the grid in a portal; this carries its scroll position and selection across.
   const [memory] = useState(createGridMemory)

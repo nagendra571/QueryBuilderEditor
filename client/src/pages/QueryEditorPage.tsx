@@ -185,7 +185,7 @@ export function QueryEditorPage() {
         dataSourceId: dataSourceId!,
         definition,
       }),
-    onSuccess: (result, input) => {
+    onSuccess: async (result, input) => {
       toast.success(input.asCopy ? 'Saved as a new query.' : 'Query saved.')
       setSaveDialogOpen(false)
       queryClient.invalidateQueries({ queryKey: savedQueriesKey })
@@ -193,7 +193,8 @@ export function QueryEditorPage() {
         // The copy starts from the layout on screen, but only a layout worth keeping; a plain grid stays unsaved.
         const shown = layoutRef.current?.()
         if (shown && !shown.plain) {
-          savedQueriesApi
+          // Awaited so the new page's first read already carries the layout.
+          await savedQueriesApi
             .saveLayout(result.id, shown.layout)
             .catch(() => toast.error('The copy was saved, but its layout could not be.'))
         }
