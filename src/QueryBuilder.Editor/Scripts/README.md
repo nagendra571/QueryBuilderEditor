@@ -18,6 +18,9 @@ so existing dashboards respond to click-filters). **`QueryBuilder.schema.2.2.0.s
 database and upgrades any earlier one, including everything the 2.0.0 script did. Rolling back to 2.1.0 is safe: older code
 ignores the column and its default fills it.
 
+**Next release (not yet versioned)** adds one migration, `AddSavedQueryLayout`, which adds the nullable column
+`SavedQueries.LayoutJson` (the saved results-grid layout). The script must be regenerated for that release.
+
 ## Regenerating after a migration change
 
 Whenever a new EF Core migration is added under `QueryBuilder.Infrastructure/Persistence/Migrations`:

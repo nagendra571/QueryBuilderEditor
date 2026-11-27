@@ -37,8 +37,8 @@ is the way to get a true, query-wide answer.
 | 14 | Conditional formatting (colour scales, in-cell bars, highlight rules) | Shaping | 4 | Done (unreleased, branch feature/results-formatting) |
 | 15 | Per-column number and date formats | Shaping | 4 | Done (unreleased, branch feature/results-formatting) |
 | 16 | Copy a cell, row or selection with headers, pastes cleanly into Excel | Getting data out | 1 | Done (unreleased, branch feature/results-grid) |
-| 17 | Remember the layout per saved query (order, widths, pins, hidden, formats). Touches the database: decide first | Remembering | 5 | Planned |
-| 18 | "Chart this column" from the header menu, opens the chart editor filled in | Moving on | 5 | Planned |
+| 17 | Remember the layout per saved query (order, widths, pins, hidden, formats). Touches the database: decide first | Remembering | 5 | Done (unreleased, branch feature/results-remember) |
+| 18 | "Chart this column" from the header menu, opens the chart editor filled in | Moving on | 5 | Done (unreleased, branch feature/results-remember) |
 
 ## Other ideas (not planned yet)
 
