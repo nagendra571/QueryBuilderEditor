@@ -32,7 +32,10 @@ public sealed record SavedQueryDetailDto(
     bool IsDisabled,
     QueryDefinition Definition,
     DateTimeOffset CreatedAtUtc,
-    DateTimeOffset? UpdatedAtUtc);
+    DateTimeOffset? UpdatedAtUtc,
+    System.Text.Json.JsonElement? Layout = null);
+
+public sealed record SaveQueryLayoutRequest(System.Text.Json.JsonElement? Layout);
 
 public sealed record SaveQueryRequest(
     Guid? Id,

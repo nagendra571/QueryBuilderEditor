@@ -36,6 +36,26 @@ public sealed class GetSavedQueryByIdQueryHandler(ISavedQueryRepository reposito
             query.IsDisabled,
             QueryDefinitionSerializer.Deserialize(query.DefinitionJson),
             query.CreatedAtUtc,
-            query.UpdatedAtUtc);
+            query.UpdatedAtUtc,
+            ParseLayout(query.LayoutJson));
+    }
+
+    // A bad stored value must never fail the query page; the grid just starts plain.
+    private static System.Text.Json.JsonElement? ParseLayout(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return null;
+        }
+
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            return doc.RootElement.Clone();
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            return null;
+        }
     }
 }
