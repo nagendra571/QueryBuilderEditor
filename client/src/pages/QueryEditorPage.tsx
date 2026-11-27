@@ -16,7 +16,7 @@ import { AddFilterButton, FiltersPanel } from '@/features/builder/FiltersPanel'
 import { AddHavingButton, HavingPanel } from '@/features/builder/HavingPanel'
 import { HistoryPanel } from '@/features/builder/HistoryPanel'
 import { ResultsTable } from '@/features/builder/ResultsTable'
-import type { SavedLayout } from '@/features/builder/results/saved-layout'
+import { parseSavedLayout, type SavedLayout } from '@/features/builder/results/saved-layout'
 import { SaveQueryDialog } from '@/features/builder/SaveQueryDialog'
 import { AccessLevelBadge, ShareDialog } from '@/features/builder/ShareDialog'
 import { AddSortControl, SortPanel } from '@/features/builder/SortPanel'
@@ -192,11 +192,13 @@ export function QueryEditorPage() {
       queryClient.invalidateQueries({ queryKey: savedQueriesKey })
       if (input.asCopy) {
         // The copy starts from the layout on screen, but only a layout worth keeping; a plain grid stays unsaved.
+        // With the Results tab closed there is no grid to ask, so the source query's saved layout carries over.
         const shown = layoutRef.current?.()
-        if (shown && !shown.plain) {
+        const copied = shown ? (shown.plain ? null : shown.layout) : parseSavedLayout(existingQuery.data?.layout)
+        if (copied) {
           // Awaited so the new page's first read already carries the layout.
           await savedQueriesApi
-            .saveLayout(result.id, shown.layout)
+            .saveLayout(result.id, copied)
             .catch(() => toast.error('The copy was saved, but its layout could not be.'))
         }
         navigate(`/queries/${result.id}`, { replace: true })
@@ -242,6 +244,22 @@ export function QueryEditorPage() {
   const saveVisualization = useSaveVisualization(queryId ?? '')
   const deleteVisualization = useDeleteVisualization(queryId ?? '')
   const savedDefinition = existingQuery.data?.definition
+  const chartColumn = useMemo(() => {
+    if (isViewer) return undefined
+    const savedNames = savedDefinition ? new Set(outputColumns(savedDefinition.columns).map((c) => c.name)) : null
+    return {
+      reasonFor: (column: string) => {
+        if (!queryId || !savedNames) return 'Save the query to add charts.'
+        return savedNames.has(column) ? undefined : "Save the query first — this column isn't in the saved version."
+      },
+      onChart: (column: string) => {
+        if (!savedDefinition) return
+        setEditingChart(null)
+        setChartStart(chartForColumn(column, outputColumns(savedDefinition.columns)))
+        setChartEditorOpen(true)
+      },
+    }
+  }, [isViewer, queryId, savedDefinition])
   const canEditCharts = !!queryId && !!existingQuery.data && !isViewer
   const charts = visualizations.data ?? []
 
@@ -592,24 +610,7 @@ export function QueryEditorPage() {
                   onAddToQuery={addGridFiltersToQuery}
                   savedLayout={queryId ? existingQuery.data?.layout : undefined}
                   canSaveLayout={canEditCharts}
-                  chartColumn={
-                    isViewer
-                      ? undefined
-                      : {
-                          reasonFor: (column) => {
-                            if (!queryId || !savedDefinition) return 'Save the query to add charts.'
-                            return outputColumns(savedDefinition.columns).some((c) => c.name === column)
-                              ? undefined
-                              : "Save the query first — this column isn't in the saved version."
-                          },
-                          onChart: (column) => {
-                            if (!savedDefinition) return
-                            setEditingChart(null)
-                            setChartStart(chartForColumn(column, outputColumns(savedDefinition.columns)))
-                            setChartEditorOpen(true)
-                          },
-                        }
-                  }
+                  chartColumn={chartColumn}
                   isSavingLayout={saveLayout.isPending}
                   layoutRef={layoutRef}
                   onSaveLayout={(layout) =>

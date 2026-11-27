@@ -36,6 +36,11 @@ export function totalChoices(column: QueryResultColumnDto): TotalFn[] {
   }
 }
 
+// A saved choice can predate a change to the column (say it became an average), so it only counts while still offered.
+export function effectiveTotal(column: QueryResultColumnDto, stored: TotalFn | undefined): TotalFn {
+  return stored && totalChoices(column).includes(stored) ? stored : defaultTotal(column)
+}
+
 export function defaultTotal(column: QueryResultColumnDto): TotalFn {
   switch (profileKind(column.dataType)) {
     case 'number':

@@ -37,7 +37,12 @@ function LayoutMenu({ dirty, hasSaved, saving, onSave, onClear }: LayoutMenuProp
           <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs">
             <LayoutTemplate className="size-3.5" />
             Layout
-            {dirty && <span className="size-1.5 rounded-full bg-primary" aria-label="Unsaved layout changes" />}
+            {dirty && (
+              <>
+                <span className="size-1.5 rounded-full bg-primary" aria-hidden="true" />
+                <span className="sr-only">Unsaved layout changes</span>
+              </>
+            )}
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start">

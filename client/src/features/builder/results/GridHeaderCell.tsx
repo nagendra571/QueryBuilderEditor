@@ -184,9 +184,9 @@ export function GridHeaderCell({
             <DropdownMenuItem
               disabled={!!actions.chart.disabledReason}
               onSelect={actions.chart.onSelect}
-              className={actions.chart.disabledReason ? 'flex-col items-start gap-0' : undefined}
+              className={actions.chart.disabledReason ? 'flex-col items-start gap-0 data-[disabled]:opacity-100' : undefined}
             >
-              Chart this column
+              <span className={actions.chart.disabledReason ? 'opacity-50' : undefined}>Chart this column</span>
               {actions.chart.disabledReason && (
                 <span className="text-[11px] font-normal leading-snug text-muted-foreground">{actions.chart.disabledReason}</span>
               )}

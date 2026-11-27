@@ -11,7 +11,7 @@ import { cn } from '@/lib/utils'
 import type { QueryResultColumnDto } from '@/types'
 import type { CompiledFormat } from './grid-format.ts'
 import { ROW_NUM_WIDTH, type ColumnLayout, type ColumnWindow } from './grid-layout.ts'
-import { TOTAL_LABEL, defaultTotal, formatTotal, totalChoices, totalRaw, type TotalFn } from './grid-totals.ts'
+import { TOTAL_LABEL, effectiveTotal, formatTotal, totalChoices, totalRaw, type TotalFn } from './grid-totals.ts'
 
 const CHOICE_NAME: Record<TotalFn, string> = {
   sum: 'Sum',
@@ -59,7 +59,7 @@ export const TotalsRow = memo(function TotalsRow({
   onChange,
   onFocusGrid,
 }: TotalsRowProps) {
-  const effective = useMemo(() => columns.map((c) => fns[c.name] ?? defaultTotal(c)), [columns, fns])
+  const effective = useMemo(() => columns.map((c) => effectiveTotal(c, fns[c.name])), [columns, fns])
   // Only the row pass is memoised: formatting is cheap, so a format edit re-formats without re-scanning the rows.
   const raws = useMemo(() => columns.map((c, i) => totalRaw(rows, c, effective[i])), [rows, columns, effective])
   const values = columns.map((_, i) => formatTotal(raws[i], formats[i].text))
