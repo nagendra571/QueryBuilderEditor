@@ -33,6 +33,7 @@ export function ResultsTable({
   onSaveLayout,
   isSavingLayout,
   layoutRef,
+  chartColumn,
 }: {
   result: QueryResultDto
   /** Adds an icon button in each row's number cell that opens the rows behind it (saved, aggregated queries only). */
@@ -51,6 +52,8 @@ export function ResultsTable({
   isSavingLayout?: boolean
   /** Filled with a reader of the layout shown now, so the page can carry it into a Save as copy. */
   layoutRef?: React.MutableRefObject<(() => { layout: SavedLayout; plain: boolean }) | null>
+  /** "Chart this column"; absent hides it (e.g. for Viewers). reasonFor returns why it is unavailable, if it is. */
+  chartColumn?: { onChart: (column: string) => void; reasonFor: (column: string) => string | undefined }
 }) {
   // Aggregates are stamped on the columns so formats and totals know which are sums or averages; keyed on the
   // columns so a re-render with an equal definition keeps the same result object and the grid's view.
@@ -73,6 +76,19 @@ export function ResultsTable({
     }
   }, [layoutRef, currentLayout, plainLayout])
   const [fullScreen, setFullScreen] = useState(false)
+  // The dialog opens outside the full-screen root, which is inert underneath: leave full screen, then open on the next frame.
+  const onChartColumn = chartColumn?.onChart
+  const chartThis = useCallback(
+    (column: string) => {
+      if (!onChartColumn) return
+      if (fullScreen) {
+        setFullScreen(false)
+        requestAnimationFrame(() => onChartColumn(column))
+      } else onChartColumn(column)
+    },
+    [onChartColumn, fullScreen],
+  )
+  const chartReasonFor = chartColumn?.reasonFor
   // Full screen remounts the grid in a portal; this carries its scroll position and selection across.
   const [memory] = useState(createGridMemory)
   const [range, setRange] = useState({ first: 0, last: 0 })
@@ -265,6 +281,8 @@ export function ResultsTable({
               filterOpenFor={filterOpenFor}
               onFilterOpenChange={setFilterOpenFor}
               onOpenRecord={() => setPanel((p) => ({ ...p, open: true, tab: 'row' }))}
+              onChart={chartColumn ? chartThis : undefined}
+              chartReasonFor={chartReasonFor}
               onFormat={(name) => {
                 setPanel((p) => ({ ...p, open: true, tab: 'format' }))
                 const col = grid.columns.findIndex((c) => c.name === name)
@@ -299,6 +317,7 @@ export function ResultsTable({
                 filtered={grid.filters.length > 0}
                 compiled={grid.compiled}
                 formats={grid.formats}
+                chart={chartColumn ? { onSelect: chartThis, reasonFor: chartReasonFor } : undefined}
                 onShowOnly={fromPanel(grid.showOnlyValue)}
                 onHide={fromPanel(grid.hideColumnValue)}
                 onRange={(f) => {

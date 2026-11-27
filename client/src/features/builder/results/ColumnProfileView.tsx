@@ -21,6 +21,8 @@ interface Props {
   onShowOnly: (column: string, raw: unknown) => void
   onHide: (column: string, raw: unknown) => void
   onRange: (filter: GridFilter) => void
+  /** Absent hides the button; a reason shows it disabled. */
+  chart?: { onSelect: (column: string) => void; reasonFor?: (column: string) => string | undefined }
 }
 
 interface Actions {
@@ -31,12 +33,12 @@ interface Actions {
 
 const HINT = <p className="p-3 text-xs text-muted-foreground">Select a cell to profile its column.</p>
 
-export function ColumnProfileView({ store, result, rows, filtered, compiled, formats, onShowOnly, onHide, onRange }: Props) {
+export function ColumnProfileView({ store, result, rows, filtered, compiled, formats, onShowOnly, onHide, onRange, chart }: Props) {
   const { range, columns } = useSyncExternalStore(store.subscribe, store.get)
   const column = range ? columns[range.focus.col] : undefined
   // The store can still hold the previous run's columns for one frame after a re-run.
   if (!range || !column || !result.columns.includes(column)) return HINT
-  return <Profile result={result} column={column} rows={rows} filtered={filtered} format={compiled(column.name)} columnFormat={formats[column.name]} actions={{ onShowOnly, onHide, onRange }} />
+  return <Profile result={result} column={column} rows={rows} filtered={filtered} format={compiled(column.name)} columnFormat={formats[column.name]} actions={{ onShowOnly, onHide, onRange }} chart={chart} />
 }
 
 function Profile({
@@ -47,7 +49,9 @@ function Profile({
   format,
   columnFormat,
   actions,
+  chart,
 }: {
+  chart: Props['chart']
   format: CompiledFormat
   columnFormat: ColumnFormat | undefined
   actions: Actions
@@ -57,6 +61,7 @@ function Profile({
   filtered: boolean
 }) {
   const profile = useMemo(() => profileColumn(rows, column), [rows, column])
+  const chartReason = chart?.reasonFor?.(column.name)
   const n = rows.length
   const m = result.rows.length
   const withTime = column.dataType === 'dateTime' && !(profile.kind === 'date' && profile.allMidnight)
@@ -93,6 +98,19 @@ function Profile({
           <span className="min-w-0 truncate text-sm font-semibold">{column.name}</span>
           <TypeBadge dataType={column.dataType} />
         </div>
+        {chart && (
+          <div>
+            <button
+              type="button"
+              disabled={!!chartReason}
+              onClick={() => chart.onSelect(column.name)}
+              className="border border-border px-2 py-1 text-xs font-medium hover:bg-muted/60 focus-visible:outline-2 focus-visible:outline-ring disabled:cursor-not-allowed disabled:text-muted-foreground disabled:hover:bg-transparent"
+            >
+              Chart this column
+            </button>
+            {chartReason && <p className="mt-1 text-[11px] text-muted-foreground">{chartReason}</p>}
+          </div>
+        )}
         {result.truncated ? (
           <>
             <div

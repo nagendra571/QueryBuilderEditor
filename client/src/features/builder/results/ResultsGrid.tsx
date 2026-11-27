@@ -41,6 +41,8 @@ export function ResultsGrid({
   onFilterOpenChange,
   onOpenRecord,
   onFormat,
+  onChart,
+  chartReasonFor,
 }: {
   grid: ReturnType<typeof useResultsGrid>
   onRowClick?: (row: Record<string, unknown>) => void
@@ -59,6 +61,9 @@ export function ResultsGrid({
   onOpenRecord?: () => void
   /** Opens the formatting panel for a column; without it the header menu has no Format… item. */
   onFormat?: (column: string) => void
+  /** "Chart this column"; without it the header menu has no such item. */
+  onChart?: (column: string) => void
+  chartReasonFor?: (column: string) => string | undefined
 }) {
   const { table, view, setView, rows, columns, density, filters, allColumns, formats, compiled, setColumnFilter, clearColumnFilter, showOnlyValue, hideColumnValue, setTotalFn } = grid
   const rowHeight = ROW_HEIGHT[density]
@@ -308,8 +313,9 @@ export function ResultsGrid({
       },
       formatted: isFormatted(formats[name]),
       format: onFormat ? () => onFormat(name) : undefined,
+      chart: onChart ? { onSelect: () => onChart(name), disabledReason: chartReasonFor?.(name) } : undefined,
     }),
-    [setView, fit, copyColumn, setWidth, canHide, filters, onFilterOpenChange, clearColumnFilter, formats, onFormat],
+    [setView, fit, copyColumn, setWidth, canHide, filters, onFilterOpenChange, clearColumnFilter, formats, onFormat, onChart, chartReasonFor],
   )
 
   const onColumnFilterOpen = useCallback(

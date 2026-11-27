@@ -36,7 +36,7 @@ import {
 } from '@/features/parameters/param-values'
 import { ChartEditorDialog } from '@/features/visualizations/ChartEditorDialog'
 import { ChartPanel } from '@/features/visualizations/ChartPanel'
-import { outputColumns } from '@/features/visualizations/chart-data'
+import { chartForColumn, outputColumns, type ChartStart } from '@/features/visualizations/chart-data'
 import { useDataSourceCatalog } from '@/hooks/useDataSources'
 import { savedQueriesKey, useSaveQueryLayout } from '@/hooks/useSavedQueries'
 import { useDeleteVisualization, useSaveVisualization, useVisualizations, visualizationDataPrefix } from '@/hooks/useVisualizations'
@@ -65,6 +65,7 @@ export function QueryEditorPage() {
   const [activeTab, setActiveTab] = useState('build')
   const [chartEditorOpen, setChartEditorOpen] = useState(false)
   const [editingChart, setEditingChart] = useState<VisualizationDto | null>(null)
+  const [chartStart, setChartStart] = useState<ChartStart | null>(null)
   const [chartToDelete, setChartToDelete] = useState<VisualizationDto | null>(null)
   // What the user has typed into the parameter bar on top of the saved defaults, and what the
   // grid/charts were last run with. Values shown in the bar are derived from these on every render.
@@ -504,6 +505,7 @@ export function QueryEditorPage() {
               className="h-8 shrink-0 text-xs"
               onClick={() => {
                 setEditingChart(null)
+                setChartStart(null)
                 setChartEditorOpen(true)
               }}
             >
@@ -590,6 +592,24 @@ export function QueryEditorPage() {
                   onAddToQuery={addGridFiltersToQuery}
                   savedLayout={queryId ? existingQuery.data?.layout : undefined}
                   canSaveLayout={canEditCharts}
+                  chartColumn={
+                    isViewer
+                      ? undefined
+                      : {
+                          reasonFor: (column) => {
+                            if (!queryId || !savedDefinition) return 'Save the query to add charts.'
+                            return outputColumns(savedDefinition.columns).some((c) => c.name === column)
+                              ? undefined
+                              : "Save the query first — this column isn't in the saved version."
+                          },
+                          onChart: (column) => {
+                            if (!savedDefinition) return
+                            setEditingChart(null)
+                            setChartStart(chartForColumn(column, outputColumns(savedDefinition.columns)))
+                            setChartEditorOpen(true)
+                          },
+                        }
+                  }
                   isSavingLayout={saveLayout.isPending}
                   layoutRef={layoutRef}
                   onSaveLayout={(layout) =>
@@ -632,6 +652,7 @@ export function QueryEditorPage() {
                   canEdit={canEditCharts}
                   onEdit={() => {
                     setEditingChart(chart)
+                    setChartStart(null)
                     setChartEditorOpen(true)
                   }}
                   onDelete={() => setChartToDelete(chart)}
@@ -676,6 +697,7 @@ export function QueryEditorPage() {
           columns={outputColumns(savedDefinition.columns)}
           drillColumnChoices={availableColumns.map((c) => c.name)}
           editing={editingChart}
+          initial={chartStart}
           previewResult={runMutation.data}
           isSaving={saveVisualization.isPending}
           onSave={(request) =>
