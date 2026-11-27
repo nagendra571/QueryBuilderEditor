@@ -22,6 +22,8 @@ public sealed class SavedQueryConfiguration : IEntityTypeConfiguration<SavedQuer
         builder.Property(x => x.UpdatedBy).HasMaxLength(450);
         builder.Property(x => x.DefinitionJson).HasColumnType("nvarchar(max)").IsRequired();
 
+        builder.Property(x => x.LayoutJson).HasColumnType("nvarchar(max)");
+
         builder.HasOne(x => x.DataSource)
             .WithMany()
             .HasForeignKey(x => x.DataSourceId)

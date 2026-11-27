@@ -491,7 +491,20 @@ change, and nothing to configure.
   Limits"), sorting, search and copy cover only the loaded rows. Export and charts still run on the server and ignore what
   you did in the grid; **Add a filter** jumps to the Build tab.
 
-The layout, formats and totals are not remembered across visits yet.
+- **Saved layout:** on a saved query, owners and editors (not read-only shares) get a **Layout** menu in the results
+  toolbar. **Save layout** stores column order, widths, pins, hidden columns, wrap, number and date formats, highlight
+  rules, bars, colour scales and the totals row; sort, grid filters, search and density are not saved. Everyone who opens
+  the query gets the saved layout when results load; changes made by anyone else last for the visit. **Reset view**
+  returns to the saved layout, and **Clear saved layout** removes it. Columns that were renamed or removed drop their
+  settings. **Save as** a new query copies the layout on screen. Saving a layout never changes the query or its
+  last-updated time; it is recorded in the audit log (`QueryLayoutSaved`). It adds one nullable column,
+  `SavedQueries.LayoutJson` (migration `AddSavedQueryLayout`), in the next release, and the endpoint
+  `PUT /querybuilder/api/queries/{id}/layout` (owners and editors only; the body is `{ "layout": {...} | null }`, a JSON
+  object with `"v": 1`, up to 256 KB). `GET /api/queries/{id}` now returns `layout`.
+- **Chart this column:** in the column header menu and the Details panel's Column tab. It opens **Add chart** filled in:
+  a number column becomes a bar of that column, a date column a line over that date, anything else a bar grouped by it.
+  It is disabled, with the reason shown, when the query isn't saved or the column isn't in the saved version, and hidden
+  for read-only shares. It leaves full screen first.
 
 ## Visualizations
 

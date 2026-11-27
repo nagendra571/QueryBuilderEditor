@@ -53,8 +53,13 @@ function sameSet(a: string[], b: string[]): boolean {
 
 // Any change in the column set resets everything: a stale name in a sort or pin
 // would point at a column that no longer exists.
-export function carryOver(prev: GridView, prevColumns: string[], nextColumns: string[]): GridView {
-  if (!sameSet(prevColumns, nextColumns)) return defaultView(nextColumns)
+export function carryOver(
+  prev: GridView,
+  prevColumns: string[],
+  nextColumns: string[],
+  baseline: GridView = defaultView(nextColumns),
+): GridView {
+  if (!sameSet(prevColumns, nextColumns)) return baseline
   return {
     order: [...prev.order],
     hidden: [...prev.hidden],

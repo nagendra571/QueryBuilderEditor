@@ -22,7 +22,7 @@ import {
   type NumberStyle,
   type ScaleKind,
 } from './grid-format.ts'
-import { defaultTotal, totalChoices, type TotalFn } from './grid-totals.ts'
+import { defaultTotal, effectiveTotal, totalChoices, type TotalFn } from './grid-totals.ts'
 import { RuleEditor } from './RuleEditor'
 import type { SelectionStore } from './selection-store.ts'
 import { TypeBadge } from './TypeBadge'
@@ -186,7 +186,7 @@ export function FormatPanel({
     setRules([...rules, { id: newRuleId(), op: rulesFor(type)[0], value: '', value2: '', color: 'red' }])
 
   const choices = totalChoices(column)
-  const fn = totals.fns[column.name] ?? defaultTotal(column)
+  const fn = effectiveTotal(column, totals.fns[column.name])
   const totalSection = (
     <Section title="Total" onReset={() => onTotalChange(defaultTotal(column))} resetDisabled={fn === defaultTotal(column)}>
       {totals.on ? (

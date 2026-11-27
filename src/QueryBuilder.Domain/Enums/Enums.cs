@@ -142,7 +142,8 @@ public enum AuditAction
     DataSourceLockChanged = 34,
     DataSourceMoved = 35,
     SuperAdminCodeIssued = 36,
-    QueryDrilled = 37
+    QueryDrilled = 37,
+    QueryLayoutSaved = 38
 }
 
 /// <summary>How a managed data source's connection is encrypted in transit.</summary>

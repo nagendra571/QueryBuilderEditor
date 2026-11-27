@@ -33,6 +33,8 @@ export interface HeaderActions {
   formatted: boolean
   /** Opens the formatting panel for this column. The menu item is hidden when absent. */
   format?: () => void
+  /** Absent hides the item; a reason shows it disabled. */
+  chart?: { onSelect: () => void; disabledReason?: string }
 }
 
 export function GridHeaderCell({
@@ -177,6 +179,19 @@ export function GridHeaderCell({
           </DropdownMenuItem>
           {actions.filter.active && <DropdownMenuItem onSelect={actions.filter.clear}>Clear filter</DropdownMenuItem>}
           {actions.format && <DropdownMenuItem onSelect={actions.format}>Format…</DropdownMenuItem>}
+          {actions.chart && (
+            // The reason is text inside the item: a disabled Radix item swallows pointer events, so a tooltip would never show.
+            <DropdownMenuItem
+              disabled={!!actions.chart.disabledReason}
+              onSelect={actions.chart.onSelect}
+              className={actions.chart.disabledReason ? 'flex-col items-start gap-0 data-[disabled]:opacity-100' : undefined}
+            >
+              <span className={actions.chart.disabledReason ? 'opacity-50' : undefined}>Chart this column</span>
+              {actions.chart.disabledReason && (
+                <span className="text-[11px] font-normal leading-snug text-muted-foreground">{actions.chart.disabledReason}</span>
+              )}
+            </DropdownMenuItem>
+          )}
           <DropdownMenuSeparator />
           {layout.group !== 'left' && <DropdownMenuItem onSelect={() => actions.pin('left')}>Pin to left</DropdownMenuItem>}
           {layout.group !== 'right' && <DropdownMenuItem onSelect={() => actions.pin('right')}>Pin to right</DropdownMenuItem>}

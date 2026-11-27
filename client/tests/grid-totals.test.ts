@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import type { QueryColumn, QueryResultColumnDto } from '../src/types/index.ts'
 import {
   defaultTotal,
+  effectiveTotal,
   formatTotal,
   totalChoices,
   totalRaw,
@@ -146,4 +147,11 @@ test('withAggregates treats a whitespace alias as no alias, like the server', ()
   })
   assert.equal(out[0].aggregate, 'avg')
   assert.ok(!totalChoices(out[0]).includes('sum'))
+})
+
+test('effectiveTotal keeps a stored choice only while the column still offers it', () => {
+  assert.equal(effectiveTotal(col('number'), 'avg'), 'avg')
+  assert.equal(effectiveTotal(col('number'), undefined), 'sum')
+  assert.equal(effectiveTotal(col('number', 'avg'), 'sum'), 'none')
+  assert.equal(effectiveTotal(col('text'), 'sum'), 'count')
 })

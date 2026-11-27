@@ -147,6 +147,7 @@ public partial class CrossAppEndpointMatrixTests
         ["DELETE /api/queries/{id}"] = _ => null,
         ["POST /api/queries/{id}/favorite"] = _ => null,
         ["POST /api/queries/{id}/disable"] = _ => null,
+        ["PUT /api/queries/{id}/layout"] = _ => new { layout = new { v = 1 } },
         ["GET /api/queries/{id}/parameters/{name}/options"] = _ => null,
         ["GET /api/queries/{id}/shares"] = _ => null,
         ["POST /api/queries/{id}/shares"] = a => new { sharedWithUserId = a.SeenUser, sharedWithUserEmail = a.SeenUser + "@x", accessLevel = "Viewer" },

@@ -723,6 +723,9 @@ namespace QueryBuilder.Infrastructure.Persistence.Migrations
                     b.Property<bool>("IsFavorite")
                         .HasColumnType("bit");
 
+                    b.Property<string>("LayoutJson")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(200)

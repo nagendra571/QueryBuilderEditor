@@ -13,6 +13,7 @@ import { ResultsToolbar } from '@/features/builder/results/ResultsToolbar'
 import { createGridMemory } from '@/features/builder/results/grid-memory'
 import { createSelectionStore } from '@/features/builder/results/selection-store'
 import { initialPanel, panelMode } from '@/features/builder/results/panel-layout'
+import { isPlainLayout, type SavedLayout } from '@/features/builder/results/saved-layout'
 import { useResultsGrid } from '@/features/builder/results/useResultsGrid'
 import { AddToQueryDialog } from '@/features/builder/results/AddToQueryDialog'
 import { withAggregates } from '@/features/builder/results/grid-totals'
@@ -27,6 +28,12 @@ export function ResultsTable({
   queryDefinition,
   onAddToQuery,
   addToQueryDisabledReason,
+  savedLayout,
+  canSaveLayout,
+  onSaveLayout,
+  isSavingLayout,
+  layoutRef,
+  chartColumn,
 }: {
   result: QueryResultDto
   /** Adds an icon button in each row's number cell that opens the rows behind it (saved, aggregated queries only). */
@@ -38,6 +45,15 @@ export function ResultsTable({
   queryDefinition?: { columns: QueryColumn[]; filters: FilterGroup; having?: FilterGroup | null }
   onAddToQuery?: (where: FilterCondition[], having: FilterCondition[], filterCount: number) => boolean
   addToQueryDisabledReason?: string
+  /** The layout saved with the query; applied to everyone who opens it. */
+  savedLayout?: unknown
+  canSaveLayout?: boolean
+  onSaveLayout?: (layout: SavedLayout | null) => void
+  isSavingLayout?: boolean
+  /** Filled with a reader of the layout shown now, so the page can carry it into a Save as copy. */
+  layoutRef?: React.MutableRefObject<(() => { layout: SavedLayout; plain: boolean }) | null>
+  /** "Chart this column"; absent hides it (e.g. for Viewers). reasonFor returns why it is unavailable, if it is. */
+  chartColumn?: { onChart: (column: string) => void; reasonFor: (column: string) => string | undefined }
 }) {
   // Aggregates are stamped on the columns so formats and totals know which are sums or averages; keyed on the
   // columns so a re-render with an equal definition keeps the same result object and the grid's view.
@@ -47,9 +63,32 @@ export function ResultsTable({
     [ran, definitionColumns],
   )
   // Above the full-screen switch so entering or leaving full screen keeps search, sort and widths.
-  const grid = useResultsGrid(result)
+  const grid = useResultsGrid(result, savedLayout)
   const { view, setView, rows } = grid
+  const shownNames = useMemo(() => result.columns.map((c) => c.name), [result.columns])
+  const plainLayout = useMemo(() => isPlainLayout(view, shownNames), [view, shownNames])
+  const { currentLayout } = grid
+  useEffect(() => {
+    if (!layoutRef) return
+    layoutRef.current = () => ({ layout: currentLayout(), plain: plainLayout })
+    return () => {
+      layoutRef.current = null
+    }
+  }, [layoutRef, currentLayout, plainLayout])
   const [fullScreen, setFullScreen] = useState(false)
+  // The dialog opens outside the full-screen root, which is inert underneath: leave full screen, then open on the next frame.
+  const onChartColumn = chartColumn?.onChart
+  const chartThis = useCallback(
+    (column: string) => {
+      if (!onChartColumn) return
+      if (fullScreen) {
+        setFullScreen(false)
+        requestAnimationFrame(() => onChartColumn(column))
+      } else onChartColumn(column)
+    },
+    [onChartColumn, fullScreen],
+  )
+  const chartReasonFor = chartColumn?.reasonFor
   // Full screen remounts the grid in a portal; this carries its scroll position and selection across.
   const [memory] = useState(createGridMemory)
   const [range, setRange] = useState({ first: 0, last: 0 })
@@ -169,6 +208,17 @@ export function ResultsTable({
         fullScreen={fullScreen}
         onToggleFullScreen={() => setFullScreen((f) => !f)}
         fullScreenRef={fullScreenButton}
+        layoutMenu={
+          canSaveLayout && onSaveLayout
+            ? {
+                dirty: grid.layoutDirty && !(!grid.baselineIsSaved && plainLayout),
+                hasSaved: grid.baselineIsSaved,
+                saving: !!isSavingLayout,
+                onSave: () => onSaveLayout(grid.currentLayout()),
+                onClear: () => onSaveLayout(null),
+              }
+            : undefined
+        }
       />
 
       {result.truncated && (
@@ -231,6 +281,8 @@ export function ResultsTable({
               filterOpenFor={filterOpenFor}
               onFilterOpenChange={setFilterOpenFor}
               onOpenRecord={() => setPanel((p) => ({ ...p, open: true, tab: 'row' }))}
+              onChart={chartColumn ? chartThis : undefined}
+              chartReasonFor={chartReasonFor}
               onFormat={(name) => {
                 setPanel((p) => ({ ...p, open: true, tab: 'format' }))
                 const col = grid.columns.findIndex((c) => c.name === name)
@@ -265,6 +317,7 @@ export function ResultsTable({
                 filtered={grid.filters.length > 0}
                 compiled={grid.compiled}
                 formats={grid.formats}
+                chart={chartColumn ? { onSelect: chartThis, reasonFor: chartReasonFor } : undefined}
                 onShowOnly={fromPanel(grid.showOnlyValue)}
                 onHide={fromPanel(grid.hideColumnValue)}
                 onRange={(f) => {

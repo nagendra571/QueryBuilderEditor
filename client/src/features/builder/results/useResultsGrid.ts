@@ -27,7 +27,8 @@ import { compileFormat, formatText, isFormatted, widthKey, type ColumnFormat, ty
 import type { TotalFn } from './grid-totals.ts'
 import { buildColumnDefs, tableBehaviour, type RowData } from './grid-table.ts'
 import { removeFilter, rowsPassing, setFilter, showOnly, hideValue, valueKey, type GridFilter } from './grid-filters.ts'
-import { carryOver, defaultView, isDefaultView, type GridView } from './grid-view.ts'
+import { carryOver, type GridView } from './grid-view.ts'
+import { applySavedLayout, layoutPartsEqual, parseSavedLayout, shouldAdoptBaseline, toSavedLayout } from './saved-layout.ts'
 import { headerExtra } from './header-width.ts'
 
 
@@ -35,24 +36,30 @@ function resolve<T>(updater: Updater<T>, current: T): T {
   return typeof updater === 'function' ? (updater as (old: T) => T)(current) : updater
 }
 
-export function useResultsGrid(result: QueryResultDto) {
-  const [state, setState] = useState(() => ({
-    result,
-    view: defaultView(result.columns.map((c) => c.name)),
-  }))
-
-  // A fresh run produces a new `result`; carrying over during render avoids a frame of the old view.
-  let view = state.view
-  if (state.result !== result) {
-    view = carryOver(
-      state.view,
-      state.result.columns.map((c) => c.name),
-      result.columns.map((c) => c.name),
-    )
-    setState({ result, view })
-  }
-
+export function useResultsGrid(result: QueryResultDto, savedLayout?: unknown) {
   const names = useMemo(() => result.columns.map((c) => c.name), [result.columns])
+  const parsedLayout = useMemo(() => parseSavedLayout(savedLayout), [savedLayout])
+  const baseline = useMemo(() => applySavedLayout(parsedLayout, names), [parsedLayout, names])
+
+  const [state, setState] = useState(() => ({ result, savedLayout, baseline, view: baseline }))
+
+  // A fresh run produces a new `result`, and a layout can arrive or change after the first render; both are
+  // handled during render so the grid never paints a frame of the old view.
+  let view = state.view
+  if (state.result !== result || state.savedLayout !== savedLayout) {
+    if (state.result !== result) {
+      view = carryOver(
+        state.view,
+        state.result.columns.map((c) => c.name),
+        names,
+        baseline,
+      )
+    }
+    if (state.savedLayout !== savedLayout && shouldAdoptBaseline(view, state.baseline, baseline, state.savedLayout === undefined && savedLayout !== undefined)) {
+      view = { ...baseline, sort: view.sort, search: view.search, filters: view.filters, density: view.density }
+    }
+    setState({ result, savedLayout, baseline, view })
+  }
 
   const appDensity = useDensityStore((s) => s.density)
   const density: Density = view.density ?? appDensity
@@ -243,7 +250,11 @@ export function useResultsGrid(result: QueryResultDto) {
     [filterRows, typeOf, view.formats],
   )
 
-  const reset = useCallback(() => setView(() => defaultView(names)), [setView, names])
+  const reset = useCallback(() => setView(() => baseline), [setView, baseline])
+  const layoutDirty = useMemo(() => !layoutPartsEqual(view, baseline), [view, baseline])
+  const currentLayout = useCallback(() => toSavedLayout(view), [view])
+  const isDefault =
+    !layoutDirty && view.sort === null && !view.search.trim() && view.filters.length === 0 && view.density === null
 
   return {
     table,
@@ -252,7 +263,10 @@ export function useResultsGrid(result: QueryResultDto) {
     rows,
     columns,
     density,
-    isDefault: isDefaultView(view, names),
+    isDefault,
+    baselineIsSaved: parsedLayout !== null,
+    layoutDirty,
+    currentLayout,
     reset,
     totalRaw: result.rows.length,
     allColumns: result.columns,

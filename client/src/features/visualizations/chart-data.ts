@@ -44,6 +44,26 @@ export function defaultRoles(columns: OutputColumn[]): { x: string; measure: str
   return { x: x?.name ?? '', measure: measure?.name ?? null }
 }
 
+export interface ChartStart {
+  type: VisualizationType
+  x: string
+  measures: string[]
+}
+
+/** Pre-fill for "Chart this column": the column takes the role it is most useful in; the other role gets the default. */
+export function chartForColumn(column: string, columns: OutputColumn[]): ChartStart {
+  const col = columns.find((c) => c.name === column)
+  if (!col) return { type: 'bar', x: '', measures: [] }
+  const d = defaultRoles(columns)
+  const otherMeasure = d.measure && d.measure !== column ? [d.measure] : []
+  if (col.dataType === 'number') {
+    const x = d.x !== column ? d.x : (columns.find((c) => c.dataType !== 'number' && c.name !== column)?.name ?? '')
+    return { type: 'bar', x, measures: [column] }
+  }
+  if (col.dataType === 'date' || col.dataType === 'dateTime') return { type: 'line', x: column, measures: otherMeasure }
+  return { type: 'bar', x: column, measures: otherMeasure }
+}
+
 /** Series keys are positional so a column name containing "." never gets read as a data path. */
 export interface SeriesInfo {
   key: string

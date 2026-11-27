@@ -15,6 +15,9 @@ public sealed class SavedQuery : AuditableEntity, IAppOwned
     /// <summary>Serialized QueryDefinition (columns, joins, filters, sorts, parameters).</summary>
     public string DefinitionJson { get; set; } = string.Empty;
 
+    /// <summary>The results grid layout, owned by the browser; the server only checks "v" and size.</summary>
+    public string? LayoutJson { get; set; }
+
     public bool IsFavorite { get; set; }
     public bool IsDisabled { get; set; }
 

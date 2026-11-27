@@ -48,6 +48,14 @@ public static class SavedQueryEndpoints
             return Results.Json(new { isDisabled }, QueryBuilderJson.Options);
         });
 
+        group.MapPut("/{id:guid}/layout", async (Guid id, HttpContext http, ISender sender, CancellationToken ct) =>
+        {
+            var request = await http.Request.ReadFromJsonAsync<SaveQueryLayoutRequest>(QueryBuilderJson.Options, ct)
+                ?? throw new BadHttpRequestException("Request body is required.");
+            var hasLayout = await sender.Send(new SaveQueryLayoutCommand(id, request.Layout), ct);
+            return Results.Json(new { hasLayout }, QueryBuilderJson.Options);
+        });
+
         group.MapGet("/{id:guid}/parameters/{name}/options", async (Guid id, string name, Guid? dashboardId, Guid? tileId, ISender sender, CancellationToken ct) =>
             Results.Json(await sender.Send(new GetParameterOptionsQuery(id, name, dashboardId, tileId), ct), QueryBuilderJson.Options))
             .AllowViewers();

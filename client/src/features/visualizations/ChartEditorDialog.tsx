@@ -23,6 +23,7 @@ import {
   optionsProblem,
   referencedColumns,
   typeLabel,
+  type ChartStart,
   type OutputColumn,
 } from '@/features/visualizations/chart-data'
 import { TYPE_GROUPS } from '@/features/visualizations/chart-types'
@@ -53,6 +54,7 @@ export function ChartEditorDialog({
   columns,
   drillColumnChoices,
   editing,
+  initial,
   previewResult,
   isSaving,
   onSave,
@@ -64,6 +66,8 @@ export function ChartEditorDialog({
   /** Names of the source object's catalog columns, offered for "Columns to show when drilling". */
   drillColumnChoices: string[]
   editing?: VisualizationDto | null
+  /** Pre-fill for a new chart ("Chart this column"); ignored when editing. */
+  initial?: ChartStart | null
   /** The latest results grid, used for the live preview. */
   previewResult?: QueryResultDto
   isSaving: boolean
@@ -83,6 +87,7 @@ export function ChartEditorDialog({
           columns={columns}
           drillColumnChoices={drillColumnChoices}
           editing={editing ?? null}
+          initial={initial ?? null}
           previewResult={previewResult}
           isSaving={isSaving}
           onCancel={() => onOpenChange(false)}
@@ -97,6 +102,7 @@ function ChartEditorForm({
   columns,
   drillColumnChoices,
   editing,
+  initial,
   previewResult,
   isSaving,
   onCancel,
@@ -105,6 +111,7 @@ function ChartEditorForm({
   columns: OutputColumn[]
   drillColumnChoices: string[]
   editing: VisualizationDto | null
+  initial: ChartStart | null
   previewResult?: QueryResultDto
   isSaving: boolean
   onCancel: () => void
@@ -112,10 +119,11 @@ function ChartEditorForm({
 }) {
   const numeric = useMemo(() => columns.filter((c) => c.dataType === 'number'), [columns])
   const defaults = useMemo(() => defaultRoles(columns), [columns])
+  const start = editing ? null : initial
 
-  const [type, setType] = useState<VisualizationType>(editing?.type ?? 'bar')
-  const [x, setX] = useState<string>(editing?.options.x ?? defaults.x)
-  const [measures, setMeasures] = useState<string[]>(editing?.options.measures ?? (defaults.measure ? [defaults.measure] : []))
+  const [type, setType] = useState<VisualizationType>(editing?.type ?? start?.type ?? 'bar')
+  const [x, setX] = useState<string>(editing?.options.x ?? start?.x ?? defaults.x)
+  const [measures, setMeasures] = useState<string[]>(editing?.options.measures ?? start?.measures ?? (defaults.measure ? [defaults.measure] : []))
   const [series, setSeries] = useState<string>(editing?.options.series ?? '')
   const [stacked, setStacked] = useState(editing?.options.stacked ?? false)
   const [percent, setPercent] = useState(editing?.options.percent ?? false)
